@@ -100,6 +100,13 @@ impl PromptEditor {
         }
     }
 
+    fn set_skills(&mut self, skills: Vec<String>) {
+        match self {
+            Self::Linear(editor) => editor.set_skills(skills),
+            Self::Inline(editor) => editor.set_skills(skills),
+        }
+    }
+
     fn clear_history(&mut self) {
         match self {
             Self::Linear(editor) => editor.clear_history(),
@@ -342,6 +349,7 @@ pub async fn run(
                 })
                 .collect(),
         );
+        editor.set_skills(trusted_skill_names(config));
         Some(editor)
     } else {
         None
@@ -448,6 +456,7 @@ pub async fn run(
                         }
                         editor.set_current_model(current_selection(&state, config));
                         editor.set_models(niucode_model_choices(config, provider_factory));
+                        editor.set_skills(trusted_skill_names(config));
                     }
                     state.clear_history = false;
                     continue;
@@ -1561,6 +1570,21 @@ fn reset_terminal_modes() {
         crossterm::style::ResetColor
     );
     let _ = std::io::Write::flush(&mut out);
+}
+
+fn trusted_skill_names(config: &AgentConfig) -> Vec<String> {
+    Workspace::discover(&config.working_dir)
+        .ok()
+        .and_then(|workspace| skills::Registry::discover(&workspace).ok())
+        .map(|registry| {
+            registry
+                .list()
+                .iter()
+                .filter(|skill| skill.trusted)
+                .map(|skill| skill.name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn editor_footer(state: &SessionUiState, config: &AgentConfig) -> String {

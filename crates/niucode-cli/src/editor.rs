@@ -49,6 +49,7 @@ pub struct LineEditor {
     models: Vec<String>,
     current_model: String,
     permissions: Vec<(String, String)>,
+    skills: Vec<String>,
 }
 
 impl LineEditor {
@@ -59,6 +60,7 @@ impl LineEditor {
             models: Vec::new(),
             current_model: String::new(),
             permissions: Vec::new(),
+            skills: Vec::new(),
         }
     }
 
@@ -72,6 +74,10 @@ impl LineEditor {
 
     pub fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
         self.permissions = permissions;
+    }
+
+    pub fn set_skills(&mut self, skills: Vec<String>) {
+        self.skills = skills;
     }
 
     pub fn clear_history(&mut self) {
@@ -95,6 +101,7 @@ impl LineEditor {
             models: &self.models,
             current_model: &self.current_model,
             permissions: &self.permissions,
+            skills: &self.skills,
             history_index,
             chars: Vec::new(),
             cursor: 0,
@@ -146,6 +153,7 @@ struct State<'a> {
     models: &'a [String],
     current_model: &'a str,
     permissions: &'a [(String, String)],
+    skills: &'a [String],
     history_index: usize,
     chars: Vec<char>,
     cursor: usize,
@@ -442,6 +450,9 @@ impl State<'_> {
 
     fn candidates(&self) -> Vec<MenuItem> {
         let line = self.line();
+        if let Some(items) = skill_candidates(self.skills, &line) {
+            return items;
+        }
         if let Some(items) =
             argument_candidates(self.models, self.current_model, self.permissions, &line)
         {
@@ -785,6 +796,29 @@ impl State<'_> {
     }
 }
 
+fn skill_candidates(skills: &[String], line: &str) -> Option<Vec<MenuItem>> {
+    let at = line.rfind('$')?;
+    let before = &line[..at];
+    if !(at == 0 || before.chars().last().is_some_and(char::is_whitespace)) {
+        return None;
+    }
+    let prefix = &line[at + 1..];
+    if prefix.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some(
+        skills
+            .iter()
+            .filter(|skill| skill.starts_with(prefix))
+            .map(|skill| MenuItem {
+                insert: format!("{before}${skill} "),
+                name: format!("${skill}"),
+                description: "activate skill".into(),
+            })
+            .collect(),
+    )
+}
+
 fn argument_candidates(
     models: &[String],
     current_model: &str,
@@ -938,5 +972,15 @@ mod tests {
         );
         assert!(command_candidates(&registry, "/goal all tests pass").is_empty());
         assert!(command_candidates(&registry, "hello").is_empty());
+    }
+
+    #[test]
+    fn skill_candidates_insert_the_selected_skill() {
+        let skills = vec!["rust".to_string(), "review".to_string()];
+        let items = skill_candidates(&skills, "please use $ru").expect("skills");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].insert, "please use $rust ");
+        assert_eq!(items[0].name, "$rust");
+        assert!(skill_candidates(&skills, "no dollar").is_none());
     }
 }

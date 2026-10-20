@@ -27,7 +27,7 @@ docs = ["adr-0024", "tui"]
 - [x] `/skills trust|untrust` 写 digest；全局无需信任。
 - [x] `$name` 只注入路径/描述；read roots 允许读 SKILL.md。
 - [x] 项目信任经过 M4-007 capability gate 对应的显式信任流程。
-- [ ] `$` 输入补全（下一轮）。
+- [x] `$` 输入补全（linear + inline，按信任过滤）。
 
 ## 记录
 

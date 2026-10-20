@@ -97,6 +97,7 @@ pub struct InlineEditor {
     fell_back: bool,
     cwd: PathBuf,
     files: Vec<String>,
+    skills: Vec<String>,
 }
 
 impl InlineEditor {
@@ -112,6 +113,7 @@ impl InlineEditor {
             fell_back: false,
             cwd: PathBuf::from("."),
             files: Vec::new(),
+            skills: Vec::new(),
         }
     }
 
@@ -129,6 +131,11 @@ impl InlineEditor {
     pub fn set_cwd(&mut self, cwd: PathBuf) {
         self.files = collect_files(&cwd);
         self.cwd = cwd;
+    }
+
+    pub fn set_skills(&mut self, skills: Vec<String>) {
+        self.skills = skills.clone();
+        self.fallback.set_skills(skills);
     }
 
     pub fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
@@ -480,6 +487,23 @@ impl InlineEditor {
     }
 
     fn candidates(&self, line: &str) -> Vec<Item> {
+        if let Some(at) = line.rfind('$') {
+            let before = &line[..at];
+            let valid = at == 0 || before.chars().last().is_some_and(char::is_whitespace);
+            let prefix = &line[at + 1..];
+            if valid && !prefix.chars().any(char::is_whitespace) {
+                return self
+                    .skills
+                    .iter()
+                    .filter(|skill| skill.starts_with(prefix))
+                    .map(|skill| Item {
+                        insert: format!("{before}${skill} "),
+                        name: format!("${skill}"),
+                        description: "activate skill".into(),
+                    })
+                    .collect();
+            }
+        }
         if let Some(at) = line.rfind('@') {
             let before = &line[..at];
             let valid = at == 0 || before.chars().last().is_some_and(char::is_whitespace);
