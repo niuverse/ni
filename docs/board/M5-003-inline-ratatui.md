@@ -35,5 +35,5 @@ docs = ["adr-0019", "tui"]
 - `inline.rs` 固定 8 行 viewport：5 行 picker/help + 2 行 input + 1 行 footer。
 - 支持基本编辑、历史、slash/model/permissions picker；尚未完成鼠标、多行布局、Ctrl-R 完整行为。
 - 默认 inline；cursor-position 不可用或 `NIUCODE_TUI_LINEAR=1` 时回退 `LineEditor`。
-- PTY 终端模拟器验证 picker 行 hit-test；默认 4 行 / picker 7 行动态 viewport。
+- PTY 终端模拟器验证 picker 行 hit-test；默认 3 行 / picker 6 行动态 viewport。
 - 已知边界：长行不横向滚动；嵌套 `.gitignore`/negation 未完整支持；TestBackend 快照未覆盖。

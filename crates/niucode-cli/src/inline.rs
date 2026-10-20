@@ -27,10 +27,10 @@ use crate::editor::{Input, LineEditor};
 use crate::slash::CommandRegistry;
 use crate::theme::Theme;
 
-const BASE_HEIGHT: u16 = 4;
-const MENU_HEIGHT: u16 = 7;
+const BASE_HEIGHT: u16 = 3;
+const MENU_HEIGHT: u16 = 6;
 const MENU_ROWS: usize = 3;
-const INPUT_ROWS: usize = 3;
+const INPUT_ROWS: usize = 2;
 
 #[derive(Clone)]
 struct Item {
@@ -41,20 +41,24 @@ struct Item {
 
 type InlineBackend = CrosstermBackend<std::io::Stdout>;
 
-struct InlineTerminal(Option<Terminal<InlineBackend>>);
+struct InlineTerminal {
+    terminal: Option<Terminal<InlineBackend>>,
+}
 
 impl InlineTerminal {
     fn new(height: u16) -> std::io::Result<Self> {
-        Ok(Self(Some(Terminal::with_options(
-            CrosstermBackend::new(stdout()),
-            TerminalOptions {
-                viewport: Viewport::Inline(height),
-            },
-        )?)))
+        Ok(Self {
+            terminal: Some(Terminal::with_options(
+                CrosstermBackend::new(stdout()),
+                TerminalOptions {
+                    viewport: Viewport::Inline(height),
+                },
+            )?),
+        })
     }
 
     fn replace(&mut self, height: u16) -> std::io::Result<()> {
-        self.0 = None;
+        self.terminal = None;
         *self = Self::new(height)?;
         Ok(())
     }
@@ -64,19 +68,19 @@ impl Deref for InlineTerminal {
     type Target = Terminal<InlineBackend>;
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref().expect("inline terminal")
+        self.terminal.as_ref().expect("inline terminal")
     }
 }
 
 impl DerefMut for InlineTerminal {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut().expect("inline terminal")
+        self.terminal.as_mut().expect("inline terminal")
     }
 }
 
 impl Drop for InlineTerminal {
     fn drop(&mut self) {
-        if let Some(terminal) = self.0.as_mut() {
+        if let Some(terminal) = self.terminal.as_mut() {
             let _ = terminal.clear();
         }
     }
@@ -160,7 +164,7 @@ impl InlineEditor {
         }
         if !self.fell_back {
             if let Ok(Input::Line(line)) = &result {
-                println!("{raw_prompt}{line}");
+                println!("\r{raw_prompt}{line}");
             }
         }
         result
