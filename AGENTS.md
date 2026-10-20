@@ -76,6 +76,6 @@ A task is not done until:
 
 ## Current focus
 
-M0: provider streaming, the six tools, and the headless turn loop. The next card
-is `M0-005` (provider trait and streaming adapter). Do not start TUI, MCP,
-subagents, or a plugin system before M0's exit criteria are met.
+M0: the six tools and the headless turn loop. Provider streaming and the DeepSeek
+preset are in place. The next card is `M0-006` (file tools). Do not start TUI,
+MCP, subagents, or a plugin system before M0's exit criteria are met.

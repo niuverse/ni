@@ -46,6 +46,7 @@ docs/
     0003-architecture-first-dashboard.md
     0004-session-runtime.md
   architecture.md
+  provider.md
   roadmap.md
   README.md
 ```

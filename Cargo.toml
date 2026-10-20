@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/ni-core",
+    "crates/ni-provider",
     "crates/ni-cli",
     "crates/xtask",
 ]
@@ -14,9 +15,16 @@ repository = "https://github.com/niuverse/ni"
 
 [workspace.dependencies]
 anyhow = "1.0"
+async-stream = "0.3"
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 clap = { version = "4.5", features = ["derive"] }
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "charset", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+thiserror = "2.0"
+tokio-util = { version = "0.7", features = ["codec", "io-util"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 toml = "0.8"
 walkdir = "2.5"

@@ -11,4 +11,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+futures-util.workspace = true
 ni-core = { path = "../ni-core" }
+ni-provider = { path = "../ni-provider" }
+tokio.workspace = true

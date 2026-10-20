@@ -147,15 +147,21 @@
       "id": "providers",
       "title": "Providers",
       "layer": "adapters",
-      "status": "planned",
-      "summary": "把 OpenAI / Anthropic 的流式响应归一化成 StreamEvent。",
-      "contract": "Provider::stream(ctx, tools, signal) -> EventStream；错误分可重试、致命、上下文溢出。",
+      "status": "active",
+      "summary": "OpenAI-compatible SSE 适配；DeepSeek preset 支持 thinking、reasoning_content 与 usage。",
+      "contract": "Provider::stream(request) -> StreamEvent；错误分 Auth / ContextOverflow / Http / Network / Decode；不依赖 tools 或 UI。",
       "paths": [
-        "crates/ni-provider/src/lib.rs"
+        "crates/ni-provider/src/lib.rs",
+        "crates/ni-provider/src/openai.rs",
+        "crates/ni-provider/src/sse.rs",
+        "crates/ni-provider/src/scripted.rs",
+        "crates/ni-provider/src/message.rs",
+        "crates/ni-provider/src/error.rs"
       ],
       "notes": [
-        "适配层要薄，不抹平 provider 的所有怪癖。",
-        "usage 必须包含 cached / reasoning tokens。"
+        "SSE 解析器按行缓冲，支持跨 chunk、多行 data 和缺失 [DONE]。",
+        "DeepSeek 带 tools 时，历史 reasoning_content 必须回传。",
+        "重试只在 turn 边界；流中断后不原地重放。"
       ]
     },
     {
@@ -313,6 +319,16 @@
       "detail": "SessionRuntime 以 Command/Event 为边界；CLI/TUI 进程内消费，Web 先做只读 viewer。ADR-0004。",
       "refs": [
         "adr-0004"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Provider 先做 OpenAI-compatible Chat Completions",
+      "detail": "DeepSeek 与 OpenAI 共用一套 SSE 适配；先不引入多 provider 抽象，验证 loop 后再扩展。",
+      "refs": [
+        "M0-005",
+        "provider"
       ]
     }
   ]

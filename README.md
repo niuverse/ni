@@ -9,8 +9,9 @@ replay, and resume.
 
 ## Status
 
-M0 · Bootstrap. The workspace, session log, CLI skeleton, and offline project
-dashboard exist. The provider, tools, and turn loop are next.
+M0 · Provider. The workspace, session log, CLI, offline dashboard, and
+OpenAI-compatible provider (with a DeepSeek preset) exist. The tools and turn
+loop are next.
 
 ## Quick start
 
@@ -20,6 +21,8 @@ Requires Rust 1.80+.
 cargo run -p ni                 # banner and current status
 cargo run -p ni -- session new  # create a session, print its path
 cargo run -p ni -- session show <path>
+cargo run -p ni -- provider list
+DEEPSEEK_API_KEY=... cargo run -p ni -- provider test --preset deepseek
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -35,7 +38,8 @@ no server, CDN, or network access is required.
 ```text
 crates/
   ni-core/    event model and append-only JSONL session log
-  ni-cli/     argument parsing and session commands
+  ni-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
+  ni-cli/     argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
 docs/
   index.html  generated project dashboard
@@ -52,7 +56,7 @@ docs/
 4. Keep the provider layer thin; normalize only what the loop needs.
 5. Be honest about sandbox boundaries. In-process path checks are not isolation.
 
-More detail: [architecture](docs/architecture.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
+More detail: [architecture](docs/architecture.md) · [provider](docs/provider.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
 
 ## Dashboard
 
