@@ -39,6 +39,9 @@ cargo xtask dashboard --check
   shell commands kill their process group.
 - **Do not hand-edit** `docs/index.html` or `docs/dashboard/model.json`. Edit the
   sources under `docs/` and rebuild.
+- **Credentials go through `ni-auth`.** Never read API keys directly in new
+  call sites, print them, or append them to a session event. Resolution order is
+  env → OS keyring → 0600 file.
 - **Read before write.** This applies to the agent and to the filesystem policy:
   do not patch a file that has not been observed in the current session.
 

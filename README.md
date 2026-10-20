@@ -9,20 +9,22 @@ replay, and resume.
 
 ## Status
 
-M0 · Provider. The workspace, session log, CLI, offline dashboard, and
-OpenAI-compatible provider (with a DeepSeek preset) exist. The tools and turn
-loop are next.
+M0 · Provider. The workspace, session log, CLI, offline dashboard,
+OpenAI-compatible provider (with a DeepSeek preset), and `ni auth` credential
+storage exist. The tools and turn loop are next.
 
 ## Quick start
 
-Requires Rust 1.80+.
+Requires Rust 1.85+. On Linux, the OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NI_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
 cargo run -p ni                 # banner and current status
 cargo run -p ni -- session new  # create a session, print its path
 cargo run -p ni -- session show <path>
+cargo run -p ni -- auth set deepseek
+cargo run -p ni -- auth status
 cargo run -p ni -- provider list
-DEEPSEEK_API_KEY=... cargo run -p ni -- provider test --preset deepseek
+cargo run -p ni -- provider test --preset deepseek
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -38,6 +40,7 @@ no server, CDN, or network access is required.
 ```text
 crates/
   ni-core/    event model and append-only JSONL session log
+  ni-auth/    env → OS keyring → 0600 file credential resolution
   ni-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
   ni-cli/     argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
@@ -56,7 +59,7 @@ docs/
 4. Keep the provider layer thin; normalize only what the loop needs.
 5. Be honest about sandbox boundaries. In-process path checks are not isolation.
 
-More detail: [architecture](docs/architecture.md) · [provider](docs/provider.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
+More detail: [architecture](docs/architecture.md) · [provider](docs/provider.md) · [auth](docs/auth.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
 
 ## Dashboard
 

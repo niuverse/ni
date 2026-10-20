@@ -153,9 +153,16 @@ impl OpenAiConfig {
     }
 
     pub fn from_preset(preset: Preset) -> Result<Self, ProviderError> {
+        let mut config = Self::preset_config(preset)?;
+        config.api_key = required_env(preset.api_key_env())?;
+        Ok(config)
+    }
+
+    /// Preset settings without a credential. Callers using `ni-auth` set
+    /// `api_key` after resolving env → keyring → file.
+    pub fn preset_config(preset: Preset) -> Result<Self, ProviderError> {
         match preset {
             Preset::DeepSeek => {
-                let api_key = required_env("DEEPSEEK_API_KEY")?;
                 let base_url = std::env::var("DEEPSEEK_BASE_URL")
                     .ok()
                     .filter(|value| !value.trim().is_empty())
@@ -183,7 +190,7 @@ impl OpenAiConfig {
 
                 Ok(Self {
                     base_url,
-                    api_key,
+                    api_key: String::new(),
                     model,
                     thinking,
                     reasoning_effort,
@@ -191,7 +198,6 @@ impl OpenAiConfig {
                 })
             }
             Preset::OpenAi => {
-                let api_key = required_env("OPENAI_API_KEY")?;
                 let base_url = std::env::var("OPENAI_BASE_URL")
                     .ok()
                     .filter(|value| !value.trim().is_empty())
@@ -203,7 +209,7 @@ impl OpenAiConfig {
 
                 Ok(Self {
                     base_url,
-                    api_key,
+                    api_key: String::new(),
                     model,
                     thinking: None,
                     reasoning_effort: None,
@@ -243,7 +249,17 @@ impl OpenAiProvider {
         Self::with_name(preset.as_str(), OpenAiConfig::from_preset(preset)?)
     }
 
+    /// Build a provider from a preset config whose credential was resolved by
+    /// `ni-auth`. Keeps the preset name for diagnostics.
+    pub fn for_preset(preset: Preset, config: OpenAiConfig) -> Result<Self, ProviderError> {
+        Self::with_name(preset.as_str(), config)
+    }
+
     fn with_name(name: impl Into<String>, config: OpenAiConfig) -> Result<Self, ProviderError> {
+        if config.api_key.trim().is_empty() {
+            return Err(ProviderError::Config("provider API key is empty".into()));
+        }
+
         let client = reqwest::Client::builder()
             .connect_timeout(config.connect_timeout)
             .build()

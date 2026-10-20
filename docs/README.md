@@ -45,7 +45,9 @@ docs/
     0002-event-log.md
     0003-architecture-first-dashboard.md
     0004-session-runtime.md
+    0005-auth.md
   architecture.md
+  auth.md
   provider.md
   roadmap.md
   README.md

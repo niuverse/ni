@@ -61,7 +61,7 @@ user input
 |---|---|---|
 | Interface | CLI / TUI | 参数、生命周期、渲染；不持有对话状态 |
 | Engine | Loop / Context | 编排、投影、压缩；不碰 wire format |
-| Adapters | Providers / Tools / Sandbox | 外部世界的适配；不依赖 UI |
+| Adapters | Providers / Tools / Sandbox / Auth | 外部世界与凭证的适配；不依赖 UI |
 | State | Session | 追加、加载、容错；不解释业务 |
 | Engineering | Dashboard | 架构阅读面（默认 Architecture）；不参与运行时 |
 

@@ -22,6 +22,7 @@ summary = "从 M0 到可用 coding harness：组件地图、自研/用库边界�
 - **Tools**（M0-006/007）— 自研注册表与六个工具；用 serde_json / ignore / globset。学会：证明工具输出不会撑爆上下文。
 - **Context**（M2-001/002）— 自研 projection、compaction、AGENTS.md 合并。学会：解释“日志全量、上下文有损”。
 - **State**（M0-002/009）— 自研 Event、JSONL、resume、fork；用 serde_json。学会：离线回放一次真实 turn。
+- **Auth**（M0-011）— 自研 env → keyring → 0600 文件的解析与回退；用 OS keyring。学会：解释密钥为什么不能进日志，以及 keyring 失败时如何安全降级。
 - **Safety**（M1-002）— 自研策略与审批链；用 landlock/seccomp 或 bubblewrap。学会：演示一次拒绝写入/联网。
 - **Clients**（M0-004 / M1-001 / M1.5）— 自研 CLI 命令和事件到视图的映射；用 clap / ratatui。学会：同一事件流渲染两种界面。
 - **Observability**（M2-002）— 自研 usage 事件、metrics JSONL。学会：定位一次慢 turn。
@@ -38,7 +39,7 @@ summary = "从 M0 到可用 coding harness：组件地图、自研/用库边界�
 ## 顺序
 
 ```text
-M0   CLI 骨架 / 事件日志 / dashboard
+M0   CLI 骨架 / 事件日志 / auth / dashboard
      └─ M0-005 provider（scripted + OpenAI-compatible SSE）
      └─ M0-006 文件工具
      └─ M0-007 bash（超时、进程组、输出预算）

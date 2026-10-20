@@ -228,6 +228,25 @@
         "浏览器只读；改状态走仓库，避免第二个真相源。",
         "不引入前端框架；单文件离线是硬约束。"
       ]
+    },
+    {
+      "id": "auth",
+      "title": "Auth",
+      "layer": "adapters",
+      "status": "active",
+      "summary": "凭证解析与安全存储：env → OS keyring → 0600 file。",
+      "contract": "AuthStore::resolve 只返回值与来源；不打印 key；provider 保持凭证无关。",
+      "paths": [
+        "crates/ni-auth/src/lib.rs",
+        "crates/ni-auth/src/file.rs",
+        "crates/ni-auth/src/keyring_store.rs",
+        "crates/ni-auth/src/error.rs"
+      ],
+      "notes": [
+        "环境变量优先；keyring 不可用时回退 0600 文件。",
+        "文件写入使用 0600，状态会提示 insecure 权限。",
+        "不支持网页账号 cookie；账号 OAuth 需要独立 ADR。"
+      ]
     }
   ],
   "relations": [
@@ -270,6 +289,11 @@
       "from": "tools",
       "to": "sandbox",
       "label": "guard"
+    },
+    {
+      "from": "cli",
+      "to": "auth",
+      "label": "resolve"
     }
   ],
   "events": [
@@ -329,6 +353,17 @@
       "refs": [
         "M0-005",
         "provider"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "凭证解析：env → keyring → 0600 file",
+      "detail": "不打印密钥；keyring 不可用时回退文件；不支持网页账号 cookie。",
+      "refs": [
+        "M0-011",
+        "auth",
+        "adr-0005"
       ]
     }
   ]

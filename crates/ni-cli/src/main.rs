@@ -1,9 +1,10 @@
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
+use ni_auth::AuthStore;
 use ni_core::{now_ms, Event, SessionLog};
 use ni_provider::{
     ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider, StreamEvent,
@@ -29,6 +30,11 @@ enum Command {
         #[command(subcommand)]
         command: ProviderCommand,
     },
+    /// Store API keys in the OS keyring or a 0600 file
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -49,6 +55,25 @@ enum SessionCommand {
         /// Directory containing session files
         #[arg(long)]
         dir: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AuthCommand {
+    /// Store an API key (hidden prompt, or --stdin for scripts)
+    Set {
+        /// Provider: deepseek or openai
+        provider: String,
+        /// Read one line from stdin instead of prompting
+        #[arg(long)]
+        stdin: bool,
+    },
+    /// Show where each provider's credential comes from
+    Status,
+    /// Remove stored credentials for a provider
+    Unset {
+        /// Provider: deepseek or openai
+        provider: String,
     },
 }
 
@@ -79,6 +104,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Command::Session { command }) => run_session(command),
         Some(Command::Provider { command }) => run_provider(command).await,
+        Some(Command::Auth { command }) => run_auth(command),
         None => {
             print_banner();
             Ok(())
@@ -125,20 +151,27 @@ fn run_session(command: SessionCommand) -> Result<()> {
 
 async fn run_provider(command: ProviderCommand) -> Result<()> {
     match command {
-        ProviderCommand::List => {
-            list_providers();
-            Ok(())
-        }
+        ProviderCommand::List => list_providers(),
         ProviderCommand::Test {
             preset,
             model,
             prompt,
             no_thinking,
         } => {
-            let preset = Preset::parse(&preset).with_context(|| {
-                format!("unknown provider preset {preset:?}; expected deepseek or openai")
-            })?;
-            let mut config = OpenAiConfig::from_preset(preset)?;
+            let preset = parse_provider(&preset)?;
+            let store = AuthStore::new()?;
+            let credential = match store.resolve(preset.as_str())? {
+                Some(credential) => credential,
+                None => bail!(
+                    "no credential for {}; run `ni auth set {}` or set {}",
+                    preset.as_str(),
+                    preset.as_str(),
+                    preset.api_key_env()
+                ),
+            };
+
+            let mut config = OpenAiConfig::preset_config(preset)?;
+            config.api_key = credential.key.expose().to_string();
             if let Some(model) = model {
                 config.model = model;
             }
@@ -146,12 +179,16 @@ async fn run_provider(command: ProviderCommand) -> Result<()> {
                 config.thinking = Some(ThinkingMode::Disabled);
             }
 
-            let provider = OpenAiProvider::new(config)?;
+            let provider = OpenAiProvider::for_preset(preset, config)?;
             let model = provider.model().to_string();
             let prompt = prompt.unwrap_or_else(|| "Reply with exactly: ni provider ok".into());
             let request = CompletionRequest::new(&model).with_message(ChatMessage::user(prompt));
 
-            eprintln!("provider: {} · model: {model}", provider.name());
+            eprintln!(
+                "provider: {} · model: {model} · auth: {}",
+                provider.name(),
+                credential.source
+            );
             let mut stream = provider.stream(request).await?;
             let mut text = String::new();
             let mut reasoning_chars = 0_usize;
@@ -170,11 +207,9 @@ async fn run_provider(command: ProviderCommand) -> Result<()> {
                         reasoning_chars += delta.chars().count();
                     }
                     StreamEvent::ToolCallDelta(call) => {
-                        if call.name.is_some() {
+                        if let Some(name) = call.name {
                             tool_calls += 1;
-                            if let Some(name) = call.name {
-                                eprintln!("\n[tool] {name}");
-                            }
+                            eprintln!("\n[tool] {name}");
                         }
                     }
                     StreamEvent::Usage(value) => usage = Some(value),
@@ -210,22 +245,120 @@ async fn run_provider(command: ProviderCommand) -> Result<()> {
     }
 }
 
-fn list_providers() {
+fn run_auth(command: AuthCommand) -> Result<()> {
+    match command {
+        AuthCommand::Set { provider, stdin } => {
+            let preset = parse_provider(&provider)?;
+            let store = AuthStore::new()?;
+
+            if !stdin {
+                eprintln!("Create a key at {}", key_url(preset));
+            }
+
+            let key = if stdin {
+                let mut line = String::new();
+                std::io::stdin().lock().read_line(&mut line)?;
+                line
+            } else {
+                rpassword::prompt_password(format!("Paste {} API key (hidden): ", preset.as_str()))?
+            };
+
+            let storage = store.set(preset.as_str(), key.trim())?;
+            println!("stored {} in {}", preset.as_str(), storage);
+            println!("credentials {}", store.credentials_path().display());
+            Ok(())
+        }
+        AuthCommand::Status => {
+            let store = AuthStore::new()?;
+            println!(
+                "{:<8} {:<10} {:<8} {:<8} file",
+                "provider", "effective", "env", "keyring"
+            );
+            for preset in Preset::ALL {
+                let status = store.status(preset.as_str())?;
+                let effective = status
+                    .effective
+                    .map(|source| source.as_str())
+                    .unwrap_or("missing");
+                let file = if !status.file {
+                    "missing"
+                } else if status.file_private {
+                    "set"
+                } else {
+                    "insecure"
+                };
+                println!(
+                    "{:<8} {:<10} {:<8} {:<8} {}",
+                    preset.as_str(),
+                    effective,
+                    yes_no(status.env),
+                    yes_no(status.keyring),
+                    file
+                );
+                if status.file && !status.file_private {
+                    eprintln!(
+                        "warning: {} is readable by other users; run chmod 600",
+                        store.credentials_path().display()
+                    );
+                }
+            }
+            println!();
+            println!("credentials {}", store.credentials_path().display());
+            Ok(())
+        }
+        AuthCommand::Unset { provider } => {
+            let preset = parse_provider(&provider)?;
+            let store = AuthStore::new()?;
+            if store.unset(preset.as_str())? {
+                println!("removed {} credentials", preset.as_str());
+            } else {
+                println!("no stored credentials for {}", preset.as_str());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn list_providers() -> Result<()> {
+    let store = AuthStore::new()?;
     for preset in Preset::ALL {
         let env = preset.api_key_env();
-        let key = std::env::var(env)
-            .map(|value| !value.trim().is_empty())
-            .unwrap_or(false);
+        let status = store.status(preset.as_str())?;
+        let auth = status
+            .effective
+            .map(|source| source.as_str())
+            .unwrap_or("missing");
         let base = preset_env(preset, true).unwrap_or_else(|| preset.default_base_url().into());
         let model = preset_env(preset, false).unwrap_or_else(|| preset.default_model().into());
 
         println!(
-            "{:<8} base={:<32} model={:<18} key={} ({env})",
+            "{:<8} base={:<32} model={:<18} auth={:<8} ({env})",
             preset.as_str(),
             base,
             model,
-            if key { "set" } else { "missing" }
+            auth
         );
+    }
+    Ok(())
+}
+
+fn parse_provider(value: &str) -> Result<Preset> {
+    Preset::parse(value)
+        .with_context(|| format!("unknown provider {value:?}; expected deepseek or openai"))
+}
+
+fn key_url(preset: Preset) -> &'static str {
+    match preset {
+        Preset::DeepSeek => "https://platform.deepseek.com/api_keys",
+        Preset::OpenAi => "https://platform.openai.com/api-keys",
+    }
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "set"
+    } else {
+        "missing"
     }
 }
 
@@ -261,6 +394,7 @@ fn print_banner() {
     println!("docs     docs/index.html");
     println!("sessions {}", default_sessions_dir().display());
     println!();
+    println!("auth     ni auth set deepseek");
     println!("next     ni provider test --preset deepseek");
     println!("         cargo xtask dashboard");
 }

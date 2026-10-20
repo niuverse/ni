@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/ni-core",
+    "crates/ni-auth",
     "crates/ni-provider",
     "crates/ni-cli",
     "crates/xtask",
@@ -10,7 +11,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.85"
 repository = "https://github.com/niuverse/ni"
 
 [workspace.dependencies]
@@ -18,8 +19,10 @@ anyhow = "1.0"
 async-stream = "0.3"
 async-trait = "0.1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 clap = { version = "4.5", features = ["derive"] }
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+rpassword = "7.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "charset", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
