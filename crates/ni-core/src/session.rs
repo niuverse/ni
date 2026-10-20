@@ -51,6 +51,26 @@ impl SessionLog {
         })
     }
 
+    /// Open an existing session for appending.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        let file = OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .with_context(|| format!("open session for append {}", path.display()))?;
+        let id = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("session")
+            .to_string();
+
+        Ok(Self {
+            id,
+            path,
+            writer: BufWriter::new(file),
+        })
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -197,6 +217,29 @@ mod tests {
         assert_eq!(loaded.events.len(), 1);
         assert_eq!(loaded.warnings.len(), 1);
         assert!(loaded.warnings[0].starts_with("line 2:"));
+
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn reopening_appends_to_the_same_session() {
+        let dir = temp_dir("reopen");
+        let mut log = SessionLog::create(&dir).expect("create log");
+        let path = log.path().to_path_buf();
+        log.append(&Event::UserMessage {
+            text: "first".into(),
+            ts: 1,
+        })
+        .expect("append");
+        drop(log);
+
+        let mut reopened = SessionLog::open(&path).expect("reopen");
+        reopened
+            .append(&Event::SessionEnd { ts: 2 })
+            .expect("append after reopen");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.events.len(), 2);
 
         fs::remove_dir_all(dir).expect("cleanup");
     }

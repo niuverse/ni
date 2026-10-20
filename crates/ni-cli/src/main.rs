@@ -1,15 +1,16 @@
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
-use ni_agent::{run as run_agent, AgentConfig, AgentEvent};
+use ni_agent::{project_history, run_with_history, AgentConfig, AgentEvent};
 use ni_auth::AuthStore;
 use ni_core::{now_ms, Event, SessionLog};
 use ni_provider::{
-    ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider, StreamEvent,
-    ThinkingMode,
+    ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider,
+    RecordingProvider, ReplayProvider, StreamEvent, ThinkingMode,
 };
 
 #[derive(Debug, Parser)]
@@ -58,6 +59,15 @@ enum Command {
         /// Directory for the session JSONL (defaults to ~/.ni/sessions)
         #[arg(long)]
         session_dir: Option<PathBuf>,
+        /// Resume an existing session JSONL
+        #[arg(long)]
+        resume: Option<PathBuf>,
+        /// Record normalized provider turns to a fixture JSON
+        #[arg(long)]
+        record: Option<PathBuf>,
+        /// Replay normalized provider turns from a fixture JSON
+        #[arg(long)]
+        replay: Option<PathBuf>,
     },
 }
 
@@ -137,6 +147,9 @@ async fn main() -> Result<()> {
             no_thinking,
             cwd,
             session_dir,
+            resume,
+            record,
+            replay,
         }) => {
             run_exec(
                 prompt,
@@ -146,6 +159,9 @@ async fn main() -> Result<()> {
                 no_thinking,
                 cwd,
                 session_dir,
+                resume,
+                record,
+                replay,
             )
             .await
         }
@@ -202,52 +218,105 @@ async fn run_exec(
     no_thinking: bool,
     cwd: Option<PathBuf>,
     session_dir: Option<PathBuf>,
+    resume: Option<PathBuf>,
+    record: Option<PathBuf>,
+    replay: Option<PathBuf>,
 ) -> Result<()> {
-    let preset = parse_provider(&preset)?;
-    let store = AuthStore::new()?;
-    let credential = match store.resolve(preset.as_str())? {
-        Some(credential) => credential,
-        None => bail!(
-            "no credential for {}; run `ni auth set {}` or set {}",
-            preset.as_str(),
-            preset.as_str(),
-            preset.api_key_env()
-        ),
-    };
+    if record.is_some() && replay.is_some() {
+        bail!("--record and --replay are mutually exclusive");
+    }
 
-    let mut config = OpenAiConfig::preset_config(preset)?;
-    config.api_key = credential.key.expose().to_string();
-    if let Some(model) = model {
-        config.model = model;
-    }
-    if no_thinking && preset == Preset::DeepSeek {
-        config.thinking = Some(ThinkingMode::Disabled);
-    }
-    let model = config.model.clone();
-    let provider = OpenAiProvider::for_preset(preset, config)?;
+    let preset = parse_provider(&preset)?;
+    let (provider, model, auth_source): (Arc<dyn Provider>, String, String) =
+        if let Some(path) = &replay {
+            let provider = ReplayProvider::load(path)?;
+            let model = model.unwrap_or_else(|| "replay".into());
+            (Arc::new(provider), model, "replay".into())
+        } else {
+            let store = AuthStore::new()?;
+            let credential = match store.resolve(preset.as_str())? {
+                Some(credential) => credential,
+                None => bail!(
+                    "no credential for {}; run `ni auth set {}` or set {}",
+                    preset.as_str(),
+                    preset.as_str(),
+                    preset.api_key_env()
+                ),
+            };
+
+            let mut config = OpenAiConfig::preset_config(preset)?;
+            config.api_key = credential.key.expose().to_string();
+            if let Some(model) = model {
+                config.model = model;
+            }
+            if no_thinking && preset == Preset::DeepSeek {
+                config.thinking = Some(ThinkingMode::Disabled);
+            }
+            let model = config.model.clone();
+            let inner: Arc<dyn Provider> = Arc::new(OpenAiProvider::for_preset(preset, config)?);
+            let provider: Arc<dyn Provider> = if let Some(path) = &record {
+                eprintln!("recording fixture: {}", path.display());
+                Arc::new(RecordingProvider::new(inner, path.clone()))
+            } else {
+                inner
+            };
+
+            (provider, model, credential.source.to_string())
+        };
+
+    let resumed = match &resume {
+        Some(path) => {
+            let loaded = ni_core::load(path)?;
+            for warning in &loaded.warnings {
+                eprintln!("warning: {warning}");
+            }
+            let session_cwd = loaded.events.iter().find_map(|event| match event {
+                Event::SessionStart { cwd, .. } => Some(cwd.clone()),
+                _ => None,
+            });
+            let history = project_history(&loaded.events)?;
+            Some((path.clone(), history, session_cwd))
+        }
+        None => None,
+    };
 
     let working_dir = match cwd {
         Some(path) => path
             .canonicalize()
             .with_context(|| format!("resolve --cwd {}", path.display()))?,
-        None => std::env::current_dir()?.canonicalize()?,
+        None => match resumed.as_ref().and_then(|(_, _, cwd)| cwd.clone()) {
+            Some(path) => PathBuf::from(path)
+                .canonicalize()
+                .context("resolve resumed session cwd")?,
+            None => std::env::current_dir()?.canonicalize()?,
+        },
     };
 
-    let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
-    let mut session = SessionLog::create(&session_dir)?;
-    session.append(&Event::SessionStart {
-        id: session.id().to_string(),
-        cwd: working_dir.display().to_string(),
-        model: model.clone(),
-        ts: now_ms(),
-    })?;
+    let (mut session, history) = if let Some((path, history, _)) = resumed {
+        (SessionLog::open(&path)?, history)
+    } else {
+        let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
+        let mut session = SessionLog::create(&session_dir)?;
+        session.append(&Event::SessionStart {
+            id: session.id().to_string(),
+            cwd: working_dir.display().to_string(),
+            model: model.clone(),
+            ts: now_ms(),
+        })?;
+        (session, Vec::new())
+    };
 
     eprintln!(
-        "ni exec · {} · model={model} · auth={} · cwd={}",
+        "ni exec · {} · model={model} · auth={auth_source} · cwd={}",
         provider.name(),
-        credential.source,
         working_dir.display()
     );
+    if let Some(path) = &replay {
+        eprintln!("replay: {}", path.display());
+    }
+    if !history.is_empty() {
+        eprintln!("resumed: {} messages", history.len());
+    }
     eprintln!("session: {}", session.path().display());
 
     let mut agent_config = AgentConfig::new(model, working_dir);
@@ -283,11 +352,12 @@ async fn run_exec(
                 );
             }
         };
-        let run = run_agent(
-            &provider,
+        let run = run_with_history(
+            provider.as_ref(),
             &mut session,
             &agent_config,
             &prompt,
+            history,
             &mut observer,
         );
         tokio::pin!(run);
@@ -307,8 +377,8 @@ async fn run_exec(
     if result.is_err() {
         eprintln!("session: {}", session.path().display());
     }
-    if result.is_err() {
-        eprintln!("session: {}", session.path().display());
+    if let Some(path) = &record {
+        eprintln!("fixture: {}", path.display());
     }
 
     let outcome = result?;

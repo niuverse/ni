@@ -9,9 +9,9 @@ replay, and resume.
 
 ## Status
 
-M0 · Tools and loop hardened. `ni exec` runs a real coding turn end-to-end with
-six tools, bash process-group cancellation, session log, and auth. The next step
-is resume/fixtures, then approval/sandbox.
+M0 complete. `ni exec` runs a real coding turn end-to-end with six tools, bash
+process-group cancellation, resume, recorded fixtures, session log, and auth.
+M1 starts with approval/sandbox before the TUI.
 
 ## Quick start
 
@@ -27,6 +27,8 @@ cargo run -p ni -- provider list
 cargo run -p ni -- provider test --preset deepseek
 
 cargo run -p ni -- exec "read a.txt and summarize it" --no-thinking
+cargo run -p ni -- exec "continue" --resume /path/to/session.jsonl
+cargo run -p ni -- exec "replay" --replay /path/to/fixture.json
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html

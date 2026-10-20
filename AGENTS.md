@@ -79,7 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M0: the `ni exec` loop is closed and hardened. Provider streaming, auth, six tools,
-bash process groups, cancellation, and session events work. The next card is
-`M0-009` (resume + recorded fixtures), then M1's approval/sandbox/TUI. Do not
-start TUI, MCP, subagents, or a plugin system before M0's exit criteria are met.
+M0 is complete: `ni exec` has six tools, process-group bash, cancellation, resume,
+recorded fixtures, and a golden transcript test. M1 starts with `M1-002`
+(sandbox + approval) before the TUI. Do not start MCP, subagents, or a plugin
+system before the M1 interaction surface is stable.

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "turns": [
+    [
+      {
+        "type": "tool_call_delta",
+        "index": 0,
+        "id": "call_1",
+        "name": "read",
+        "arguments": "{\"path\":\"a.txt\"}"
+      },
+      {
+        "type": "done",
+        "finish_reason": "tool_calls"
+      }
+    ],
+    [
+      {
+        "type": "text_delta",
+        "text": "read it"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 2,
+          "cached_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      {
+        "type": "done",
+        "finish_reason": "stop"
+      }
+    ]
+  ]
+}

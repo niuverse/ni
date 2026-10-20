@@ -62,6 +62,47 @@ session_start
 
 文件工具会把路径 canonicalize 到工作区内部；`../` 或绝对路径逃逸会被拒绝。`bash` 是逃生舱，不经过这层路径策略。
 
+## Resume 与录制回放
+
+```sh
+# 从已有 session 继续
+ni exec "continue from here" --resume /path/to/session.jsonl
+
+# 录制归一化 provider turn
+ni exec "record this" --record /tmp/fixture.json
+
+# 完全离线重放，不需要 API key
+ni exec "replay this" --replay /tmp/fixture.json
+```
+
+`--resume` 会从 `user_message`、`assistant_message`、`tool_result` 重建历史，跳过 `turn_end` / `session_end`，并把最后一个 `compaction` 摘要作为 system 消息。未指定 `--cwd` 时使用 `session_start` 里的 cwd。
+
+Fixture 是归一化事件，不是原始 SSE：
+
+```json
+{
+  "schema_version": 1,
+  "turns": [
+    [
+      {"type": "tool_call_delta", "index": 0, "id": "call_1",
+       "name": "read", "arguments": "{\"path\":\"a.txt\"}"},
+      {"type": "done", "finish_reason": "tool_calls"}
+    ],
+    [
+      {"type": "text_delta", "text": "read it"},
+      {"type": "done", "finish_reason": "stop"}
+    ]
+  ]
+}
+```
+
+离线回归：
+
+```sh
+cargo test -p ni-agent --test golden
+cargo test -p ni-provider fixture::tests
+```
+
 ## 安全边界
 
 当前是最小闭环，不是安全沙箱：
@@ -85,10 +126,10 @@ session_start
 ## 明确还没有
 
 - approval / OS sandbox / network 开关（M1-002）；bash 仍可访问工作区外。
-- resume / replay / compaction（M0-009、M2）。
+- compaction / 上下文预算（M2）；长任务可能撞上下文上限。
 - 并行工具；当前顺序执行。
 - SessionRuntime 的 Command/Event 通道；当前是函数边界。
-- 上下文预算；长任务可能撞上下文上限。
+- fork / subagent。
 
 ## 调试
 

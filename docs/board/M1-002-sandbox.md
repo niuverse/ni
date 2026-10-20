@@ -1,7 +1,7 @@
 +++
 id = "M1-002"
 title = "Sandbox 三轴与原生隔离"
-status = "backlog"
+status = "ready"
 milestone = "M1"
 module = "sandbox"
 size = "L"

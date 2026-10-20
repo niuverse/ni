@@ -74,16 +74,28 @@ pub async fn run(
     prompt: &str,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
+    run_with_history(provider, session, config, prompt, Vec::new(), observer).await
+}
+
+/// Continue with messages reconstructed from an existing session.
+pub async fn run_with_history(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    observer: &mut dyn FnMut(AgentEvent),
+) -> Result<RunOutcome> {
     if config.max_steps == 0 {
         bail!("max_steps must be greater than zero");
     }
 
     let toolbox = Toolbox::new(&config.working_dir)?;
     let tools = Toolbox::specs();
-    let mut messages = vec![
-        ChatMessage::system(config.system_prompt.clone()),
-        ChatMessage::user(prompt),
-    ];
+    let mut messages = Vec::with_capacity(history.len() + 2);
+    messages.push(ChatMessage::system(config.system_prompt.clone()));
+    messages.extend(history);
+    messages.push(ChatMessage::user(prompt));
 
     session.append(&Event::UserMessage {
         text: prompt.to_string(),
@@ -191,6 +203,48 @@ pub async fn run(
     )
 }
 
+/// Rebuild provider messages from durable session events.
+///
+/// `SessionStart`, `TurnEnd`, and `SessionEnd` carry no conversation content.
+/// A `Compaction` event becomes a system message so resumed turns retain its
+/// handoff text.
+pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
+    let mut messages = Vec::new();
+
+    for event in events {
+        match event {
+            Event::SessionStart { .. } | Event::TurnEnd { .. } | Event::SessionEnd { .. } => {}
+            Event::UserMessage { text, .. } => {
+                messages.push(ChatMessage::user(text.clone()));
+            }
+            Event::AssistantMessage {
+                text,
+                reasoning,
+                tool_calls,
+                ..
+            } => {
+                messages.push(ChatMessage::assistant(
+                    non_empty(text.clone()),
+                    reasoning.clone().filter(|value| !value.is_empty()),
+                    tool_calls.clone(),
+                ));
+            }
+            Event::ToolResult {
+                call_id, output, ..
+            } => {
+                messages.push(ChatMessage::tool(call_id.clone(), output.clone()));
+            }
+            Event::Compaction { summary, .. } => {
+                messages.push(ChatMessage::system(format!(
+                    "Previous context summary:\n{summary}"
+                )));
+            }
+        }
+    }
+
+    Ok(messages)
+}
+
 #[derive(Debug, Default)]
 struct PendingCall {
     id: Option<String>,
@@ -249,7 +303,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use ni_core::session::load;
-    use ni_provider::{ScriptedProvider, StreamEvent, ToolCallDelta};
+    use ni_provider::{Role, ScriptedProvider, StreamEvent, ToolCallDelta};
 
     use super::*;
 
@@ -295,6 +349,88 @@ mod tests {
                 "session_end"
             ]
         );
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn projects_conversation_history_from_events() {
+        let events = vec![
+            Event::UserMessage {
+                text: "first".into(),
+                ts: 1,
+            },
+            Event::AssistantMessage {
+                text: "answer".into(),
+                reasoning: Some("thought".into()),
+                tool_calls: vec![ToolCall {
+                    id: "call_1".into(),
+                    name: "read".into(),
+                    input: json!({"path": "a.txt"}),
+                }],
+                ts: 2,
+            },
+            Event::ToolResult {
+                call_id: "call_1".into(),
+                ok: true,
+                output: "file".into(),
+                ts: 3,
+            },
+            Event::TurnEnd {
+                usage: Usage::default(),
+                ts: 4,
+            },
+        ];
+
+        let history = project_history(&events).expect("project history");
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[0].role, Role::User);
+        assert_eq!(history[1].role, Role::Assistant);
+        assert_eq!(history[1].reasoning_content.as_deref(), Some("thought"));
+        assert_eq!(history[2].role, Role::Tool);
+        assert_eq!(history[2].tool_call_id.as_deref(), Some("call_1"));
+    }
+
+    #[tokio::test]
+    async fn resumes_from_projected_history() {
+        let directory = temp_dir("resume");
+        let mut session = SessionLog::create(directory.as_path()).expect("session");
+        let first = ScriptedProvider::from_turns(vec![vec![
+            StreamEvent::TextDelta("first".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ]]);
+        let config = AgentConfig::new("test-model", directory.clone());
+        run(&first, &mut session, &config, "first task", &mut |_| {})
+            .await
+            .expect("first run");
+
+        let loaded = load(session.path()).expect("load session");
+        let history = project_history(&loaded.events).expect("project");
+        let second = ScriptedProvider::from_turns(vec![vec![
+            StreamEvent::TextDelta("second".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ]]);
+        let outcome = run_with_history(
+            &second,
+            &mut session,
+            &config,
+            "second task",
+            history,
+            &mut |_| {},
+        )
+        .await
+        .expect("resume run");
+
+        assert_eq!(outcome.final_text, "second");
+        let requests = second.requests();
+        assert!(requests[0]
+            .messages
+            .iter()
+            .any(|message| message.content.as_deref() == Some("first task")));
 
         fs::remove_dir_all(directory).expect("cleanup");
     }

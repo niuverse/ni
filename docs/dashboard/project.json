@@ -5,7 +5,7 @@
     "title": "ni",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M0 · Bootstrap",
+    "status": "M1 · Sandbox",
     "repo": "niuverse/ni",
     "language": "Rust"
   },
@@ -13,7 +13,7 @@
     {
       "id": "M0",
       "title": "Bootstrap",
-      "status": "active",
+      "status": "done",
       "goal": "跑通 headless 闭环：一个 provider、六个工具、可恢复的会话。",
       "exit": [
         "ni exec 能修复一个真实小 bug",
@@ -24,7 +24,7 @@
     {
       "id": "M1",
       "title": "Interaction",
-      "status": "planned",
+      "status": "active",
       "goal": "把审批、沙箱和流式交互补齐，让 harness 可以放心跑长任务。",
       "exit": [
         "TUI 流式输出与 diff 预览",
@@ -387,6 +387,16 @@
         "M0-006",
         "M0-007",
         "M0-008"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M0 完成：可恢复、可回放的 exec 闭环",
+      "detail": "resume、record/replay fixture、golden transcript 与六工具加固都已落地。",
+      "refs": [
+        "M0-009",
+        "exec"
       ]
     }
   ]

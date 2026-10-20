@@ -5,12 +5,14 @@
 //! never sees SSE, HTTP, or provider-specific JSON.
 
 mod error;
+mod fixture;
 mod message;
 mod openai;
 mod scripted;
 mod sse;
 
 pub use error::ProviderError;
+pub use fixture::{RecordedEvent, RecordedFixture, RecordingProvider, ReplayProvider};
 pub use message::{
     ChatMessage, CompletionRequest, FunctionSpec, Role, ToolSpec, WireFunction, WireToolCall,
 };
