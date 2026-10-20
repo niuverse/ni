@@ -90,6 +90,8 @@ pub struct AgentConfig {
     /// Optional workspace-relative path prefixes for write/edit. bash is not
     /// path-scoped; it is serialized by `write_lock` instead.
     pub write_scope: Option<Vec<String>>,
+    /// Extra read-only roots (trusted skill bodies).
+    pub read_roots: Vec<PathBuf>,
     /// Explicit opt-in for subagent `profile = "inherit"`. Off by default;
     /// inherit still strips the nested `subagent` tool.
     pub allow_subagent_inheritance: bool,
@@ -126,6 +128,7 @@ impl AgentConfig {
             extension_host: None,
             write_lock: None,
             write_scope: None,
+            read_roots: Vec::new(),
             allow_subagent_inheritance: false,
         }
     }
@@ -193,10 +196,11 @@ pub async fn run_with_history(
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
-    let toolbox = Toolbox::with_policy_and_fallback(
+    let toolbox = Toolbox::with_policy_and_roots(
         &config.working_dir,
         config.sandbox,
         config.allow_unsandboxed,
+        config.read_roots.clone(),
     )?;
     let mut tools = Toolbox::specs();
     if let Some(host) = &config.extension_host {

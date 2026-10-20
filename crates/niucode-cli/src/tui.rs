@@ -33,6 +33,7 @@ use crate::inline::InlineEditor;
 use crate::provider_factory::{available_model_choices, provider_choices, ProviderFactory};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
+use crate::skills;
 use crate::slash::{
     self, Command as SlashCommand, CommandRegistry, GoalAction, Parsed as SlashParsed, PlanAction,
 };
@@ -661,6 +662,15 @@ pub async fn run(
         }
         let mut run_config = apply_runtime_config(config, &state);
         run_config.plan_mode = state.plan_mode;
+        if let Ok(workspace) = Workspace::discover(&config.working_dir) {
+            if let Ok(registry) = skills::Registry::discover(&workspace) {
+                let (block, roots) = registry.activate(&prompt);
+                if !block.is_empty() {
+                    run_config.system_prompt.push_str(&block);
+                    run_config.read_roots.extend(roots);
+                }
+            }
+        }
 
         let result = {
             let run = run_with_history(
@@ -796,6 +806,7 @@ async fn handle_command(
                 run_init_generate(provider.as_ref(), session, config, state, out, err).await?;
             }
         }
+        SlashCommand::Skills(arg) => handle_skills(config, state, arg, out)?,
         SlashCommand::Plan(action) => handle_plan(session, state, action, out)?,
         SlashCommand::Goal(action) => handle_goal(session, state, action, out)?,
         SlashCommand::Clear => {
@@ -1091,6 +1102,91 @@ fn handle_model(
         "{}",
         out.dim("  switching between turns may miss the prompt cache")
     );
+    Ok(())
+}
+
+fn handle_skills(
+    config: &AgentConfig,
+    state: &SessionUiState,
+    arg: Option<String>,
+    out: Theme,
+) -> Result<()> {
+    let workspace = Workspace::discover(&config.working_dir)?;
+    let registry = skills::Registry::discover(&workspace)?;
+    let Some(arg) = arg else {
+        println!(
+            "{} {}",
+            out.accent("skills"),
+            out.dim(format!(
+                "global ~/.agents/skills · project {}",
+                config.working_dir.join(".agents/skills").display()
+            ))
+        );
+        if registry.list().is_empty() {
+            println!("{}", out.dim("  no SKILL.md found"));
+            return Ok(());
+        }
+        for skill in registry.list() {
+            println!(
+                "{} {}",
+                out.paint(
+                    if skill.trusted {
+                        Tone::Success
+                    } else {
+                        Tone::Warning
+                    },
+                    if skill.trusted {
+                        "trusted"
+                    } else {
+                        "untrusted"
+                    }
+                ),
+                out.paint(
+                    Tone::Bright,
+                    format!(
+                        "{} · {} · {}",
+                        skill.name,
+                        skill.scope.as_str(),
+                        skill.description
+                    )
+                )
+            );
+            println!("{}", out.dim(format!("  {}", skill.path.display())));
+        }
+        println!(
+            "{}",
+            out.dim("  /skills trust <name> · /skills untrust <name>")
+        );
+        return Ok(());
+    };
+    let mut parts = arg.split_whitespace();
+    let action = parts.next().unwrap_or("");
+    let name = parts.next().unwrap_or("");
+    if name.is_empty() {
+        bail!("usage: /skills [trust|untrust <name>]");
+    }
+    if state.plan_mode {
+        bail!("plan mode is read-only; use /plan off before changing skill trust");
+    }
+    match action {
+        "trust" => {
+            registry.trust(name)?;
+            println!(
+                "{} {}",
+                out.paint(Tone::Success, theme::OK),
+                out.dim(format!("trusted project skill {name} for this project"))
+            );
+        }
+        "untrust" => {
+            registry.untrust(name)?;
+            println!(
+                "{} {}",
+                out.paint(Tone::Success, theme::OK),
+                out.dim(format!("untrusted project skill {name}"))
+            );
+        }
+        _ => bail!("usage: /skills [trust|untrust <name>]"),
+    }
     Ok(())
 }
 

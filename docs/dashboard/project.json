@@ -1018,6 +1018,18 @@
         "adr-0023",
         "M4-008"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "skills 基础进入 review",
+      "detail": "SKILL.md 发现、digest 信任、/skills、$name 激活与只读 roots；项目信任待 M4-007 gate。",
+      "refs": [
+        "M5-007",
+        "adr-0024",
+        "skills",
+        "tui"
+      ]
     }
   ]
 }

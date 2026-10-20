@@ -86,7 +86,7 @@ M4-004/M4-005/M4-009/M4-010/M4-011/M4-012 are done; M4-006/007/008 are backlog.
 M5-001/M5-002/M5-004/M5-005 are done; M5-003 inline is review. Ghostty
 currently defaults to the stable linear editor because inline still overlaps
 there (M5-006); non-Ghostty terminals use inline. There is no project-local
-`.niucode`; state lives in `~/.niucode/projects/<key>/`. skills, M4-007 security gate, and
+`.niucode`; state lives in `~/.niucode/projects/<key>/`. skills discovery/trust is in review (M5-007); M4-007 security gate and
 M4-006 worktree remain.
 `/goal run` is available in TUI and headless via `exec --goal`. TUI mouse capture
 is menu-scoped, terminal state is restored by `TerminalGuard`, session

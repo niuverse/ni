@@ -114,6 +114,7 @@ pub struct Toolbox {
     observed: Mutex<HashSet<PathBuf>>,
     policy: SandboxPolicy,
     allow_unsandboxed: bool,
+    read_roots: Vec<PathBuf>,
 }
 
 impl Toolbox {
@@ -130,6 +131,15 @@ impl Toolbox {
         policy: SandboxPolicy,
         allow_unsandboxed: bool,
     ) -> Result<Self> {
+        Self::with_policy_and_roots(cwd, policy, allow_unsandboxed, Vec::new())
+    }
+
+    pub fn with_policy_and_roots(
+        cwd: impl AsRef<Path>,
+        policy: SandboxPolicy,
+        allow_unsandboxed: bool,
+        read_roots: Vec<PathBuf>,
+    ) -> Result<Self> {
         let cwd = cwd.as_ref().canonicalize().with_context(|| {
             format!("canonicalize working directory {}", cwd.as_ref().display())
         })?;
@@ -142,6 +152,7 @@ impl Toolbox {
             observed: Mutex::new(HashSet::new()),
             policy,
             allow_unsandboxed,
+            read_roots,
         })
     }
 
@@ -293,7 +304,7 @@ impl Toolbox {
     }
 
     fn read(&self, input: &Value) -> Result<String> {
-        let path = self.resolve_existing(input_string(input, "path")?)?;
+        let path = self.resolve_existing_read(input_string(input, "path")?)?;
         let text = fs::read_to_string(&path)
             .with_context(|| format!("read {}", self.display_path(&path)))?;
         self.mark_observed(&path);
@@ -697,6 +708,26 @@ impl Toolbox {
         self.observed.lock().expect("observed lock").contains(path)
     }
 
+    fn resolve_existing_read(&self, raw: &str) -> Result<PathBuf> {
+        let candidate = self.candidate(raw);
+        let canonical = candidate
+            .canonicalize()
+            .with_context(|| format!("resolve {raw}"))?;
+        if canonical.starts_with(&self.cwd)
+            || self
+                .read_roots
+                .iter()
+                .any(|root| canonical.starts_with(root))
+        {
+            Ok(canonical)
+        } else {
+            bail!(
+                "{} is outside the workspace and skill roots",
+                self.display_path(&canonical)
+            )
+        }
+    }
+
     fn resolve_existing(&self, raw: &str) -> Result<PathBuf> {
         let candidate = self.candidate(raw);
         let canonical = candidate
@@ -1076,5 +1107,30 @@ mod tests {
         assert!(result.output.contains("exit: 3"));
 
         fs::remove_dir_all(directory).expect("cleanup");
+    }
+    #[tokio::test]
+    async fn read_allows_extra_read_only_roots() {
+        let workspace =
+            std::env::temp_dir().join(format!("niucode-tool-roots-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("niucode-skill-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&workspace);
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        std::fs::create_dir_all(&root).expect("root");
+        std::fs::write(root.join("SKILL.md"), "# Skill\n").expect("skill");
+        let toolbox = Toolbox::with_policy_and_roots(
+            &workspace,
+            SandboxPolicy::default(),
+            false,
+            vec![root.clone()],
+        )
+        .expect("toolbox");
+        let result = toolbox
+            .execute("read", &serde_json::json!({"path": root.join("SKILL.md")}))
+            .await;
+        assert!(result.ok, "{}", result.output);
+        assert!(result.output.contains("# Skill"));
+        let _ = std::fs::remove_dir_all(workspace);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

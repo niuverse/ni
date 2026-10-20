@@ -17,6 +17,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ),
     ("/reload", "reload AGENTS.md instructions for the next turn"),
     ("/model", "show or switch the runtime model"),
+    ("/skills", "list skills; trust/untrust project skills"),
     (
         "/permissions",
         "show or switch the runtime permission profile",
@@ -81,6 +82,7 @@ pub enum Command {
     Reload,
     Model(Option<String>),
     Permissions(Option<String>),
+    Skills(Option<String>),
     Compact,
     Plan(PlanAction),
     Goal(GoalAction),
@@ -140,6 +142,14 @@ pub fn parse(input: &str) -> Parsed {
             "apply" => Parsed::Command(Command::Init { apply: true }),
             _ => Parsed::Usage("/init [apply]".into()),
         };
+    }
+
+    if name == "skills" {
+        return Parsed::Command(Command::Skills(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        }));
     }
 
     if name == "goal" {
@@ -221,6 +231,7 @@ fn usage(command: &Command) -> String {
         Command::Reload => "/reload".into(),
         Command::Model(_) => "/model [name]".into(),
         Command::Permissions(_) => "/permissions [ask|review|full-access|ci]".into(),
+        Command::Skills(_) => "/skills [trust|untrust <name>]".into(),
         Command::Compact => "/compact".into(),
         Command::Plan(action) => match action {
             PlanAction::Enter => "/plan".into(),

@@ -29,6 +29,7 @@ mod inline;
 mod provider_factory;
 mod review;
 mod session_ops;
+mod skills;
 mod slash;
 mod theme;
 mod tui;
@@ -1146,6 +1147,13 @@ async fn run_exec(
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    if let Ok(registry) = skills::Registry::discover(&workspace) {
+        let (block, roots) = registry.activate(&prompt);
+        if !block.is_empty() {
+            agent_config.system_prompt.push_str(&block);
+            agent_config.read_roots.extend(roots);
+        }
+    }
     if let Some(condition) = &goal {
         session.append(&Event::GoalSet {
             text: condition.clone(),
