@@ -276,6 +276,29 @@ fn apply_runtime_config(config: &AgentConfig, state: &SessionUiState) -> AgentCo
     runtime
 }
 
+fn ghostty_terminal() -> bool {
+    std::env::var("TERM_PROGRAM")
+        .map(|value| value.eq_ignore_ascii_case("ghostty"))
+        .unwrap_or(false)
+        || std::env::var("TERM")
+            .map(|value| value.to_ascii_lowercase().contains("ghostty"))
+            .unwrap_or(false)
+        || std::env::var_os("GHOSTTY_RESOURCES_DIR").is_some()
+}
+
+/// Inline ratatui is still being hardened against terminal-specific cursor
+/// behavior. Ghostty currently falls back to the stable linear editor unless
+/// the user explicitly forces inline mode.
+fn inline_tui_allowed() -> bool {
+    if std::env::var_os("NIUCODE_TUI_LINEAR").is_some() {
+        return false;
+    }
+    if std::env::var_os("NIUCODE_TUI_INLINE").is_some() {
+        return true;
+    }
+    !ghostty_terminal()
+}
+
 pub async fn run(
     mut provider: Arc<dyn Provider>,
     provider_factory: Option<&ProviderFactory>,
@@ -291,10 +314,18 @@ pub async fn run(
     }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        let mut editor = if std::env::var_os("NIUCODE_TUI_LINEAR").is_some() {
-            PromptEditor::Linear(LineEditor::new(commands.clone()))
-        } else {
+        let inline = inline_tui_allowed();
+        if !inline && ghostty_terminal() {
+            eprintln!(
+                "{} {}",
+                out.dim("tui"),
+                out.dim("Ghostty: using stable linear TUI; NIUCODE_TUI_INLINE=1 forces inline.")
+            );
+        }
+        let mut editor = if inline {
             PromptEditor::Inline(InlineEditor::new(commands.clone()))
+        } else {
+            PromptEditor::Linear(LineEditor::new(commands.clone()))
         };
         editor.set_models(niucode_model_choices(config, provider_factory));
         editor.set_current_model(format!("{}/{}", config.provider, config.model));
@@ -507,7 +538,7 @@ pub async fn run(
                         line_open = false;
                     }
                     flush_usage(err, &mut pending_usage, turn_no);
-                    eprintln!("{}", err.dim(format!("{} thinking", theme::THINKING)));
+                    eprintln!("\r{}", err.dim(format!("{} thinking", theme::THINKING)));
                     thinking = true;
                 }
                 eprint!("{}", err.dim(delta.replace('\u{1b}', "␛")));

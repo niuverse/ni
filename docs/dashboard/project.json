@@ -974,6 +974,28 @@
         "adr-0021",
         "M5-005"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0022 accepted：Ghostty 先回退 linear",
+      "detail": "Ghostty 覆盖问题未解决前默认 linear；inline 仅显式 opt-in/其他终端；M5-006 跟踪 Ghostty 回归测试。",
+      "refs": [
+        "adr-0022",
+        "M5-006",
+        "M5-003"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "fix",
+      "title": "Ghostty 自动 linear fallback",
+      "detail": "TERM_PROGRAM/TERM/GHOSTTY_RESOURCES_DIR 检测 Ghostty；提交后 tmux 抓屏无覆盖；reasoning 缩进修复。",
+      "refs": [
+        "M5-006",
+        "adr-0022",
+        "tui"
+      ]
     }
   ]
 }
