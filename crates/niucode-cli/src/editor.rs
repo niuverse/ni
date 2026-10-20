@@ -21,6 +21,7 @@ use crate::theme::Theme;
 
 const MAX_MENU_ROWS: usize = 6;
 const MENU_NAME_WIDTH: usize = 10;
+const MENU_PREFIX_WIDTH: usize = 2;
 static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
 
 /// Number of mouse events delivered to the line editor in this process.
@@ -629,7 +630,10 @@ impl State<'_> {
                 spec.description,
                 width = MENU_NAME_WIDTH
             );
-            let line = truncate_columns(&line, cols);
+            // The selected/normal prefix occupies two columns. Truncating to
+            // the full terminal width would wrap and desynchronise the cursor,
+            // leaving old menu rows behind when the user edits the input.
+            let line = truncate_columns(&line, cols.saturating_sub(MENU_PREFIX_WIDTH));
             if index == self.selected {
                 if self.theme.is_ansi() {
                     write!(out, "\x1b[7m▸ {line}\x1b[0m")?;
@@ -865,6 +869,16 @@ mod tests {
     fn truncates_menu_lines_by_display_width() {
         assert_eq!(truncate_columns("abcdef", 4), "abcd");
         assert_eq!(truncate_columns("你好世界", 4), "你好");
+    }
+
+    #[test]
+    fn menu_lines_leave_room_for_the_prefix() {
+        let line = format!("{:<10} {}", "/model", "description ".repeat(20));
+        let truncated = truncate_columns(&line, 40 - MENU_PREFIX_WIDTH);
+        assert!(
+            UnicodeWidthStr::width(truncated.as_str()) + MENU_PREFIX_WIDTH <= 40,
+            "menu line would wrap"
+        );
     }
 
     #[test]
