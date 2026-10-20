@@ -195,6 +195,12 @@ pub enum Event {
     GoalCleared {
         ts: Timestamp,
     },
+    /// Evaluator verdict for a /goal run turn.
+    GoalVerdict {
+        status: String,
+        reason: String,
+        ts: Timestamp,
+    },
     /// A sidecar extension was mounted for this session.
     ExtensionMount {
         name: String,
@@ -244,6 +250,7 @@ impl Event {
             Self::PlanMode { .. } => "plan_mode",
             Self::GoalSet { .. } => "goal_set",
             Self::GoalCleared { .. } => "goal_cleared",
+            Self::GoalVerdict { .. } => "goal_verdict",
             Self::ExtensionMount { .. } => "extension_mount",
             Self::ExtensionUnmount { .. } => "extension_unmount",
             Self::ExtensionError { .. } => "extension_error",
@@ -268,6 +275,7 @@ impl Event {
             | Self::PlanMode { ts, .. }
             | Self::GoalSet { ts, .. }
             | Self::GoalCleared { ts }
+            | Self::GoalVerdict { ts, .. }
             | Self::ExtensionMount { ts, .. }
             | Self::ExtensionUnmount { ts, .. }
             | Self::ExtensionError { ts, .. }

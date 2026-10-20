@@ -731,6 +731,18 @@
         "adr-0014",
         "loop"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-005 完成：/goal run evaluator loop",
+      "detail": "TUI 自动续跑最多 6 轮；独立无工具 evaluator 输出 goal_verdict；met 清 goal，impossible/预算耗尽停止；headless 版进 M4-008。",
+      "refs": [
+        "M4-005",
+        "M4-008",
+        "adr-0014",
+        "loop"
+      ]
     }
   ]
 }

@@ -56,6 +56,7 @@ user input
 | `subagent_result` | 子任务结束 | id、ok、summary、session、turns、usage |
 | `plan_mode` | plan mode 开关 | active |
 | `goal_set` / `goal_cleared` | 会话目标 | text / 清除 |
+| `goal_verdict` | `/goal run` evaluator 结论 | status、reason |
 | `extension_mount` / `extension_unmount` | sidecar 挂载/卸载 | name、version、tools |
 | `extension_error` | sidecar 挂载/调用失败 | name、message |
 | `compaction` | 上下文压缩 | summary、upto、before/after tokens |

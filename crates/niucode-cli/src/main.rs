@@ -22,6 +22,7 @@ use crate::theme::{Theme, Tone};
 
 mod diff;
 mod editor;
+mod goal;
 mod review;
 mod session_ops;
 mod slash;

@@ -12,13 +12,16 @@ use crossterm::cursor::MoveTo;
 use crossterm::event::{self, Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType};
-use niucode_agent::{project_history, run_with_history, AgentConfig, AgentEvent, ApprovalRequest};
+use niucode_agent::{
+    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalRequest, RunOutcome,
+};
 use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
 use niucode_provider::{ChatMessage, Provider};
 use niucode_tools::SandboxMode;
 
 use crate::diff::{clean_text, render_plain};
 use crate::editor::{Input, LineEditor};
+use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
 use crate::slash::{
@@ -49,6 +52,9 @@ struct ToolEcho {
 struct SessionUiState {
     plan_mode: bool,
     goal: Option<String>,
+    goal_run: bool,
+    goal_turns: usize,
+    pending_prompt: Option<String>,
 }
 
 impl SessionUiState {
@@ -113,7 +119,19 @@ pub async fn run(
     });
 
     loop {
-        let input = if let Some(editor) = &mut editor {
+        let input = if let Some(prompt) = state.pending_prompt.take() {
+            eprintln!(
+                "{} {}",
+                out.accent("↻ goal run"),
+                out.dim(format!(
+                    "turn {}/{} · {}",
+                    state.goal_turns + 1,
+                    MAX_GOAL_TURNS,
+                    state.goal.as_deref().unwrap_or("")
+                ))
+            );
+            prompt
+        } else if let Some(editor) = &mut editor {
             println!();
             let raw_prompt = format!("niucode {} ", theme::PROMPT);
             let styled_prompt = format!("{} ", out.accent(format!("niucode {}", theme::PROMPT)));
@@ -350,6 +368,8 @@ pub async fn run(
 
         match result {
             None => {
+                state.goal_run = false;
+                state.pending_prompt = None;
                 let _ = session.append(&Event::SessionEnd { ts: now_ms() });
                 history = project_history(&load(session.path())?.events)?;
                 eprintln!(
@@ -373,8 +393,31 @@ pub async fn run(
                     ))
                 );
                 history = project_history(&load(session.path())?.events)?;
+                if state.goal_run {
+                    if let Err(error) = goal_after_turn(
+                        provider,
+                        session,
+                        &mut state,
+                        &outcome,
+                        &config.model,
+                        out,
+                        err,
+                    )
+                    .await
+                    {
+                        state.goal_run = false;
+                        state.pending_prompt = None;
+                        eprintln!(
+                            "{} {}",
+                            err.paint(Tone::Warning, theme::WARN),
+                            err.paint(Tone::Warning, format!("goal evaluator failed: {error:#}"))
+                        );
+                    }
+                }
             }
             Some(Err(error)) => {
+                state.goal_run = false;
+                state.pending_prompt = None;
                 eprintln!(
                     "{} {}",
                     err.paint(Tone::Danger, theme::ERR),
@@ -425,6 +468,9 @@ fn handle_command(
             *last_tool = None;
             state.plan_mode = false;
             state.goal = None;
+            state.goal_run = false;
+            state.goal_turns = 0;
+            state.pending_prompt = None;
             reset_screen(err);
             println!(
                 "{} {}",
@@ -552,9 +598,44 @@ fn handle_goal(
         GoalAction::Show => match &state.goal {
             Some(goal) => {
                 println!("{} {}", out.accent("goal"), out.paint(Tone::Bright, goal));
+                if state.goal_run {
+                    println!(
+                        "{}",
+                        out.dim(format!(
+                            "  run active · turn {}/{} · /goal stop",
+                            state.goal_turns, MAX_GOAL_TURNS
+                        ))
+                    );
+                }
             }
             None => println!("{}", out.dim("no active goal · /goal <condition>")),
         },
+        GoalAction::Run => {
+            if state.plan_mode {
+                bail!("goal run is disabled in plan mode; use /plan off first");
+            }
+            let Some(goal) = state.goal.clone() else {
+                bail!("set a goal first: /goal <condition>");
+            };
+            state.goal_run = true;
+            state.goal_turns = 0;
+            state.pending_prompt = Some(goal::continue_prompt(&goal));
+            println!(
+                "{} {}",
+                out.accent("goal run"),
+                out.paint(Tone::Bright, format!("max {MAX_GOAL_TURNS} turns"))
+            );
+            println!("{}", out.dim("  /goal stop to stop after the current turn"));
+        }
+        GoalAction::Stop => {
+            if state.goal_run {
+                state.goal_run = false;
+                state.pending_prompt = None;
+                println!("{}", out.dim("goal run stopped"));
+            } else {
+                println!("{}", out.dim("goal run is not active"));
+            }
+        }
         GoalAction::Set(text) => {
             let text = text.trim();
             if text.is_empty() {
@@ -574,11 +655,93 @@ fn handle_goal(
             );
         }
         GoalAction::Clear => {
+            state.goal_run = false;
+            state.pending_prompt = None;
             if state.goal.take().is_some() {
                 session.append(&Event::GoalCleared { ts: now_ms() })?;
                 println!("{} goal cleared", out.paint(Tone::Success, theme::OK));
             } else {
                 println!("{}", out.dim("no active goal"));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn goal_after_turn(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    state: &mut SessionUiState,
+    outcome: &RunOutcome,
+    model: &str,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    let Some(goal) = state.goal.clone() else {
+        state.goal_run = false;
+        return Ok(());
+    };
+    let verdict = goal::evaluate(provider, model, &goal, &outcome.final_text).await?;
+    session.append(&Event::GoalVerdict {
+        status: verdict.status.as_str().to_string(),
+        reason: verdict.reason.clone(),
+        ts: now_ms(),
+    })?;
+
+    match verdict.status {
+        GoalStatus::Met => {
+            state.goal_run = false;
+            state.goal_turns = 0;
+            state.pending_prompt = None;
+            state.goal = None;
+            session.append(&Event::GoalCleared { ts: now_ms() })?;
+            println!(
+                "{} {}",
+                out.paint(Tone::Success, theme::OK),
+                out.paint(
+                    Tone::Bright,
+                    format!("goal met · {}", clean_text(&verdict.reason))
+                )
+            );
+        }
+        GoalStatus::Impossible => {
+            state.goal_run = false;
+            state.pending_prompt = None;
+            eprintln!(
+                "{} {}",
+                err.paint(Tone::Warning, theme::WARN),
+                err.paint(
+                    Tone::Warning,
+                    format!("goal impossible · {}", clean_text(&verdict.reason))
+                )
+            );
+        }
+        GoalStatus::NotMet => {
+            state.goal_turns += 1;
+            if state.goal_turns >= MAX_GOAL_TURNS {
+                state.goal_run = false;
+                state.pending_prompt = None;
+                eprintln!(
+                    "{} {}",
+                    err.paint(Tone::Warning, theme::WARN),
+                    err.dim(format!(
+                        "goal budget exhausted ({MAX_GOAL_TURNS} turns) · {}",
+                        clean_text(&verdict.reason)
+                    ))
+                );
+            } else {
+                state.pending_prompt = Some(goal::continue_prompt(&goal));
+                eprintln!(
+                    "{} {}",
+                    out.accent("↻ goal not met"),
+                    out.dim(format!(
+                        "turn {}/{} · {}",
+                        state.goal_turns,
+                        MAX_GOAL_TURNS,
+                        clean_text(&verdict.reason)
+                    ))
+                );
             }
         }
     }

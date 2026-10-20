@@ -7,7 +7,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("/init", "create AGENTS.md in the workspace"),
     ("/clear", "start a new session (old log is kept)"),
     ("/plan", "enter or leave read-only plan mode"),
-    ("/goal", "set, show, or clear the session goal"),
+    ("/goal", "set, run, stop, or clear the session goal"),
     ("/fork", "fork the current session [event-id]"),
     ("/status", "show model, sandbox, context, session and cache"),
     ("/session", "show the current session path and event count"),
@@ -81,6 +81,8 @@ pub enum PlanAction {
 pub enum GoalAction {
     Show,
     Set(String),
+    Run,
+    Stop,
     Clear,
 }
 
@@ -114,7 +116,9 @@ pub fn parse(input: &str) -> Parsed {
     if name == "goal" {
         let command = match rest {
             "" => Command::Goal(GoalAction::Show),
-            "clear" | "stop" | "off" => Command::Goal(GoalAction::Clear),
+            "run" => Command::Goal(GoalAction::Run),
+            "stop" | "pause" | "off" => Command::Goal(GoalAction::Stop),
+            "clear" => Command::Goal(GoalAction::Clear),
             text => Command::Goal(GoalAction::Set(text.to_string())),
         };
         return Parsed::Command(command);
@@ -167,7 +171,7 @@ fn usage(command: &Command) -> String {
             PlanAction::Approve => "/plan approve".into(),
             PlanAction::Status => "/plan status".into(),
         },
-        Command::Goal(_) => "/goal [condition|clear]".into(),
+        Command::Goal(_) => "/goal [condition|run|stop|clear]".into(),
         Command::Fork(_) => "/fork [event-id]".into(),
         Command::Status => "/status".into(),
         Command::Session => "/session".into(),
@@ -308,6 +312,14 @@ mod tests {
         assert_eq!(
             parse("/goal clear"),
             Parsed::Command(Command::Goal(GoalAction::Clear))
+        );
+        assert_eq!(
+            parse("/goal run"),
+            Parsed::Command(Command::Goal(GoalAction::Run))
+        );
+        assert_eq!(
+            parse("/goal stop"),
+            Parsed::Command(Command::Goal(GoalAction::Stop))
         );
         assert_eq!(
             parse("/plan nope"),

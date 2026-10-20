@@ -76,7 +76,8 @@ TTY 下使用 readline 风格的行编辑器：
 
 - `/plan` 只收紧权限：`effective_access = min(base_access, read-only)`，写/命令/联网被阻止或询问；它不改变当前 sandbox/approval 配置，退出后恢复。
 - `/plan` 生成的计划就是该 turn 的 assistant 输出；`/plan approve` 只退出模式，不自动执行，下一次 prompt 才进入实现。
-- `/goal` 是目标标签，不是权限；它进入 system prompt，写入 `goal_set` / `goal_cleared` 事件，compaction/resume 后仍存在。`/goal run` evaluator loop 在 backlog。
+- `/goal` 是目标标签，不是权限；它进入 system prompt，写入 `goal_set` / `goal_cleared` 事件，compaction/resume 后仍存在。
+- `/goal run` 每轮结束调用独立 evaluator（无工具、30s timeout），verdict 写入 `goal_verdict`；met 自动清除 goal，impossible/6 轮预算耗尽停止。`/goal stop` 停止但不删 goal。headless 版本在 M4-008。
 - 启动时可用 `--plan` 直接进入 plan mode；profile 的 CLI/`/permissions` 随 M4-003 落地，当前仍用 `--sandbox` / `--approval`。
 
 ## Slash 命令
@@ -88,7 +89,7 @@ TTY 下使用 readline 风格的行编辑器：
 | `/init` | 在当前工作区创建 `AGENTS.md` scaffold；已存在则不覆盖，read-only 沙箱拒绝。 |
 | `/clear` | 新建 session 并清空当前上下文；旧 session 文件保留。 |
 | `/plan` | 进入只读 plan mode；`/plan off` / `/plan approve` 退出；`/plan status` 查看。 |
-| `/goal <condition>` | 设置会话目标标签；`/goal` 查看；`/goal clear` 清除；写入事件日志并随 resume 恢复。 |
+| `/goal <condition>` | 设置会话目标标签；`/goal` 查看；`/goal run` 自动续跑（最多 6 轮）；`/goal stop` 停止；`/goal clear` 清除。 |
 | `/fork [event-id]` | 复制当前 session 的前缀到新 session 并切换过去；默认 fork 到最后一个事件。 |
 | `/status` | 显示 model、cwd、sandbox、context budget、session、事件数、turn / compaction / instruction / subagent / extension 计数和累计 cache。 |
 | `/session` | 显示当前 session 路径、事件数和 turn 数。 |
