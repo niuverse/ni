@@ -796,10 +796,9 @@ fn argument_candidates(
         ("model", rest)
     } else if line == "/permissions" {
         ("permissions", "")
-    } else if let Some(rest) = line.strip_prefix("/permissions ") {
-        ("permissions", rest)
     } else {
-        return None;
+        let rest = line.strip_prefix("/permissions ")?;
+        ("permissions", rest)
     };
     if argument.chars().any(char::is_whitespace) {
         return None;
