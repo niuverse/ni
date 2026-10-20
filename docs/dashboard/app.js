@@ -17,19 +17,19 @@
     active: 'Active',
   };
   const STATUS_COLORS = {
-    backlog: '#8c8478',
-    ready: '#3f6f9f',
-    doing: '#b7791f',
-    review: '#6f5aa8',
-    done: '#3f7d4f',
-    blocked: '#b42318',
+    backlog: 'var(--st-backlog)',
+    ready: 'var(--st-ready)',
+    doing: 'var(--st-doing)',
+    review: 'var(--st-review)',
+    done: 'var(--st-done)',
+    blocked: 'var(--st-blocked)',
   };
   const LAYER_COLORS = {
-    interface: '#4c7bd9',
-    engine: '#b57436',
-    adapters: '#8768bf',
-    state: '#5c8f4a',
-    engineering: '#8a8175',
+    interface: 'var(--layer-interface)',
+    engine: 'var(--layer-engine)',
+    adapters: 'var(--layer-adapters)',
+    state: 'var(--layer-state)',
+    engineering: 'var(--layer-engineering)',
   };
   const KIND_LABEL = { adr: 'ADR', doc: 'Doc', guide: 'Guide' };
 
@@ -48,6 +48,7 @@
     view: 'arch',
     milestone: currentMilestoneId(),
     selection: null,
+    hoverModule: null,
     query: '',
     sourceIndex: 0,
   };
@@ -82,7 +83,7 @@
   }
 
   function layerColor(id) {
-    return LAYER_COLORS[id] || '#8a8175';
+    return LAYER_COLORS[id] || 'var(--layer-engineering)';
   }
 
   function layerName(id) {
@@ -170,7 +171,7 @@
 
   function viewHead(kicker, title, subtitle, stats) {
     return `<div class="view-head">
-      <div>
+      <div class="view-head-main">
         <div class="kicker">${esc(kicker)}</div>
         <h1 class="view-title">${esc(title)}</h1>
         ${subtitle ? `<p class="view-sub">${esc(subtitle)}</p>` : ''}
@@ -203,7 +204,7 @@
     const focus = currentFocus();
     let foot = '';
     if (focus?.card) {
-      foot += `<div class="focus-block"><div class="focus-kicker">Current focus · ${esc(focus.milestone.id)}</div><button class="focus-card" type="button" data-card="${esc(focus.card.id)}"><span class="focus-id">${esc(focus.card.id)}</span><span class="focus-title">${esc(focus.card.title)}</span></button></div>`;
+      foot += `<div class="focus-block"><div class="focus-kicker">Current focus · ${esc(focus.milestone.id)}</div><button class="focus-card" type="button" data-card="${esc(focus.card.id)}"><span class="focus-id">${esc(focus.card.id)} · ${esc(STATUS_LABEL[focus.card.status] || focus.card.status)}</span><span class="focus-title">${esc(focus.card.title)}</span></button></div>`;
     } else if (focus) {
       foot += `<div class="focus-block"><div class="focus-kicker">Current focus · ${esc(focus.milestone.id)}</div><div class="focus-empty">${esc(focus.milestone.goal)}</div></div>`;
     }
@@ -211,12 +212,12 @@
     document.getElementById('rail-foot').innerHTML = foot;
 
     const placeholders = {
-      arch: 'Filter modules',
-      work: 'Filter cards',
-      docs: 'Filter documents',
-      decisions: 'Filter decisions',
+      arch: 'Filter modules…',
+      work: 'Filter cards…',
+      docs: 'Filter documents…',
+      decisions: 'Filter decisions…',
     };
-    search.placeholder = placeholders[state.view] || 'Filter';
+    search.placeholder = placeholders[state.view] || 'Filter…';
   }
 
   function renderRail() {
@@ -243,7 +244,7 @@
 
   function renderRailDocs() {
     return DATA.docs.map((doc) => `<button class="rail-doc${isDocSelected(doc.id) ? ' active' : ''}" type="button" data-doc="${esc(doc.id)}" title="${esc(doc.title)}">
-      <span class="rd-kind">${esc(docKind(doc.kind))}</span><span class="rd-title">${esc(doc.title)}</span>
+      <span class="rd-kind rd-kind-${esc(doc.kind)}">${esc(docKind(doc.kind))}</span><span class="rd-title">${esc(doc.title)}</span>
     </button>`).join('');
   }
 
@@ -273,30 +274,60 @@
     if (state.view === 'arch') scheduleEdges();
   }
 
+  function activeArchModuleId() {
+    if (state.selection?.type === 'module') return state.selection.id;
+    return state.hoverModule;
+  }
+
+  function syncArchFocusClasses() {
+    const arch = document.getElementById('arch-canvas');
+    if (!arch) return;
+    const focusId = activeArchModuleId();
+    const related = focusId ? relatedModules(focusId) : new Set();
+    arch.classList.toggle('has-focus', Boolean(focusId));
+    arch.querySelectorAll('.module-card').forEach((card) => {
+      const id = card.dataset.module;
+      const isSelected = id === state.selection?.id && state.selection?.type === 'module';
+      const isFocused = id === focusId;
+      const isRel = related.has(id);
+      card.classList.toggle('selected', isSelected);
+      card.classList.toggle('related', Boolean(focusId && !isFocused && isRel));
+      card.classList.toggle('muted', Boolean(focusId && !isFocused && !isRel));
+    });
+    scheduleEdges();
+  }
+
   function archView() {
     const query = state.query.toLowerCase();
+    const focusId = activeArchModuleId();
     const selected = state.selection?.type === 'module' ? moduleById.get(state.selection.id) : null;
-    const related = selected ? relatedModules(selected.id) : new Set();
-    const stats = `<span><strong>${DATA.modules.length}</strong> modules</span><span class="sep">·</span><span>${DATA.layers.length} layers</span><span class="sep">·</span><span>${DATA.relations.length} relations</span>`;
+    const related = focusId ? relatedModules(focusId) : new Set();
+    const stats = `<span><strong>${DATA.modules.length}</strong> modules</span><span class="sep">·</span><span><strong>${DATA.layers.length}</strong> layers</span><span class="sep">·</span><span><strong>${DATA.relations.length}</strong> relations</span>`;
 
     let html = viewHead(
       'Architecture',
       'How niucode is shaped',
-      '语义分层，不是目录树。选中模块聚焦它的依赖；状态只表示落地程度。',
+      '语义分层，不是目录树。悬停或选中模块聚焦依赖流向；状态仅表示落地程度。',
       stats,
     );
 
     if (selected) {
-      html += `<div class="focus-bar"><span class="focus-label">Focus</span><button class="focus-chip" type="button" data-close>${esc(selected.title)}<span aria-hidden="true">×</span></button></div>`;
+      html += `<div class="focus-bar"><span class="focus-label">Focused module</span><button class="focus-chip" type="button" data-close>${esc(selected.title)}<span aria-hidden="true">×</span></button></div>`;
     }
 
-    html += `<div class="arch-canvas${selected ? ' has-focus' : ''}" id="arch-canvas"><svg class="edges" id="arch-edges" aria-hidden="true"></svg>`;
+    html += `<div class="arch-canvas${focusId ? ' has-focus' : ''}" id="arch-canvas"><svg class="edges" id="arch-edges" aria-hidden="true"></svg><svg class="edges edges-fg" id="arch-edges-fg" aria-hidden="true"></svg>`;
 
     DATA.layers.forEach((layer, index) => {
       const modules = DATA.modules.filter((module) => module.layer === layer.id);
-      html += `<section class="arch-layer">
-        <div class="layer-label"><div class="layer-index">${String(index + 1).padStart(2, '0')}</div><h2>${esc(layer.name)}</h2><p>${esc(layer.note)}</p></div>
-        <div class="layer-cards">${modules.map((module) => moduleCard(module, query, selected?.id, related)).join('') || '<div class="empty">No modules yet.</div>'}</div>
+      html += `<section class="arch-layer" style="--layer-color:${layerColor(layer.id)}">
+        <div class="layer-label">
+          <div class="layer-head-row">
+            <span class="layer-index">${String(index + 1).padStart(2, '0')}</span>
+            <h2>${esc(layer.name)}</h2>
+          </div>
+          <p>${esc(layer.note)}</p>
+        </div>
+        <div class="layer-cards">${modules.map((module) => moduleCard(module, query, focusId, related)).join('') || '<div class="empty">No modules yet.</div>'}</div>
       </section>`;
     });
 
@@ -309,22 +340,23 @@
     return html;
   }
 
-  function moduleCard(module, query, selectedId, related) {
-    const selected = module.id === selectedId;
+  function moduleCard(module, query, focusId, related) {
+    const selected = isModuleSelected(module.id);
+    const focused = module.id === focusId;
     const isRelated = related.has(module.id);
-    const muted = selectedId && !selected && !isRelated;
+    const muted = focusId && !focused && !isRelated;
     const dim = query && !moduleMatches(module, query);
     const classes = [
       'module-card',
       module.status === 'planned' ? 'planned' : '',
       selected ? 'selected' : '',
-      isRelated ? 'related' : '',
+      !focused && isRelated ? 'related' : '',
       muted ? 'muted' : '',
       dim ? 'dim' : '',
     ].filter(Boolean).join(' ');
 
     return `<button class="${classes}" type="button" data-module="${esc(module.id)}" style="--module-color:${layerColor(module.layer)}" aria-pressed="${selected}">
-      <span class="module-head"><span>${esc(module.id)}</span><span class="module-status">${esc(STATUS_LABEL[module.status] || module.status)}</span></span>
+      <span class="module-head"><span class="module-id">${esc(module.id)}</span><span class="module-status">${esc(STATUS_LABEL[module.status] || module.status)}</span></span>
       <span class="module-title">${esc(module.title)}</span>
       <span class="module-summary">${esc(module.summary)}</span>
       <span class="module-path">${esc(module.paths?.[0] || '—')}</span>
@@ -362,8 +394,8 @@
 
   function milestoneFilter() {
     const items = [
-      ...DATA.milestones.map((milestone) => ({ id: milestone.id, label: milestone.id, title: milestone.title })),
-      { id: 'all', label: 'All', title: 'Every milestone' },
+      ...DATA.milestones.map((milestone) => ({ id: milestone.id, label: `${milestone.id} · ${milestone.title}`, title: milestone.goal })),
+      { id: 'all', label: 'All milestones', title: 'Every milestone' },
     ];
     return items.map((item) => `<button class="filter${state.milestone === item.id ? ' active' : ''}" type="button" data-milestone="${esc(item.id)}" title="${esc(item.title)}" aria-pressed="${state.milestone === item.id}">${esc(item.label)}</button>`).join('');
   }
@@ -380,7 +412,7 @@
     const module = card.module ? moduleById.get(card.module) : null;
     const selected = isCardSelected(card.id);
     return `<button class="card${card.status === 'done' ? ' done' : ''}${card.status === 'blocked' ? ' blocked' : ''}${selected ? ' selected' : ''}" type="button" data-card="${esc(card.id)}" aria-pressed="${selected}">
-      <span class="card-top"><span>${esc(card.id)}</span><span class="size">${esc(card.size)}</span></span>
+      <span class="card-top"><span class="card-id">${esc(card.id)}</span><span class="card-badges">${card.priority ? `<span class="prio prio-${esc(card.priority.toLowerCase())}">${esc(card.priority)}</span>` : ''}<span class="size">${esc(card.size)}</span></span></span>
       <span class="card-title">${esc(card.title)}</span>
       <span class="card-foot"><span>${module ? esc(module.title) : '—'}</span><span>${esc(fmtDate(card.updated))}</span></span>
     </button>`;
@@ -390,7 +422,7 @@
     const query = state.query.toLowerCase();
     const docs = DATA.docs.filter((doc) => docMatches(doc, query));
     const adrCount = DATA.docs.filter((doc) => doc.kind === 'adr').length;
-    const stats = `<span><strong>${DATA.docs.length}</strong> documents</span><span class="sep">·</span><span>${adrCount} ADRs</span>`;
+    const stats = `<span><strong>${DATA.docs.length}</strong> documents</span><span class="sep">·</span><span><strong>${adrCount}</strong> ADRs</span>`;
 
     return viewHead(
       'Docs',
@@ -403,7 +435,7 @@
   function docCard(doc) {
     const selected = isDocSelected(doc.id);
     return `<button class="doc-card${selected ? ' selected' : ''}" type="button" data-doc="${esc(doc.id)}" aria-pressed="${selected}">
-      <span class="doc-top"><span class="doc-kind">${esc(docKind(doc.kind))}</span>${doc.status ? `<span class="doc-status">${esc(doc.status)}</span>` : ''}</span>
+      <span class="doc-top"><span class="doc-kind doc-kind-${esc(doc.kind)}">${esc(docKind(doc.kind))}</span>${doc.status ? `<span class="doc-status">${esc(doc.status)}</span>` : ''}</span>
       <span class="doc-title">${esc(doc.title)}</span>
       <span class="doc-excerpt">${esc(doc.excerpt)}</span>
       <span class="doc-path">${esc(doc.path)}</span>
@@ -417,7 +449,7 @@
       .filter((event) => event.kind === 'decision' && eventMatches(event, query))
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-    const stats = `<span><strong>${DATA.docs.filter((doc) => doc.kind === 'adr').length}</strong> ADRs</span><span class="sep">·</span><span>${DATA.events.filter((event) => event.kind === 'decision').length} decisions</span>`;
+    const stats = `<span><strong>${DATA.docs.filter((doc) => doc.kind === 'adr').length}</strong> ADRs</span><span class="sep">·</span><span><strong>${DATA.events.filter((event) => event.kind === 'decision').length}</strong> decisions</span>`;
 
     let html = viewHead(
       'Decisions',
@@ -438,11 +470,12 @@
     const refs = (event.refs || []).map((ref) => {
       if (cardById.has(ref)) return `<button class="ref-chip" type="button" data-card="${esc(ref)}">${esc(ref)}</button>`;
       if (docById.has(ref)) return `<button class="ref-chip" type="button" data-doc="${esc(ref)}">${esc(ref)}</button>`;
+      if (moduleById.has(ref)) return `<button class="ref-chip" type="button" data-module="${esc(ref)}">${esc(ref)}</button>`;
       return `<span class="ref-chip">${esc(ref)}</span>`;
     }).join('');
 
     return `<article class="tl-item">
-      <div><span class="tl-date">${esc(event.date)}</span><span class="tl-kind">${esc(event.kind)}</span></div>
+      <div class="tl-head"><span class="tl-date">${esc(event.date)}</span><span class="tl-kind">${esc(event.kind)}</span></div>
       <h3 class="tl-title">${esc(event.title)}</h3>
       ${event.detail ? `<p class="tl-detail">${esc(event.detail)}</p>` : ''}
       ${refs ? `<div class="tl-refs">${refs}</div>` : ''}
@@ -450,7 +483,7 @@
   }
 
   function detailsHead(kicker, closable = true) {
-    return `<div class="details-head"><span class="kicker">${esc(kicker)}</span>${closable ? '<button class="close" type="button" data-close aria-label="Close details">×</button>' : ''}</div>`;
+    return `<div class="details-head"><span class="kicker">${esc(kicker)}</span>${closable ? '<button class="close" type="button" data-close title="Close (Esc)" aria-label="Close details">×</button>' : ''}</div>`;
   }
 
   function metaItem(key, value) {
@@ -489,8 +522,9 @@
     const focus = currentFocus();
 
     let html = detailsHead(`Project · ${DATA.project.name}`, false);
+    html += `<div class="details-body">`;
     html += `<h1 class="details-title">${esc(DATA.project.title)}</h1>`;
-    html += `<p class="view-sub" style="font-size:12px">${esc(DATA.project.summary)}</p>`;
+    html += `<p class="details-lead">${esc(DATA.project.summary)}</p>`;
     html += `<div class="overview-stats">
       <div class="overview-stat"><strong>${DATA.modules.length}</strong><span>modules</span></div>
       <div class="overview-stat"><strong>${DATA.layers.length}</strong><span>layers</span></div>
@@ -499,21 +533,22 @@
     </div>`;
 
     html += `<div class="detail-section"><h2>How to read</h2><ul class="notes">
-      <li>Architecture：先看层和依赖，再点模块看契约与源码。</li>
-      <li>Work：需要接手任务时再看卡片；进度不在第一屏。</li>
-      <li>Docs / Decisions：为什么这样切，以及被否决的方案。</li>
+      <li><strong>Architecture</strong>：先看层和依赖，再点模块看契约与源码。</li>
+      <li><strong>Work</strong>：需要接手任务时再看卡片；进度不在第一屏。</li>
+      <li><strong>Docs / Decisions</strong>：为什么这样切，以及被否决的方案。</li>
     </ul></div>`;
 
     if (focus?.card) {
-      html += `<div class="detail-section"><h2>Current focus</h2><div class="path-list"><button class="path-chip" type="button" data-card="${esc(focus.card.id)}">${esc(focus.card.id)} · ${esc(focus.card.title)}</button></div></div>`;
+      html += `<div class="detail-section"><h2>Current focus</h2><div class="path-list"><button class="path-chip" type="button" data-card="${esc(focus.card.id)}"><span class="chip-id">${esc(focus.card.id)}</span><span>${esc(focus.card.title)}</span></button></div></div>`;
     }
 
     html += `<div class="detail-section"><h2>Read next</h2><div class="path-list">
-      <button class="path-chip" type="button" data-view="arch">Architecture map</button>
-      <button class="path-chip" type="button" data-doc="architecture">Architecture doc</button>
-      <button class="path-chip" type="button" data-doc="adr-0001">ADR-0001 · Rust</button>
-      <button class="path-chip" type="button" data-doc="adr-0003">ADR-0003 · architecture-first</button>
+      <button class="path-chip" type="button" data-view="arch"><span class="chip-id">VIEW</span><span>Architecture map</span></button>
+      <button class="path-chip" type="button" data-doc="architecture"><span class="chip-id">DOC</span><span>Architecture doc</span></button>
+      <button class="path-chip" type="button" data-doc="adr-0001"><span class="chip-id">ADR</span><span>ADR-0001 · Rust</span></button>
+      <button class="path-chip" type="button" data-doc="adr-0003"><span class="chip-id">ADR</span><span>ADR-0003 · architecture-first</span></button>
     </div></div>`;
+    html += `</div>`;
 
     return html;
   }
@@ -524,6 +559,7 @@
     const docs = (card.docs || []).map((id) => docById.get(id)).filter(Boolean);
 
     let html = detailsHead(`Work · ${card.id}`);
+    html += `<div class="details-body">`;
     html += `<h1 class="details-title">${esc(card.title)}</h1>`;
     html += `<div class="badges">${statusBadge(card.status)}${card.priority ? `<span class="badge">${esc(card.priority)}</span>` : ''}<span class="badge">${esc(card.size)}</span></div>`;
 
@@ -539,27 +575,29 @@
     </div>`;
 
     if (card.depends_on?.length) {
-      html += `<div class="detail-section"><h2>Depends on</h2><div class="path-list">${card.depends_on.map((id) => `<button class="path-chip" type="button" data-card="${esc(id)}">${esc(id)} · ${esc(cardById.get(id)?.title || '')}</button>`).join('')}</div></div>`;
+      html += `<div class="detail-section"><h2>Depends on</h2><div class="path-list">${card.depends_on.map((id) => `<button class="path-chip" type="button" data-card="${esc(id)}"><span class="chip-id">${esc(id)}</span><span>${esc(cardById.get(id)?.title || '')}</span></button>`).join('')}</div></div>`;
     }
 
     html += `<div class="md">${card.body_html}</div>`;
 
     if (docs.length) {
-      html += `<div class="detail-section"><h2>Documents</h2><div class="path-list">${docs.map((doc) => `<button class="path-chip" type="button" data-doc="${esc(doc.id)}">${esc(doc.title)}</button>`).join('')}</div></div>`;
+      html += `<div class="detail-section"><h2>Documents</h2><div class="path-list">${docs.map((doc) => `<button class="path-chip" type="button" data-doc="${esc(doc.id)}"><span class="chip-id">${esc(docKind(doc.kind))}</span><span>${esc(doc.title)}</span></button>`).join('')}</div></div>`;
     }
 
     html += `<p class="hint">${esc(card.path)}</p>`;
+    html += `</div>`;
     return html;
   }
 
   function moduleDetails(module) {
     let html = detailsHead(`Module · ${module.id}`);
+    html += `<div class="details-body">`;
     html += `<h1 class="details-title">${esc(module.title)}</h1>`;
-    html += `<div class="badges">${statusBadge(module.status)}<span class="badge">${esc(layerName(module.layer))}</span></div>`;
-    html += `<p class="view-sub" style="font-size:12px">${esc(module.summary)}</p>`;
+    html += `<div class="badges">${statusBadge(module.status)}<span class="badge"><span class="dot" style="background:${layerColor(module.layer)}"></span>${esc(layerName(module.layer))}</span></div>`;
+    html += `<p class="details-lead">${esc(module.summary)}</p>`;
 
     if (module.contract) {
-      html += `<div class="detail-section"><h2>Contract</h2><p>${esc(module.contract)}</p></div>`;
+      html += `<div class="detail-section"><h2>Contract</h2><div class="contract-box">${esc(module.contract)}</div></div>`;
     }
 
     if (module.notes?.length) {
@@ -577,16 +615,17 @@
     }
 
     if (module.paths?.length) {
-      html += `<div class="detail-section"><h2>Owned paths</h2><div class="path-list">${module.paths.map((path) => `<span class="path-chip">${esc(path)}</span>`).join('')}</div></div>`;
+      html += `<div class="detail-section"><h2>Owned paths</h2><div class="path-list">${module.paths.map((path) => `<span class="path-chip path-chip-static">${esc(path)}</span>`).join('')}</div></div>`;
     }
 
     html += `<div class="detail-section"><h2>Source</h2>${sourceView(module)}</div>`;
+    html += `</div>`;
     return html;
   }
 
   function relationRow(relation, direction) {
     const other = direction === 'out' ? relation.to : relation.from;
-    return `<div class="relation"><span class="arrow">${direction === 'out' ? '→' : '←'}</span><button type="button" data-module="${esc(other)}">${esc(moduleTitle(other))}</button><span>${esc(relation.label || '')}</span></div>`;
+    return `<button class="relation" type="button" data-module="${esc(other)}"><span class="rel-dir rel-dir-${direction}">${direction === 'out' ? '→' : '←'}</span><span class="rel-target">${esc(moduleTitle(other))}</span>${relation.label ? `<span class="rel-label">${esc(relation.label)}</span>` : ''}</button>`;
   }
 
   function sourceView(module) {
@@ -603,15 +642,17 @@
   function sourceBox(source) {
     const lines = source.text.replace(/\n$/, '').split('\n');
     const body = lines.map((line, index) => `<span class="source-line"><span class="ln">${index + 1}</span><span class="lc">${esc(line) || ' '}</span></span>`).join('');
-    return `<div class="source-box" role="region" aria-label="${esc(source.path)}">${body}</div>${source.truncated ? '<p class="hint">Truncated. Open the file in the repository for the full source.</p>' : ''}`;
+    return `<div class="source-box" role="region" aria-label="${esc(source.path)}"><div class="source-head"><span class="source-path">${esc(source.path)}</span><span class="source-meta">${lines.length} lines</span></div><div class="source-body">${body}</div></div>${source.truncated ? '<p class="hint">Truncated. Open the file in the repository for the full source.</p>' : ''}`;
   }
 
   function docDetails(doc) {
     let html = detailsHead(`${docKind(doc.kind)} · ${doc.id}`);
+    html += `<div class="details-body">`;
     html += `<h1 class="details-title">${esc(doc.title)}</h1>`;
-    html += `<div class="badges">${doc.status ? `<span class="badge">${esc(doc.status)}</span>` : ''}<span class="badge">${esc(docKind(doc.kind))}</span></div>`;
+    html += `<div class="badges">${doc.status ? `<span class="badge badge-${esc(doc.status)}">${esc(doc.status)}</span>` : ''}<span class="badge">${esc(docKind(doc.kind))}</span></div>`;
     html += `<div class="md">${doc.body_html}</div>`;
     html += `<p class="hint">${esc(doc.path)}</p>`;
+    html += `</div>`;
     return html;
   }
 
@@ -621,6 +662,7 @@
     state.view = 'work';
     state.milestone = card.milestone;
     state.selection = { type: 'card', id };
+    state.hoverModule = null;
     state.query = '';
     search.value = '';
     render();
@@ -629,8 +671,13 @@
 
   function openModule(id) {
     if (!moduleById.has(id)) return;
+    if (state.view === 'arch' && isModuleSelected(id)) {
+      clearSelection();
+      return;
+    }
     state.view = 'arch';
     state.selection = { type: 'module', id };
+    state.hoverModule = null;
     state.sourceIndex = 0;
     state.query = '';
     search.value = '';
@@ -642,6 +689,7 @@
     if (!docById.has(id)) return;
     state.view = 'docs';
     state.selection = { type: 'doc', id };
+    state.hoverModule = null;
     state.query = '';
     search.value = '';
     render();
@@ -653,6 +701,7 @@
     if (!VIEWS.includes(normalized)) return;
     state.view = normalized;
     state.selection = null;
+    state.hoverModule = null;
     state.query = '';
     search.value = '';
     render();
@@ -663,6 +712,7 @@
     state.view = 'work';
     state.milestone = id;
     state.selection = null;
+    state.hoverModule = null;
     state.query = '';
     search.value = '';
     render();
@@ -671,6 +721,7 @@
 
   function clearSelection() {
     state.selection = null;
+    state.hoverModule = null;
     render();
     syncHash();
   }
@@ -691,6 +742,7 @@
     if (!raw) {
       state.view = 'arch';
       state.selection = null;
+      state.hoverModule = null;
       render();
       syncHash();
       return;
@@ -702,6 +754,7 @@
 
     state.view = VIEWS.includes(view) ? view : 'arch';
     state.selection = null;
+    state.hoverModule = null;
 
     if (id) {
       if (state.view === 'arch' && moduleById.has(id)) {
@@ -731,6 +784,7 @@
   function drawEdges() {
     const arch = document.getElementById('arch-canvas');
     const svg = document.getElementById('arch-edges');
+    const svgFg = document.getElementById('arch-edges-fg');
     if (!arch || !svg) return;
 
     const rect = arch.getBoundingClientRect();
@@ -739,10 +793,17 @@
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     svg.setAttribute('width', width);
     svg.setAttribute('height', height);
+    if (svgFg) {
+      svgFg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      svgFg.setAttribute('width', width);
+      svgFg.setAttribute('height', height);
+    }
 
-    const defs = '<defs><marker id="niucode-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head" d="M 0 0 L 10 5 L 0 10 z"/></marker><marker id="niucode-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head-active" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>';
-    const parts = [defs];
-    const selectedModule = state.selection?.type === 'module' ? state.selection.id : null;
+    const defs = '<defs><marker id="niucode-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="arrow-head" d="M 0 1 L 10 5 L 0 9 z"/></marker><marker id="niucode-arrow-active" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head-active" d="M 0 1 L 10 5 L 0 9 z"/></marker></defs>';
+    const inactivePaths = [];
+    const activePaths = [];
+    const activeLabels = [];
+    const focusModule = activeArchModuleId();
 
     for (const relation of DATA.relations) {
       const source = arch.querySelector(`[data-module="${cssEscape(relation.from)}"]`);
@@ -757,6 +818,8 @@
       let y1;
       let x2;
       let y2;
+      let lx;
+      let ly;
       let path;
 
       if (b.top > a.bottom + 6) {
@@ -766,6 +829,8 @@
         y2 = b.top - rect.top;
         const midY = (y1 + y2) / 2;
         path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+        lx = Math.round(x1 + (x2 - x1) * 0.68);
+        ly = Math.round(y2 - 11);
       } else if (b.bottom < a.top - 6) {
         x1 = a.left + a.width / 2 - rect.left;
         y1 = a.top - rect.top;
@@ -773,25 +838,69 @@
         y2 = b.bottom - rect.top;
         const midY = (y1 + y2) / 2;
         path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+        lx = Math.round(x1 + (x2 - x1) * 0.68);
+        ly = Math.round(y2 + 11);
       } else {
         const toRight = b.left >= a.left;
         x1 = (toRight ? a.right : a.left) - rect.left;
-        y1 = a.top + a.height / 2 - rect.top;
+        y1 = a.top + 22 - rect.top;
         x2 = (toRight ? b.left : b.right) - rect.left;
-        y2 = b.top + b.height / 2 - rect.top;
+        y2 = b.top + 22 - rect.top;
         const midX = (x1 + x2) / 2;
         path = `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
+        lx = Math.round(midX);
+        ly = Math.round(Math.min(a.top, b.top) - rect.top - 9);
       }
 
-      const connected = selectedModule && (relation.from === selectedModule || relation.to === selectedModule);
+      const connected = Boolean(focusModule && (relation.from === focusModule || relation.to === focusModule));
       const className = connected ? 'edge edge-active' : 'edge';
       const marker = connected ? 'niucode-arrow-active' : 'niucode-arrow';
       const title = `${relation.from} → ${relation.to}${relation.label ? ` · ${relation.label}` : ''}`;
-      parts.push(`<path class="${className}" d="${path}" marker-end="url(#${marker})"><title>${esc(title)}</title></path>`);
+      const pathEl = `<path class="${className}" d="${path}" marker-end="url(#${marker})"><title>${esc(title)}</title></path>`;
 
+      if (connected) {
+        activePaths.push(pathEl);
+        if (relation.label) {
+          const text = String(relation.label);
+          const pillW = Math.max(28, Math.round(text.length * 6.2 + 12));
+          const pillH = 16;
+          activeLabels.push({ lx, ly, pillW, pillH, text });
+        }
+      } else {
+        inactivePaths.push(pathEl);
+      }
     }
 
-    svg.innerHTML = parts.join('');
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (let i = 0; i < activeLabels.length; i += 1) {
+        for (let j = i + 1; j < activeLabels.length; j += 1) {
+          const a = activeLabels[i];
+          const b = activeLabels[j];
+          if (Math.abs(a.ly - b.ly) < 15) {
+            const minGap = (a.pillW + b.pillW) / 2 + 6;
+            const dx = b.lx - a.lx;
+            if (Math.abs(dx) < minGap) {
+              const push = (minGap - Math.abs(dx)) / 2;
+              const dir = dx >= 0 ? 1 : -1;
+              a.lx = Math.round(a.lx - dir * push);
+              b.lx = Math.round(b.lx + dir * push);
+            }
+          }
+        }
+      }
+    }
+
+    const labelSvg = activeLabels.map(({ lx, ly, pillW, pillH, text }) => (
+      `<g class="edge-badge" transform="translate(${lx},${ly})">` +
+      `<rect class="edge-badge-bg" x="${-pillW / 2}" y="${-pillH / 2}" width="${pillW}" height="${pillH}" rx="4"></rect>` +
+      `<text class="edge-label edge-label-active" x="0" y="0.5" text-anchor="middle" dominant-baseline="central">${esc(text)}</text>` +
+      `</g>`
+    ));
+
+    svg.innerHTML = [defs, ...inactivePaths, ...activePaths].join('');
+    if (svgFg) {
+      svgFg.innerHTML = labelSvg.join('');
+    }
   }
 
   function cssEscape(value) {
@@ -802,7 +911,7 @@
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#080a0f' : '#f1ede4');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#090b0e' : '#f6f5f1');
   }
 
   function bindEvents() {
@@ -839,6 +948,25 @@
       }
       if (target.hasAttribute('data-close')) {
         clearSelection();
+      }
+    });
+
+    canvas.addEventListener('pointerover', (event) => {
+      if (state.view !== 'arch' || state.selection?.type === 'module') return;
+      if (!(event.target instanceof Element)) return;
+      const card = event.target.closest('.module-card[data-module]');
+      const next = card ? card.dataset.module : null;
+      if (next !== state.hoverModule) {
+        state.hoverModule = next;
+        syncArchFocusClasses();
+      }
+    });
+
+    canvas.addEventListener('pointerleave', () => {
+      if (state.view !== 'arch' || state.selection?.type === 'module') return;
+      if (state.hoverModule) {
+        state.hoverModule = null;
+        syncArchFocusClasses();
       }
     });
 
