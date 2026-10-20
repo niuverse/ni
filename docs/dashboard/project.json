@@ -145,7 +145,9 @@
         "鼠标悬停/点击 slash 菜单；命令输入高亮；Ctrl-R/Ctrl-N/Ctrl-P 历史操作。",
         "prompt 显示 plan/goal 徽标；/goal 设置后立即启动 goal run。",
         "鼠标捕获只在 slash 菜单打开时启用；TerminalGuard 统一恢复终端状态。",
-        "--max-steps 默认 24；max-steps 错误给提升提示并保留已写文件。"
+        "--max-steps 默认 24；max-steps 错误给提升提示并保留已写文件。",
+        "/reload 重读 AGENTS.md；/clear 保留 plan/goal；/reset 全量重置；/resume 切换 session。",
+        "鼠标 hover 支持绝对行号与相对移动 fallback。"
       ]
     },
     {
@@ -768,6 +770,17 @@
         "M4-009",
         "tui",
         "M4-005"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-010 完成：reload/reset/resume",
+      "detail": "新增 session 生命周期命令；/clear 保留 plan/goal，/reset 清状态与输入历史并 reload，/resume 列表/切换；PTY 全链路验证。",
+      "refs": [
+        "M4-010",
+        "M4-009",
+        "tui"
       ]
     }
   ]

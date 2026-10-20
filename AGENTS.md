@@ -82,8 +82,9 @@ A task is not done until:
 M0–M3 are done; M4 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
-M4-004/M4-005/M4-009 are done; M4-006/007/008 are backlog. `/goal run` is
-TUI-only; headless `exec --goal` is M4-008. TUI mouse capture is menu-scoped
-and terminal state is restored by `TerminalGuard`. Keep the event log
+M4-004/M4-005/M4-009/M4-010 are done; M4-006/007/008 are backlog. `/goal run`
+is TUI-only; headless `exec --goal` is M4-008. TUI mouse capture is
+menu-scoped, terminal state is restored by `TerminalGuard`, and session
+lifecycle is `/clear` (keep mode) vs `/reset` (full reset) vs `/resume`. Keep the event log
 as the only durable state; plugins are capability-scoped and out-of-process,
 never a second durable store.

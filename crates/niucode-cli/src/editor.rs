@@ -41,6 +41,10 @@ impl LineEditor {
         }
     }
 
+    pub fn clear_history(&mut self) {
+        self.history.clear();
+    }
+
     pub fn read_line(
         &mut self,
         raw_prompt: &str,
@@ -66,6 +70,7 @@ impl LineEditor {
             prompt_row: None,
             mouse_failed: false,
             mouse_captured: false,
+            mouse_anchor: None,
             raw_prompt,
             styled_prompt,
             theme,
@@ -112,6 +117,7 @@ struct State<'a> {
     prompt_row: Option<u16>,
     mouse_failed: bool,
     mouse_captured: bool,
+    mouse_anchor: Option<u16>,
     raw_prompt: &'a str,
     styled_prompt: &'a str,
     theme: Theme,
@@ -155,6 +161,8 @@ impl State<'_> {
                 }
                 Event::Resize(_, _) => {
                     self.prompt_row = None;
+                    self.mouse_captured = false;
+                    self.sync_mouse_capture(out)?;
                     self.render(out)?;
                 }
                 _ => {}
@@ -582,39 +590,75 @@ impl State<'_> {
     }
 
     fn sync_mouse_capture(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        let want = self.menu_open && !self.mouse_failed;
+        let want = self.menu_open;
         if want == self.mouse_captured {
             return Ok(());
         }
         if want {
-            execute!(out, EnableMouseCapture)?;
+            // Query before enabling mouse reporting. Querying from inside a
+            // mouse event can race with crossterm's event reader and leave
+            // hover permanently disabled on some terminals.
+            if self.prompt_row.is_none() && !self.mouse_failed {
+                match position() {
+                    Ok((_, row)) => self.prompt_row = Some(row),
+                    Err(_) => self.mouse_failed = true,
+                }
+            }
+            if execute!(out, EnableMouseCapture).is_err() {
+                self.mouse_failed = true;
+                return Ok(());
+            }
+            self.mouse_anchor = None;
         } else {
-            execute!(out, DisableMouseCapture)?;
+            let _ = execute!(out, DisableMouseCapture);
+            self.mouse_anchor = None;
         }
         self.mouse_captured = want;
         Ok(())
     }
 
+    fn handle_relative_mouse(&mut self, mouse: event::MouseEvent, rows: usize) -> bool {
+        match mouse.kind {
+            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
+                let anchor = *self.mouse_anchor.get_or_insert(mouse.row);
+                let delta = mouse.row as i32 - anchor as i32;
+                if delta == 0 {
+                    return false;
+                }
+                let next = (self.selected as i32 + delta).clamp(0, rows.saturating_sub(1) as i32);
+                self.mouse_anchor = Some(mouse.row);
+                if next as usize == self.selected {
+                    return false;
+                }
+                self.selected = next as usize;
+                true
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.accept_selected();
+                true
+            }
+            MouseEventKind::ScrollDown => {
+                self.selected = (self.selected + 1).min(rows.saturating_sub(1));
+                true
+            }
+            MouseEventKind::ScrollUp => {
+                self.selected = self.selected.saturating_sub(1);
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn handle_mouse(&mut self, mouse: event::MouseEvent) -> std::io::Result<bool> {
-        if !self.menu_open || self.mouse_failed {
+        if !self.menu_open {
             return Ok(false);
         }
         let rows = self.candidates().len().min(MAX_MENU_ROWS);
         if rows == 0 {
             return Ok(false);
         }
-        let prompt_row = match self.prompt_row {
-            Some(row) => row,
-            None => match position() {
-                Ok((_, row)) => {
-                    self.prompt_row = Some(row);
-                    row
-                }
-                Err(_) => {
-                    self.mouse_failed = true;
-                    return Ok(false);
-                }
-            },
+        let Some(prompt_row) = self.prompt_row else {
+            return Ok(self.handle_relative_mouse(mouse, rows));
         };
         let Some(index) = menu_index(mouse.row, prompt_row, rows) else {
             return Ok(false);

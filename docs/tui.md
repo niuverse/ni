@@ -72,7 +72,7 @@ TTY 下使用 readline 风格的行编辑器：
 - 输入 `/` 后自动显示 slash 命令和说明；输入 `/i` 直接出现 `/init` 候选，不需要先按 Tab。
 - `Tab` / `Enter` 接受当前候选；`↑` / `↓` 选择；`Esc` 关闭菜单。
 - 鼠标移动到候选行会高亮；左键点击接受；滚轮在菜单内移动选择。
-- 终端不支持 cursor-position 查询时自动关闭鼠标选择，键盘操作不受影响。
+- 终端支持 cursor-position 时按绝对行号 hover；不支持时退化为相对移动 hover（第一次移动作为锚点，后续按行差改变候选），键盘操作始终可用。
 - 输入的命令名用 accent 高亮；prompt 会显示 `plan` / `goal` 徽标。
 - 命令继续输入参数（例如 `/goal all tests pass`）后菜单自动关闭。
 - `↑` / `↓` 调出当前进程内的历史输入；`Ctrl-C` 清空当前行；`Ctrl-D` 退出；`Ctrl-L` 清屏。
@@ -95,7 +95,10 @@ TTY 下使用 readline 风格的行编辑器：
 | 命令 | 行为 |
 |---|---|
 | `/init` | 在当前工作区创建 `AGENTS.md` scaffold；已存在则不覆盖，read-only 沙箱拒绝。 |
-| `/clear` | 新建 session 并清空当前上下文；旧 session 文件保留。 |
+| `/clear` | 新建对话 session；保留 plan mode 和 goal，清空上下文；旧 session 文件保留。 |
+| `/reset` | 新建对话 session，并清除 plan/goal/pending/输入历史，重新读取 AGENTS.md；旧 session 保留。 |
+| `/resume [path|id]` | 无参数列出最近 8 个 session；带参数切换并恢复其 history / plan / goal。 |
+| `/reload` | 重新读取 AGENTS.md 并显示 sources/digest；下一次 turn 生效。 |
 | `/plan` | 进入只读 plan mode；`/plan off` / `/plan approve` 退出；`/plan status` 查看。 |
 | `/goal <condition>` | 设置目标并立即启动 goal run（最多 6 轮）；`/goal` 查看；`/goal run` 重新启动；`/goal stop` 停止；`/goal clear` 清除。 |
 | `/fork [event-id]` | 复制当前 session 的前缀到新 session 并切换过去；默认 fork 到最后一个事件。 |
@@ -110,7 +113,10 @@ TTY 下使用 readline 风格的行编辑器：
 - `/init` 根据 `Cargo.toml` / `package.json` / `pyproject.toml` / `go.mod` 选择测试、构建、lint 命令；未知项目保留占位注释。它只写 `<cwd>/AGENTS.md`，不跟随已存在的 symlink。
 - `/plan` 不改变 profile，只把 tool allowlist 收窄到 `read/grep/glob` 并注入只读计划指令；`/plan approve` 只退出模式，不自动执行。
 - `/goal` 不改变权限；active goal 进入 system prompt，并写入 `goal_set` / `goal_cleared` 事件。
-- `/clear` 继承当前 model、cwd 和 sandbox 配置，写入新的 `session_start` / `policy` 事件；旧 session 不被删除。
+- `/clear` 继承当前 model、cwd 和 sandbox 配置，写入新的 `session_start` / `policy` 事件；保留 plan mode 与 goal（重新写入事件），停止 goal run，保留输入历史。
+- `/reset` 是更强的重置：新 session + plan off + goal 清空 + pending/输入历史清空 + 重新读取 AGENTS.md；extension host 仍按 session 生命周期挂载，不重启进程。
+- `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；cwd/model 不一致会警告。无参数列出最近 session。
+- `/reload` 只重读 AGENTS.md 指令；扩展 manifest 在 session 启动时挂载，重新加载需要重启 TUI。
 - `/fork` 调用与 `niucode fork` 相同的逻辑：只读源文件、复制前缀、追加 `fork` 溯源事件，然后重新投影 history 并切换过去。非法 event ID 会报错并保留当前 session。
 - 未知 `/foo` 显示 `unknown command`，不会发给模型；命令参数错误显示 usage。
 - 所有 slash 输出走 stdout，warning / error 走 stderr。

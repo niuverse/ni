@@ -4,8 +4,8 @@
 //! point as headless exec. No loop internals are imported here.
 
 use std::io::{IsTerminal, Write};
-use std::path::Path;
-use std::time::{Duration, Instant};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use crossterm::cursor::{MoveTo, Show};
@@ -58,6 +58,8 @@ struct SessionUiState {
     goal_run: bool,
     goal_turns: usize,
     pending_prompt: Option<String>,
+    /// Ephemeral request from `/reset` to drop the line editor history.
+    clear_history: bool,
 }
 
 impl SessionUiState {
@@ -188,7 +190,15 @@ pub async fn run(
                 err,
             ) {
                 Ok(CommandOutcome::Exit) => break,
-                Ok(CommandOutcome::Continue) => continue,
+                Ok(CommandOutcome::Continue) => {
+                    if state.clear_history {
+                        if let Some(editor) = &mut editor {
+                            editor.clear_history();
+                        }
+                        state.clear_history = false;
+                    }
+                    continue;
+                }
                 Err(error) => {
                     eprintln!(
                         "{} {}",
@@ -496,12 +506,27 @@ fn handle_command(
         SlashCommand::Goal(action) => handle_goal(session, state, action, out)?,
         SlashCommand::Clear => {
             let previous = session.path().to_path_buf();
-            *session = new_session(session, config)?;
+            let plan = state.plan_mode;
+            let goal = state.goal.clone();
+            let mut fresh = new_session(session, config)?;
+            if plan {
+                fresh.append(&Event::PlanMode {
+                    active: true,
+                    ts: now_ms(),
+                })?;
+            }
+            if let Some(goal) = &goal {
+                fresh.append(&Event::GoalSet {
+                    text: goal.clone(),
+                    ts: now_ms(),
+                })?;
+            }
+            *session = fresh;
             history.clear();
             *allow_session = false;
             *last_tool = None;
-            state.plan_mode = false;
-            state.goal = None;
+            state.plan_mode = plan;
+            state.goal = goal;
             state.goal_run = false;
             state.goal_turns = 0;
             state.pending_prompt = None;
@@ -509,9 +534,48 @@ fn handle_command(
             println!(
                 "{} {}",
                 out.paint(Tone::Success, theme::OK),
-                out.dim(format!("new session · {}", session.path().display()))
+                out.dim(format!(
+                    "new conversation · {} · kept plan={} goal={}",
+                    session.path().display(),
+                    state.plan_mode,
+                    state.goal.is_some()
+                ))
             );
             println!("{}", out.dim(format!("previous · {}", previous.display())));
+        }
+        SlashCommand::Reset => {
+            let previous = session.path().to_path_buf();
+            *session = new_session(session, config)?;
+            history.clear();
+            *allow_session = false;
+            *last_tool = None;
+            *state = SessionUiState::default();
+            state.clear_history = true;
+            reset_screen(err);
+            println!(
+                "{} {}",
+                out.paint(Tone::Success, theme::OK),
+                out.dim(format!(
+                    "runtime reset · new conversation · plan/goal/history cleared · {}",
+                    session.path().display()
+                ))
+            );
+            println!("{}", out.dim(format!("previous · {}", previous.display())));
+            reload_instructions(config, out, err)?;
+        }
+        SlashCommand::Reload => reload_instructions(config, out, err)?,
+        SlashCommand::Resume(arg) => {
+            resume_session(
+                session,
+                config,
+                history,
+                allow_session,
+                last_tool,
+                state,
+                arg.as_deref(),
+                out,
+                err,
+            )?;
         }
         SlashCommand::Fork(at) => {
             let report = fork_session(session, at.as_deref())?;
@@ -840,6 +904,219 @@ fn run_init(config: &AgentConfig, out: Theme) -> Result<()> {
         out.paint(Tone::Success, theme::OK),
         out.dim(format!("wrote {} · next turn will load it", path.display()))
     );
+    Ok(())
+}
+
+fn reload_instructions(config: &AgentConfig, out: Theme, err: Theme) -> Result<()> {
+    let loaded = niucode_agent::load_instructions(&config.working_dir);
+    for warning in &loaded.warnings {
+        eprintln!(
+            "{} {}",
+            err.paint(Tone::Warning, theme::WARN),
+            err.dim(warning)
+        );
+    }
+    if loaded.sources.is_empty() {
+        println!(
+            "{} {}",
+            out.accent("reload"),
+            out.dim("no AGENTS.md found · built-in prompt only")
+        );
+    } else {
+        println!(
+            "{} {}",
+            out.accent("reload"),
+            out.paint(
+                Tone::Bright,
+                format!(
+                    "{} instruction source(s) · digest {}",
+                    loaded.sources.len(),
+                    loaded.digest
+                )
+            )
+        );
+        for source in &loaded.sources {
+            println!("{}", out.dim(format!("  {source}")));
+        }
+    }
+    println!(
+        "{}",
+        out.dim("  effective on the next turn · extensions stay session-scoped")
+    );
+    Ok(())
+}
+
+fn format_age(modified: u64) -> String {
+    let now = now_ms() / 1000;
+    let age = now.saturating_sub(modified);
+    if age < 60 {
+        "just now".to_string()
+    } else if age < 3_600 {
+        format!("{}m ago", age / 60)
+    } else if age < 86_400 {
+        format!("{}h ago", age / 3_600)
+    } else {
+        format!("{}d ago", age / 86_400)
+    }
+}
+
+fn resolve_session_path(directory: &Path, arg: &str) -> Result<PathBuf> {
+    let raw = PathBuf::from(arg);
+    let mut candidates = Vec::new();
+    if raw.is_absolute() {
+        candidates.push(raw);
+    } else {
+        if let Ok(cwd) = std::env::current_dir() {
+            candidates.push(cwd.join(&raw));
+        }
+        candidates.push(directory.join(&raw));
+    }
+    for mut candidate in candidates {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+        if candidate.extension().is_none() {
+            candidate.set_extension("jsonl");
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+    bail!("session not found: {arg} · use /resume to list recent sessions")
+}
+
+fn recent_sessions(directory: &Path) -> Vec<(PathBuf, u64)> {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut sessions = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+                return None;
+            }
+            let modified = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs())
+                .unwrap_or(0);
+            Some((path, modified))
+        })
+        .collect::<Vec<_>>();
+    sessions.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| right.0.cmp(&left.0)));
+    sessions.truncate(8);
+    sessions
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resume_session(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    history: &mut Vec<ChatMessage>,
+    allow_session: &mut bool,
+    last_tool: &mut Option<ToolEcho>,
+    state: &mut SessionUiState,
+    arg: Option<&str>,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    let directory = session
+        .path()
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    let Some(arg) = arg else {
+        let sessions = recent_sessions(&directory);
+        if sessions.is_empty() {
+            println!("{}", out.dim("no sessions found in this directory"));
+            return Ok(());
+        }
+        println!(
+            "{} {}",
+            out.accent("resume"),
+            out.dim("recent sessions · /resume <path|id>")
+        );
+        for (path, modified) in sessions {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("session.jsonl");
+            println!(
+                "{} {}",
+                out.paint(Tone::Bright, format!("  {name}")),
+                out.dim(format!("  {}", format_age(modified)))
+            );
+        }
+        return Ok(());
+    };
+
+    let path = resolve_session_path(&directory, arg)?;
+    if path == session.path() {
+        println!("{}", out.dim("already on this session"));
+        return Ok(());
+    }
+    let loaded = load(&path)?;
+    for warning in &loaded.warnings {
+        eprintln!(
+            "{} {}",
+            err.paint(Tone::Warning, theme::WARN),
+            err.dim(warning)
+        );
+    }
+    let new_history = project_history(&loaded.events)?;
+    let mut new_state = SessionUiState::from_events(&loaded.events);
+    new_state.clear_history = false;
+    let new_session = SessionLog::open(&path)?;
+    *session = new_session;
+    *history = new_history;
+    *state = new_state;
+    *allow_session = false;
+    *last_tool = None;
+    reset_screen(err);
+    println!(
+        "{} {}",
+        out.paint(Tone::Success, theme::OK),
+        out.dim(format!(
+            "resumed · {} · {} events",
+            session.path().display(),
+            loaded.events.len()
+        ))
+    );
+    if let Some(Event::SessionStart { cwd, model, .. }) = loaded
+        .events
+        .iter()
+        .find(|event| matches!(event, Event::SessionStart { .. }))
+    {
+        if cwd != &config.working_dir.display().to_string() {
+            eprintln!(
+                "{}",
+                err.paint(
+                    Tone::Warning,
+                    format!(
+                        "warning: session cwd {cwd} differs from current {}",
+                        config.working_dir.display()
+                    )
+                )
+            );
+        }
+        if model != &config.model {
+            eprintln!(
+                "{}",
+                err.paint(
+                    Tone::Warning,
+                    format!(
+                        "warning: session model {model} differs from current {}",
+                        config.model
+                    )
+                )
+            );
+        }
+    }
     Ok(())
 }
 

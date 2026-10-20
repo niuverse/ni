@@ -17,7 +17,7 @@ docs = ["tui"]
 - 鼠标捕获只在 slash 菜单打开时启用；菜单关闭/提交/退出后释放，恢复终端原生复制和拖拽。
 - `TerminalGuard` 用 Drop 统一恢复 raw mode、bracketed paste、mouse capture 和 cursor。
 - TUI 增加 `--max-steps`，默认 24；max-steps 错误给出提升提示，不丢已写文件。
-- 鼠标 cursor-position 查询失败时自动降级，不长时间卡住。
+- 鼠标 cursor-position 查询失败时退化为相对 hover，不长时间卡住。
 
 ## 验收
 
@@ -28,7 +28,7 @@ docs = ["tui"]
 
 ## 记录
 
-- `TerminalGuard::enter/drop`；动态 `sync_mouse_capture`；`mouse_failed` 后不再查询。
+- `TerminalGuard::enter/drop`；动态 `sync_mouse_capture`；cursor 查询在菜单打开时、capture 前执行；失败后走相对 hover。
 - TUI 启动先发 `DisableMouseCapture` / `DisableBracketedPaste` / `LeaveAlternateScreen` / `Show` / `ResetColor`，清掉上一次崩溃可能残留的终端模式。
 - `run_tui --max-steps`（默认 24）、`exec --max-steps`（默认 24）；max-steps 提示当前值。
 - 复现：`tui --max-steps 1 --replay golden-read.json` → `max steps reached` → 仍出现 prompt；鼠标使能只发生在 `/` 菜单，错误后立即释放。

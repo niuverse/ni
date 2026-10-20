@@ -24,7 +24,7 @@ pub use context::{
     build_handoff, estimate_context, project_history, ContextConfig, Handoff,
     DEFAULT_COMPACT_AT_PERCENT, DEFAULT_CONTEXT_BUDGET, DEFAULT_KEEP_RECENT_TURNS,
 };
-pub use instructions::{compose_system_prompt, Instructions};
+pub use instructions::{compose_system_prompt, load as load_instructions, Instructions};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalMode {

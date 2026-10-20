@@ -5,7 +5,19 @@ use std::path::Path;
 /// Slash commands surfaced by completion and `/help`.
 pub const COMMANDS: &[(&str, &str)] = &[
     ("/init", "create AGENTS.md in the workspace"),
-    ("/clear", "start a new session (old log is kept)"),
+    (
+        "/clear",
+        "new conversation; keep plan/goal (old log is kept)",
+    ),
+    (
+        "/reset",
+        "new conversation + clear goal/plan/history + reload instructions",
+    ),
+    (
+        "/resume",
+        "resume a session by path or list recent sessions",
+    ),
+    ("/reload", "reload AGENTS.md instructions for the next turn"),
     ("/plan", "enter or leave read-only plan mode"),
     ("/goal", "set, run, stop, or clear the session goal"),
     ("/fork", "fork the current session [event-id]"),
@@ -61,6 +73,9 @@ pub enum Command {
     Last,
     Init,
     Clear,
+    Reset,
+    Resume(Option<String>),
+    Reload,
     Plan(PlanAction),
     Goal(GoalAction),
     Fork(Option<String>),
@@ -129,6 +144,13 @@ pub fn parse(input: &str) -> Parsed {
         "last" => Command::Last,
         "init" => Command::Init,
         "clear" => Command::Clear,
+        "reset" => Command::Reset,
+        "reload" => Command::Reload,
+        "resume" => Command::Resume(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        }),
         "plan" => match rest {
             "" => Command::Plan(PlanAction::Enter),
             "off" | "exit" => Command::Plan(PlanAction::Exit),
@@ -150,7 +172,7 @@ pub fn parse(input: &str) -> Parsed {
     if !args.is_empty()
         && !matches!(
             command,
-            Command::Fork(_) | Command::Plan(_) | Command::Goal(_)
+            Command::Fork(_) | Command::Plan(_) | Command::Goal(_) | Command::Resume(_)
         )
     {
         return Parsed::Usage(usage(&command));
@@ -165,6 +187,9 @@ fn usage(command: &Command) -> String {
         Command::Last => "/last".into(),
         Command::Init => "/init".into(),
         Command::Clear => "/clear".into(),
+        Command::Reset => "/reset".into(),
+        Command::Resume(_) => "/resume [session-path|id]".into(),
+        Command::Reload => "/reload".into(),
         Command::Plan(action) => match action {
             PlanAction::Enter => "/plan".into(),
             PlanAction::Exit => "/plan off".into(),
@@ -262,6 +287,13 @@ mod tests {
     fn reports_unknown_and_usage_errors() {
         assert_eq!(parse("/nope"), Parsed::Unknown("nope".into()));
         assert_eq!(parse("/clear extra"), Parsed::Usage("/clear".into()));
+        assert_eq!(parse("/reset"), Parsed::Command(Command::Reset));
+        assert_eq!(parse("/reload"), Parsed::Command(Command::Reload));
+        assert_eq!(parse("/resume"), Parsed::Command(Command::Resume(None)));
+        assert_eq!(
+            parse("/resume abc.jsonl"),
+            Parsed::Command(Command::Resume(Some("abc.jsonl".into())))
+        );
         assert_eq!(
             parse("/fork e1 e2"),
             Parsed::Usage("/fork [event-id]".into())
