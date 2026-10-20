@@ -435,11 +435,24 @@ pub async fn run(
             Some(Err(error)) => {
                 state.goal_run = false;
                 state.pending_prompt = None;
+                let message = format!("{error:#}");
                 eprintln!(
                     "{} {}",
                     err.paint(Tone::Danger, theme::ERR),
-                    err.paint(Tone::Danger, format!("{error:#}"))
+                    err.paint(Tone::Danger, &message)
                 );
+                if message.contains("max steps reached") {
+                    eprintln!(
+                        "{}",
+                        err.paint(
+                            Tone::Warning,
+                            format!(
+                                "hint: raise --max-steps (current {}) · project writes are preserved",
+                                config.max_steps
+                            )
+                        )
+                    );
+                }
                 history = project_history(&load(session.path())?.events)?;
             }
         }

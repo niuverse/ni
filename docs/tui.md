@@ -18,6 +18,7 @@ niucode tui --approval ask
 niucode tui --resume /path/to/session.jsonl
 niucode tui --replay /path/to/fixture.json
 niucode tui --context-budget 128000 --keep-recent-turns 4
+niucode tui --max-steps 40
 ```
 
 默认策略与 `niucode exec` 相同：`workspace-write + network off + on-failure`。
@@ -52,11 +53,13 @@ niucode ▸ exit
 - `Tab` 补全 slash 命令；多个匹配时显示带说明的候选列表。唯一前缀会显示灰色内联提示。
 - 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-R` 用当前输入做反向历史搜索，重复按继续向前找。
 - `Ctrl-N` / `Ctrl-P` 等同 `↓` / `↑`；`Ctrl-Left/Right` 或 `Alt-B/F` 按词移动；`Ctrl-L` 清屏；支持 bracketed paste。
+- 鼠标捕获只在 slash 菜单打开时启用；菜单关闭后终端恢复原生复制/拖拽。退出、panic 或 Ctrl-C 都会经 `TerminalGuard` 释放 raw mode / bracketed paste / mouse capture。
 - 非 TTY（管道/脚本）自动退化为逐行输入，不启用行编辑。
 - `◆` 标记 assistant 文本，`◇` 标记折叠后的 reasoning，`»` 标记工具调用。
 - `subagent` 调用会显示任务输入，完成后显示每个子任务的摘要和独立日志路径；父上下文只收到这一条 tool_result。
 - 工具结果显示 `✓` / `✗`，短输出用 `│` 缩进；超过 12 行或 2 KB 时折叠为摘要和 `:last to expand`。
 - `╰─ turn N` 在该 turn 的工具结果结束后打印，包含 input / output / cache 百分比。
+- `--max-steps` 控制每个用户请求的最大模型 turn 数，默认 24；达到上限时打印 `max steps reached` 和提升提示，已写入的项目文件保留，可直接继续下一条 prompt。
 - `⇣ compacted · N events · ~before → ~after tokens` 表示上下文压缩；失败显示 `! warning: compaction skipped: ...` 并保留原上下文。
 - `:last` 重新打印最近一次工具输出；`:help` 显示可用命令。展开只保留在当前进程内，完整输出始终在 session JSONL 里。
 - 文本增量直接写到 stdout，首 token 到达即渲染。
@@ -68,6 +71,7 @@ TTY 下使用 readline 风格的行编辑器：
 - 输入 `/` 后自动显示 slash 命令和说明；输入 `/i` 直接出现 `/init` 候选，不需要先按 Tab。
 - `Tab` / `Enter` 接受当前候选；`↑` / `↓` 选择；`Esc` 关闭菜单。
 - 鼠标移动到候选行会高亮；左键点击接受；滚轮在菜单内移动选择。
+- 终端不支持 cursor-position 查询时自动关闭鼠标选择，键盘操作不受影响。
 - 输入的命令名用 accent 高亮；prompt 会显示 `plan` / `goal` 徽标。
 - 命令继续输入参数（例如 `/goal all tests pass`）后菜单自动关闭。
 - `↑` / `↓` 调出当前进程内的历史输入；`Ctrl-C` 清空当前行；`Ctrl-D` 退出；`Ctrl-L` 清屏。
@@ -79,7 +83,7 @@ TTY 下使用 readline 风格的行编辑器：
 
 - `/plan` 只收紧权限：`effective_access = min(base_access, read-only)`，写/命令/联网被阻止或询问；它不改变当前 sandbox/approval 配置，退出后恢复。
 - `/plan` 生成的计划就是该 turn 的 assistant 输出；`/plan approve` 只退出模式，不自动执行，下一次 prompt 才进入实现。
-- `/goal <condition>` 现在会**设置目标并立即启动** goal run；如果只想设置不执行，先 `/goal run` 前用 `/goal` 查看，或使用 `/plan` 只读模式。
+- `/goal <condition>` 现在会**设置目标并立即启动** goal run；如果只想设置不执行，可在 `/plan` 只读模式下设置（此时只存目标，不启动 run）。
 - 每轮结束调用独立 evaluator（无工具、30s timeout），verdict 写入 `goal_verdict`；met 自动清除 goal，impossible/6 轮预算耗尽停止。`/goal stop` 停止但不删 goal。headless 版本在 M4-008。
 - 启动时可用 `--plan` 直接进入 plan mode；profile 的 CLI/`/permissions` 随 M4-003 落地，当前仍用 `--sandbox` / `--approval`。
 
@@ -153,6 +157,7 @@ diff 使用工具层读取的真实文件内容，包含行号、hunk 和上下�
 
 ```sh
 niucode tui --context-budget 128000 --keep-recent-turns 4
+niucode tui --max-steps 40
 ```
 
 - `compaction.upto` 是绝对事件下标；最后一个 compaction 生效，原始事件不删除。

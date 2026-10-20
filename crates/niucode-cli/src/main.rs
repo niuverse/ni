@@ -83,8 +83,8 @@ enum Command {
         /// Override the preset model
         #[arg(long)]
         model: Option<String>,
-        /// Maximum model turns
-        #[arg(long, default_value_t = 12)]
+        /// Maximum model turns per user request
+        #[arg(long, default_value_t = 24)]
         max_steps: usize,
         /// Approximate context budget in tokens before compaction
         #[arg(long, default_value_t = 64_000)]
@@ -137,6 +137,9 @@ enum Command {
         /// Approximate context budget in tokens before compaction
         #[arg(long, default_value_t = 64_000)]
         context_budget: usize,
+        /// Maximum model turns per user request
+        #[arg(long, default_value_t = 24)]
+        max_steps: usize,
         /// Recent user turns kept verbatim when compacting
         #[arg(long, default_value_t = 3)]
         keep_recent_turns: usize,
@@ -291,6 +294,7 @@ async fn main() -> Result<()> {
             preset,
             model,
             context_budget,
+            max_steps,
             keep_recent_turns,
             no_thinking,
             cwd,
@@ -307,6 +311,7 @@ async fn main() -> Result<()> {
                 preset,
                 model,
                 context_budget,
+                max_steps,
                 keep_recent_turns,
                 no_thinking,
                 cwd,
@@ -326,6 +331,7 @@ async fn main() -> Result<()> {
                 "deepseek".into(),
                 None,
                 64_000,
+                24,
                 3,
                 false,
                 None,
@@ -507,6 +513,7 @@ async fn run_tui(
     preset: String,
     model: Option<String>,
     context_budget: usize,
+    max_steps: usize,
     keep_recent_turns: usize,
     no_thinking: bool,
     cwd: Option<PathBuf>,
@@ -640,6 +647,7 @@ async fn run_tui(
     }
 
     let mut agent_config = AgentConfig::new(model.clone(), working_dir.clone());
+    agent_config.max_steps = max_steps;
     agent_config.sandbox = policy;
     agent_config.approval = approval_mode;
     agent_config.allow_unsandboxed = allow_unsandboxed;

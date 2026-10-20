@@ -65,18 +65,36 @@ impl LineEditor {
             history_query: None,
             prompt_row: None,
             mouse_failed: false,
+            mouse_captured: false,
             raw_prompt,
             styled_prompt,
             theme,
         };
 
+        let _guard = TerminalGuard::enter()?;
+        state.run(&mut stdout())
+    }
+}
+
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn enter() -> std::io::Result<Self> {
         enable_raw_mode()?;
         let mut out = stdout();
-        execute!(out, EnableBracketedPaste, EnableMouseCapture, Hide)?;
-        let result = state.run(&mut out);
+        if let Err(error) = execute!(out, EnableBracketedPaste, Hide) {
+            let _ = disable_raw_mode();
+            return Err(error);
+        }
+        Ok(Self)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let mut out = stdout();
         let _ = execute!(out, DisableMouseCapture, DisableBracketedPaste, Show);
         let _ = disable_raw_mode();
-        result
     }
 }
 
@@ -93,6 +111,7 @@ struct State<'a> {
     history_query: Option<String>,
     prompt_row: Option<u16>,
     mouse_failed: bool,
+    mouse_captured: bool,
     raw_prompt: &'a str,
     styled_prompt: &'a str,
     theme: Theme,
@@ -101,6 +120,7 @@ struct State<'a> {
 impl State<'_> {
     fn run(&mut self, out: &mut impl Write) -> std::io::Result<Input> {
         self.refresh_menu();
+        self.sync_mouse_capture(out)?;
         self.render(out)?;
 
         loop {
@@ -113,16 +133,23 @@ impl State<'_> {
                         return Ok(input);
                     }
                     self.refresh_menu();
+                    self.sync_mouse_capture(out)?;
                     self.render(out)?;
                 }
                 Event::Paste(text) => {
                     let text = text.replace(['\r', '\n'], " ");
                     self.insert(&text);
                     self.refresh_menu();
+                    self.sync_mouse_capture(out)?;
                     self.render(out)?;
                 }
                 Event::Mouse(mouse) => {
-                    if self.handle_mouse(mouse)? {
+                    let changed = self.handle_mouse(mouse)?;
+                    // If cursor-position support is missing, drop capture so
+                    // terminal text selection and drag keep working.
+                    self.sync_mouse_capture(out)?;
+                    if changed {
+                        self.refresh_menu();
                         self.render(out)?;
                     }
                 }
@@ -552,6 +579,20 @@ impl State<'_> {
             }
         }
         out.flush()
+    }
+
+    fn sync_mouse_capture(&mut self, out: &mut impl Write) -> std::io::Result<()> {
+        let want = self.menu_open && !self.mouse_failed;
+        if want == self.mouse_captured {
+            return Ok(());
+        }
+        if want {
+            execute!(out, EnableMouseCapture)?;
+        } else {
+            execute!(out, DisableMouseCapture)?;
+        }
+        self.mouse_captured = want;
+        Ok(())
     }
 
     fn handle_mouse(&mut self, mouse: event::MouseEvent) -> std::io::Result<bool> {

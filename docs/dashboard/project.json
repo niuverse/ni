@@ -143,7 +143,9 @@
         "M4-001: readable slash auto-menu replaces the rustyline ghost hint.",
         "/plan toggles read-only plan mode; /goal persists as an event-backed objective label.",
         "鼠标悬停/点击 slash 菜单；命令输入高亮；Ctrl-R/Ctrl-N/Ctrl-P 历史操作。",
-        "prompt 显示 plan/goal 徽标；/goal 设置后立即启动 goal run。"
+        "prompt 显示 plan/goal 徽标；/goal 设置后立即启动 goal run。",
+        "鼠标捕获只在 slash 菜单打开时启用；TerminalGuard 统一恢复终端状态。",
+        "--max-steps 默认 24；max-steps 错误给提升提示并保留已写文件。"
       ]
     },
     {
@@ -754,6 +756,17 @@
       "refs": [
         "tui",
         "M4-001",
+        "M4-005"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-009 完成：TUI 终端状态加固",
+      "detail": "鼠标捕获改为菜单级并加 Drop guard；TUI/exec max-steps 默认 24；max-steps 后回到 prompt 可复制/拖拽；proj_00 的 2048 完成 16 逻辑 + 11 浏览器 e2e。",
+      "refs": [
+        "M4-009",
+        "tui",
         "M4-005"
       ]
     }
