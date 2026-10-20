@@ -484,6 +484,10 @@ pub async fn run(
                         println!();
                         line_open = false;
                     }
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
                     flush_usage(err, &mut pending_usage, turn_no);
                     print!("{} ", out.accent(theme::ASSISTANT));
                     text_started = true;
@@ -493,17 +497,27 @@ pub async fn run(
                 let _ = std::io::stdout().flush();
                 line_open = !delta.ends_with('\n');
             }
-            AgentEvent::ReasoningDelta(_) => {
+            AgentEvent::ReasoningDelta(delta) => {
+                if delta.is_empty() {
+                    return;
+                }
                 if !thinking {
                     if line_open {
                         println!();
                         line_open = false;
                     }
-                    eprintln!("{}", err.dim(format!("{} thinking…", theme::THINKING)));
+                    flush_usage(err, &mut pending_usage, turn_no);
+                    eprintln!("{}", err.dim(format!("{} thinking", theme::THINKING)));
                     thinking = true;
                 }
+                eprint!("{}", err.dim(delta.replace('\u{1b}', "␛")));
+                let _ = std::io::stderr().flush();
             }
             AgentEvent::ToolCall { name, input } => {
+                if thinking {
+                    eprintln!();
+                    thinking = false;
+                }
                 if line_open {
                     println!();
                     line_open = false;
@@ -529,6 +543,10 @@ pub async fn run(
                 summary,
                 output,
             } => {
+                if thinking {
+                    eprintln!();
+                    thinking = false;
+                }
                 if line_open {
                     println!();
                     line_open = false;
@@ -542,6 +560,10 @@ pub async fn run(
                 }
             }
             AgentEvent::TurnEnd { usage } => {
+                if thinking {
+                    eprintln!();
+                    thinking = false;
+                }
                 if line_open {
                     println!();
                     line_open = false;
@@ -556,6 +578,10 @@ pub async fn run(
                 before_tokens,
                 after_tokens,
             } => {
+                if thinking {
+                    eprintln!();
+                    thinking = false;
+                }
                 if line_open {
                     println!();
                     line_open = false;
@@ -571,6 +597,10 @@ pub async fn run(
                 );
             }
             AgentEvent::Warning(message) => {
+                if thinking {
+                    eprintln!();
+                    thinking = false;
+                }
                 if line_open {
                     println!();
                     line_open = false;

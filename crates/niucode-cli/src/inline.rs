@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::io::stdout;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
 use crossterm::cursor::Show;
@@ -26,8 +27,9 @@ use crate::editor::{Input, LineEditor};
 use crate::slash::CommandRegistry;
 use crate::theme::Theme;
 
-const VIEWPORT_HEIGHT: u16 = 8;
-const MENU_ROWS: usize = 4;
+const BASE_HEIGHT: u16 = 4;
+const MENU_HEIGHT: u16 = 7;
+const MENU_ROWS: usize = 3;
 const INPUT_ROWS: usize = 3;
 
 #[derive(Clone)]
@@ -35,6 +37,49 @@ struct Item {
     insert: String,
     name: String,
     description: String,
+}
+
+type InlineBackend = CrosstermBackend<std::io::Stdout>;
+
+struct InlineTerminal(Option<Terminal<InlineBackend>>);
+
+impl InlineTerminal {
+    fn new(height: u16) -> std::io::Result<Self> {
+        Ok(Self(Some(Terminal::with_options(
+            CrosstermBackend::new(stdout()),
+            TerminalOptions {
+                viewport: Viewport::Inline(height),
+            },
+        )?)))
+    }
+
+    fn replace(&mut self, height: u16) -> std::io::Result<()> {
+        self.0 = None;
+        *self = Self::new(height)?;
+        Ok(())
+    }
+}
+
+impl Deref for InlineTerminal {
+    type Target = Terminal<InlineBackend>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().expect("inline terminal")
+    }
+}
+
+impl DerefMut for InlineTerminal {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.as_mut().expect("inline terminal")
+    }
+}
+
+impl Drop for InlineTerminal {
+    fn drop(&mut self) {
+        if let Some(terminal) = self.0.as_mut() {
+            let _ = terminal.clear();
+        }
+    }
 }
 
 pub struct InlineEditor {
@@ -106,26 +151,13 @@ impl InlineEditor {
             let _ = disable_raw_mode();
             return Err(error);
         }
-        let backend = CrosstermBackend::new(stdout());
-        let mut terminal = match Terminal::with_options(
-            backend,
-            TerminalOptions {
-                viewport: Viewport::Inline(VIEWPORT_HEIGHT),
-            },
-        ) {
-            Ok(terminal) => terminal,
-            Err(_) => {
-                let _ = execute!(stdout(), DisableBracketedPaste, Show);
-                let _ = disable_raw_mode();
-                return self.fallback.read_line(raw_prompt, _styled_prompt, theme);
-            }
-        };
-
-        let result = self.run(&mut terminal, raw_prompt, footer);
-        let _ = terminal.clear();
-        drop(terminal);
+        let result = self.run(raw_prompt, footer);
         let _ = execute!(stdout(), DisableMouseCapture, DisableBracketedPaste, Show);
         let _ = disable_raw_mode();
+        if result.is_err() {
+            self.fell_back = true;
+            return self.fallback.read_line(raw_prompt, _styled_prompt, theme);
+        }
         if !self.fell_back {
             if let Ok(Input::Line(line)) = &result {
                 println!("{raw_prompt}{line}");
@@ -134,12 +166,9 @@ impl InlineEditor {
         result
     }
 
-    fn run(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-        prompt: &str,
-        footer: &str,
-    ) -> std::io::Result<Input> {
+    fn run(&mut self, prompt: &str, footer: &str) -> std::io::Result<Input> {
+        let mut height = BASE_HEIGHT;
+        let mut terminal = new_terminal(height)?;
         let mut chars = Vec::new();
         let mut cursor = 0_usize;
         let mut history_index = self.history.len();
@@ -151,6 +180,12 @@ impl InlineEditor {
             let line: String = chars.iter().collect();
             let candidates = self.candidates(&line);
             let menu_open = show_menu && !candidates.is_empty();
+            let desired_height = if menu_open { MENU_HEIGHT } else { BASE_HEIGHT };
+            if desired_height != height {
+                let _ = terminal.clear();
+                terminal.replace(desired_height)?;
+                height = desired_height;
+            }
             let lines = line.split('\n').collect::<Vec<_>>();
             if menu_open {
                 selected = selected.min(candidates.len().saturating_sub(1));
@@ -171,12 +206,12 @@ impl InlineEditor {
                 let rows = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Length(MENU_ROWS as u16),
+                        Constraint::Length(if menu_open { MENU_ROWS as u16 } else { 0 }),
                         Constraint::Length(INPUT_ROWS as u16),
                         Constraint::Length(1),
                     ])
                     .split(area);
-                menu_rect = Some(rows[0]);
+                menu_rect = menu_open.then_some(rows[0]);
                 let items = if menu_open {
                     candidates
                         .iter()
@@ -197,13 +232,7 @@ impl InlineEditor {
                         })
                         .collect::<Vec<_>>()
                 } else {
-                    vec![
-                        ListItem::new(
-                            "  enter send · shift/ctrl-j newline · / commands · ↑↓ history",
-                        ),
-                        ListItem::new("  tab complete · ctrl-j newline · ctrl-r history"),
-                        ListItem::new("  esc close menu · @ files · / commands"),
-                    ]
+                    Vec::new()
                 };
                 frame.render_widget(List::new(items), rows[0]);
                 let input_style = if ansi {
@@ -240,9 +269,13 @@ impl InlineEditor {
                     }
                 }
                 frame.render_widget(Paragraph::new(Text::from(input_lines)), rows[1]);
+                let mut footer = footer.to_string();
+                if !menu_open {
+                    footer.push_str("  ·  / commands · @ files");
+                }
                 frame.render_widget(
                     Paragraph::new(Line::from(Span::styled(
-                        footer.to_string(),
+                        footer,
                         if ansi {
                             Style::default().fg(Color::DarkGray)
                         } else {
@@ -505,6 +538,10 @@ impl InlineEditor {
             })
             .collect()
     }
+}
+
+fn new_terminal(height: u16) -> std::io::Result<InlineTerminal> {
+    InlineTerminal::new(height)
 }
 
 fn cursor_position(chars: &[char], cursor: usize) -> (usize, usize) {

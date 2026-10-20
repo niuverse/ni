@@ -953,6 +953,27 @@
         "tui",
         "architecture"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-005 完成：紧凑 inline 与 reasoning 可见",
+      "detail": "默认底部 4 行，picker 打开 7 行；移除 help 墙；ReasoningDelta 以 dim 流式文本显示，answer/tool 前关闭；PTY fixture 验证。",
+      "refs": [
+        "M5-005",
+        "adr-0021",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0021 accepted：紧凑 inline 与 reasoning 可见",
+      "detail": "动态 4/7 行 viewport；reasoning 默认可见；不折叠。",
+      "refs": [
+        "adr-0021",
+        "M5-005"
+      ]
     }
   ]
 }
