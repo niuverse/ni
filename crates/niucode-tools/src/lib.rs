@@ -237,7 +237,7 @@ impl Toolbox {
             ),
             ToolSpec::function(
                 "subagent",
-                "Run one or more subagents in parallel. explore is read-only (read/grep/glob + read-only external tools); worker may also write/edit/run bash under a shared write lock and optional write_scope. Each task gets its own session log and budget. Returns a summary and log path per task.",
+                "Run one or more subagents in parallel. explore is read-only (read/grep/glob + read-only external tools); worker may also write/edit/run bash under a shared write lock and optional write_scope; inherit requires explicit --allow-subagent-inheritance and copies the parent tool surface (minus nested subagents). Each task gets its own session log and budget.",
                 json!({
                     "type": "object",
                     "properties": {
@@ -249,7 +249,7 @@ impl Toolbox {
                                 "type": "object",
                                 "properties": {
                                     "prompt": {"type": "string", "description": "Task for the subagent"},
-                                    "profile": {"type": "string", "enum": ["explore", "worker"], "default": "explore", "description": "explore = read-only; worker = workspace writes"},
+                                    "profile": {"type": "string", "enum": ["explore", "worker", "inherit"], "default": "explore", "description": "explore = read-only; worker = workspace writes; inherit = parent surface (explicit opt-in; no nested subagents)"},
                                     "write_scope": {
                                         "type": "array",
                                         "items": {"type": "string"},

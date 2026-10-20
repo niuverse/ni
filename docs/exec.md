@@ -177,7 +177,8 @@ niucode tui  --context-budget 128000 --keep-recent-turns 4
 - 默认 `max_steps=6`（上限 12）、`timeout_secs=120`（上限 600）；context budget 为 `min(parent, 16k)`。
 - 父模型只收到一条 tool_result：每个任务的摘要 + 子日志路径；完整 transcript 不进入父上下文。
 - 超时/provider 错误/max steps 都返回 `ok=false`，父 agent 继续。
-- mutating external tools 不进入子 agent；`full-access` 也不默认下放。决策见 ADR-0011/0014。
+- mutating external tools 不进入 explore/worker；`full-access` 也不默认下放。
+- `profile: inherit` 需要显式 `--allow-subagent-inheritance`；它复制父工具面，但一定剥离 `subagent`，不能递归。决策见 ADR-0011/0014。
 
 ## External tools
 

@@ -97,6 +97,7 @@ user input
 - `profile: explore`（默认）：`read` / `grep` / `glob` + 只读 external tools；sandbox read-only + network off；没有 write/edit/bash，也没有 `subagent`，不能递归。
 - `profile: worker`：`read` / `write` / `edit` / `grep` / `glob` / `bash` + 只读 external tools；继承父 sandbox；`write_scope` 约束 write/edit 路径。
 - W1：父和所有 Worker 共享一个全局 write lock；write/edit/bash 串行。bash 不受 path scope 约束。
+- `profile: inherit` 需要显式 `--allow-subagent-inheritance`；复制父工具面，但剥离 `subagent`，不能递归。
 - mutating external tools 和 full-access 不默认下放给子 agent。
 - 父 session 记录 `subagent_spawn`（含 profile）/ `subagent_result`，包含子 session 路径；子 `session_start.id` 等于 spawn id。
 - 父模型只收到一条 tool_result：每个任务的摘要 + 日志路径；完整 transcript 留在子日志里。

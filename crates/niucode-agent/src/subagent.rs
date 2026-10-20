@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use futures_util::future::join_all;
 use niucode_core::{now_ms, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::Provider;
-use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, ToolResult};
+use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, ToolResult, Toolbox};
 use serde_json::Value;
 
 use crate::{run, AgentConfig, ApprovalMode};
@@ -25,6 +25,7 @@ const SUBAGENT_TOOLS: [&str; 3] = ["read", "grep", "glob"];
 enum SubagentProfile {
     Explore,
     Worker,
+    Inherit,
 }
 
 impl SubagentProfile {
@@ -32,6 +33,7 @@ impl SubagentProfile {
         match self {
             Self::Explore => "explore",
             Self::Worker => "worker",
+            Self::Inherit => "inherit",
         }
     }
 }
@@ -79,6 +81,15 @@ async fn run_tasks(
     call: &ToolCall,
 ) -> Result<Vec<SubagentOutcome>> {
     let tasks = parse_tasks(&call.input)?;
+    if tasks
+        .iter()
+        .any(|task| task.profile == SubagentProfile::Inherit)
+        && !parent_config.allow_subagent_inheritance
+    {
+        bail!(
+            "subagent profile \"inherit\" requires --allow-subagent-inheritance (explicit opt-in)"
+        );
+    }
     let directory = parent_session
         .path()
         .parent()
@@ -218,6 +229,7 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
             {
                 "explore" => SubagentProfile::Explore,
                 "worker" => SubagentProfile::Worker,
+                "inherit" => SubagentProfile::Inherit,
                 other => bail!("task {} has unknown profile {other:?}", index + 1),
             };
             let write_scope = task
@@ -279,6 +291,8 @@ fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
             .iter()
             .map(|name| (*name).to_string())
             .collect::<Vec<_>>(),
+        // Replaced by the parent tool surface in the Inherit branch below.
+        SubagentProfile::Inherit => Vec::new(),
     };
     if let Some(host) = &parent.extension_host {
         allowed.extend(host.read_only_tools());
@@ -315,6 +329,38 @@ fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
             config.sandbox = parent.sandbox;
             config.approval = parent.approval;
             config.allow_unsandboxed = false;
+            config.write_scope = task.write_scope.clone();
+        }
+        SubagentProfile::Inherit => {
+            config.system_prompt = format!(
+                "You are an explicitly inherited subagent working inside {}.\n\
+                 You inherit the parent's tool surface and policy, except that nested subagents are disabled.\n\
+                 Respect the parent's sandbox, approval, write lock, and declared write scope.\n\
+                 The parent agent sees only your final summary; the full transcript stays in your own session log.\n\
+                 Do not ask questions.",
+                parent.working_dir.display()
+            );
+            let mut tools = match &parent.allowed_tools {
+                Some(tools) => tools.clone(),
+                None => {
+                    let mut names = Toolbox::specs()
+                        .into_iter()
+                        .map(|tool| tool.function.name)
+                        .collect::<Vec<_>>();
+                    if let Some(host) = &parent.extension_host {
+                        names.extend(host.specs().into_iter().map(|tool| tool.function.name));
+                    }
+                    names
+                }
+            };
+            tools.retain(|name| name != "subagent");
+            tools.sort();
+            tools.dedup();
+            config.allowed_tools = Some(tools);
+            config.sandbox = parent.sandbox;
+            config.approval = parent.approval;
+            config.allow_unsandboxed = parent.allow_unsandboxed;
+            config.plan_mode = parent.plan_mode;
             config.write_scope = task.write_scope.clone();
         }
     }

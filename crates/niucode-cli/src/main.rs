@@ -121,6 +121,9 @@ enum Command {
         /// Emit a stable JSONL event stream on stdout
         #[arg(long)]
         json: bool,
+        /// Explicitly allow subagent profile=inherit
+        #[arg(long)]
+        allow_subagent_inheritance: bool,
     },
     /// Start the interactive linear TUI
     Tui {
@@ -163,6 +166,9 @@ enum Command {
         /// Start in read-only plan mode
         #[arg(long)]
         plan: bool,
+        /// Explicitly allow subagent profile=inherit
+        #[arg(long)]
+        allow_subagent_inheritance: bool,
     },
 }
 
@@ -257,6 +263,7 @@ async fn main() -> Result<()> {
             approval,
             network,
             json,
+            allow_subagent_inheritance,
         }) => {
             run_exec(
                 prompt,
@@ -275,6 +282,7 @@ async fn main() -> Result<()> {
                 approval,
                 network,
                 json,
+                allow_subagent_inheritance,
             )
             .await
         }
@@ -292,6 +300,7 @@ async fn main() -> Result<()> {
             network,
             replay,
             plan,
+            allow_subagent_inheritance,
         }) => {
             run_tui(
                 preset,
@@ -307,6 +316,7 @@ async fn main() -> Result<()> {
                 network,
                 replay,
                 plan,
+                allow_subagent_inheritance,
             )
             .await
         }
@@ -324,6 +334,7 @@ async fn main() -> Result<()> {
                 "on-failure".into(),
                 "off".into(),
                 None,
+                false,
                 false,
             )
             .await
@@ -505,6 +516,7 @@ async fn run_tui(
     network: String,
     replay: Option<PathBuf>,
     plan: bool,
+    allow_subagent_inheritance: bool,
 ) -> Result<()> {
     if context_budget < 100 {
         bail!("--context-budget must be at least 100 tokens");
@@ -633,6 +645,7 @@ async fn run_tui(
     agent_config.context.budget_tokens = context_budget;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+    agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&working_dir, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 
@@ -693,6 +706,7 @@ async fn run_exec(
     approval: String,
     network: String,
     json: bool,
+    allow_subagent_inheritance: bool,
 ) -> Result<()> {
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
@@ -853,6 +867,7 @@ async fn run_exec(
     agent_config.context.budget_tokens = context_budget;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+    agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&agent_config.working_dir, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 

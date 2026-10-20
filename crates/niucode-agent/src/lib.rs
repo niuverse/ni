@@ -78,6 +78,9 @@ pub struct AgentConfig {
     /// Optional workspace-relative path prefixes for write/edit. bash is not
     /// path-scoped; it is serialized by `write_lock` instead.
     pub write_scope: Option<Vec<String>>,
+    /// Explicit opt-in for subagent `profile = "inherit"`. Off by default;
+    /// inherit still strips the nested `subagent` tool.
+    pub allow_subagent_inheritance: bool,
 }
 
 impl AgentConfig {
@@ -107,6 +110,7 @@ impl AgentConfig {
             extension_host: None,
             write_lock: None,
             write_scope: None,
+            allow_subagent_inheritance: false,
         }
     }
 }

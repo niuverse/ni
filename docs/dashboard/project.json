@@ -719,6 +719,18 @@
         "adr-0014",
         "loop"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-004 完成：inherit 显式、可审计、不可递归",
+      "detail": "subagent profile=inherit 需要 --allow-subagent-inheritance；复制父工具面但剥离 subagent，共享 sandbox/approval/write lock。",
+      "refs": [
+        "M4-004",
+        "M4-003",
+        "adr-0014",
+        "loop"
+      ]
     }
   ]
 }

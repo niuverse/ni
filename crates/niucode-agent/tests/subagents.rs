@@ -527,3 +527,112 @@ for line in sys.stdin:
     }
     std::fs::remove_dir_all(directory).expect("cleanup");
 }
+
+struct InheritProvider {
+    calls: AtomicUsize,
+    requests: Mutex<Vec<CompletionRequest>>,
+}
+
+#[async_trait]
+impl Provider for InheritProvider {
+    fn name(&self) -> &str {
+        "inherit-test"
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> Result<EventStream, ProviderError> {
+        self.requests.lock().expect("requests").push(request);
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        match call {
+            0 => Ok(Box::pin(stream::iter(subagent_call(json!([
+                {"prompt": "inherit the tools", "profile": "inherit"}
+            ]))))),
+            1 => Ok(Box::pin(stream::iter(text("inherited")))),
+            _ => Ok(Box::pin(stream::iter(text("parent done")))),
+        }
+    }
+}
+
+#[tokio::test]
+async fn inherit_profile_requires_explicit_opt_in() {
+    let directory = temp_dir("inherit-guard");
+    let provider = InheritProvider {
+        calls: AtomicUsize::new(0),
+        requests: Mutex::new(Vec::new()),
+    };
+    let mut session = start_session(&directory);
+    let config = config(&directory); // allow_subagent_inheritance defaults false
+
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(5),
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "try inherit",
+            &mut |_| true,
+            &mut |_| {},
+        ),
+    )
+    .await
+    .expect("run")
+    .expect("run");
+    assert_eq!(outcome.final_text, "inherited");
+
+    let loaded = load(session.path()).expect("load");
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::ToolResult { ok: false, output, .. }
+            if output.contains("allow-subagent-inheritance")
+    )));
+
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[tokio::test]
+async fn inherit_profile_copies_the_parent_surface_but_not_nested_subagents() {
+    let directory = temp_dir("inherit-ok");
+    let provider = InheritProvider {
+        calls: AtomicUsize::new(0),
+        requests: Mutex::new(Vec::new()),
+    };
+    let mut session = start_session(&directory);
+    let mut config = config(&directory);
+    config.allow_subagent_inheritance = true;
+    config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(5),
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "inherit",
+            &mut |_| true,
+            &mut |_| {},
+        ),
+    )
+    .await
+    .expect("run")
+    .expect("run");
+    assert_eq!(outcome.final_text, "parent done");
+
+    {
+        let requests = provider.requests.lock().expect("requests");
+        let subagent = &requests[1];
+        let mut names = subagent
+            .tools
+            .iter()
+            .map(|tool| tool.function.name.as_str())
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(names, ["bash", "edit", "glob", "grep", "read", "write"]);
+    }
+
+    let loaded = load(session.path()).expect("load");
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::SubagentSpawn { profile, .. } if profile == "inherit"
+    )));
+
+    fs::remove_dir_all(directory).expect("cleanup");
+}
