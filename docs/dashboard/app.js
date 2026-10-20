@@ -248,6 +248,7 @@
   }
 
   function render() {
+    document.body.dataset.view = state.view;
     renderTabs();
     renderChrome();
     renderRail();

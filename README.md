@@ -52,7 +52,7 @@ docs/
 4. Keep the provider layer thin; normalize only what the loop needs.
 5. Be honest about sandbox boundaries. In-process path checks are not isolation.
 
-More detail: [architecture](docs/architecture.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
+More detail: [architecture](docs/architecture.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
 
 ## Dashboard
 

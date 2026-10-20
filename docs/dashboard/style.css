@@ -1822,6 +1822,12 @@ button.ref-chip:hover {
 
 /* ---------- responsive ---------- */
 
+@media (min-width: 1400px) {
+  body[data-view="docs"] .shell {
+    grid-template-columns: 224px minmax(0, 1fr) 560px;
+  }
+}
+
 @media (max-width: 1280px) {
   .shell {
     grid-template-columns: 210px minmax(0, 1fr) 344px;
@@ -1913,4 +1919,14 @@ button.ref-chip:hover {
   height: 11px;
   margin-right: 6px;
   vertical-align: -1px;
+}
+
+.table-wrap {
+  margin: 11px 0;
+  overflow-x: auto;
+}
+
+.table-wrap table {
+  min-width: 520px;
+  margin: 0;
 }

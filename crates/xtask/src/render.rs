@@ -19,7 +19,14 @@ pub fn markdown(input: &str) -> String {
     let parser = Parser::new_ext(input, options);
     let mut output = String::new();
     html::push_html(&mut output, parser);
-    output
+    wrap_tables(output)
+}
+
+/// Keep wide tables readable in the narrow details pane: scroll the table
+/// instead of wrapping every cell character by character.
+fn wrap_tables(html: String) -> String {
+    html.replace("<table>", "<div class=\"table-wrap\"><table>")
+        .replace("</table>", "</table></div>")
 }
 
 pub fn excerpt(markdown: &str, limit: usize) -> String {

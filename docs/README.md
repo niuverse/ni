@@ -21,7 +21,7 @@ cargo xtask dashboard --check  # CI：生成物过期、引用断开时失败
 
 - **Architecture（默认）**：按语义层排列模块，显示依赖关系、模块状态、contract、owned paths 和源码。选中模块会聚焦它的关系，弱化无关节点；不提供 zoom/pan。
 - **Work**：卡片和状态列，可按里程碑筛选。它是 agent 的 handoff 面，不是进度仪表盘；不显示完成率、进度条、WIP 数字或卡片计数。
-- **Docs**：Markdown 文档索引，右栏阅读，支持 `#/docs/adr-0001` 深链。
+- **Docs**：Markdown 文档索引，右栏阅读，支持 `#/docs/adr-0001` 深链。组件与学习路径见 `roadmap.md`。
 - **Decisions**：ADR 卡片 + `kind = "decision"` 的决策日志。这里不放“某张卡完成”的流水账。
 
 进度信息仍然存在于 `docs/board/` 和 git 里；只是不再占据第一屏。
@@ -44,7 +44,9 @@ docs/
     0001-rust-core.md
     0002-event-log.md
     0003-architecture-first-dashboard.md
+    0004-session-runtime.md
   architecture.md
+  roadmap.md
   README.md
 ```
 

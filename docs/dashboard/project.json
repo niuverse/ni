@@ -305,6 +305,15 @@
       "refs": [
         "adr-0003"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Interface 抽象会话，不抽象界面",
+      "detail": "SessionRuntime 以 Command/Event 为边界；CLI/TUI 进程内消费，Web 先做只读 viewer。ADR-0004。",
+      "refs": [
+        "adr-0004"
+      ]
     }
   ]
 }

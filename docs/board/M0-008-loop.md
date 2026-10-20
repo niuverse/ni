@@ -14,6 +14,7 @@ docs = ["architecture"]
 ## 范围
 
 - 一个 turn：project → stream → dispatch tools → append events。
+- `SessionRuntime` 暴露 Command/Event 边界；CLI/TUI 不直接操作 loop 内部。
 - 循环直到无 tool call、达到 max steps、被取消或 fatal error。
 - 只读工具可并发，写工具串行。
 - `ni exec "<prompt>"` headless 入口，输出最终文本和 usage。
