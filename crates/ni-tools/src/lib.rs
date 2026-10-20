@@ -7,12 +7,18 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
+use globset::GlobBuilder;
+use ignore::WalkBuilder;
 use ni_provider::ToolSpec;
+use regex::Regex;
 use serde_json::{json, Value};
+use similar::TextDiff;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tokio::time::timeout;
 
@@ -21,6 +27,8 @@ const READ_MAX_BYTES: usize = 50_000;
 const BASH_MAX_BYTES: usize = 20_000;
 const BASH_DEFAULT_TIMEOUT: u64 = 120;
 const BASH_MAX_TIMEOUT: u64 = 600;
+const BASH_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
+const SEARCH_MAX_RESULTS: usize = 200;
 
 pub struct Toolbox {
     cwd: PathBuf,
@@ -98,6 +106,32 @@ impl Toolbox {
                     "required": ["command"]
                 }),
             ),
+            ToolSpec::function(
+                "grep",
+                "Search text files in the workspace with a regular expression. Respects .gitignore, skips binaries and target/.git, and caps results.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string", "description": "Rust regex"},
+                        "path": {"type": "string", "description": "File or directory, defaults to the workspace root"},
+                        "include": {"type": "string", "description": "Optional glob such as *.rs"},
+                        "max_results": {"type": "integer", "minimum": 1, "maximum": SEARCH_MAX_RESULTS}
+                    },
+                    "required": ["pattern"]
+                }),
+            ),
+            ToolSpec::function(
+                "glob",
+                "List files in the workspace matching a glob pattern, for example **/*.rs. Respects .gitignore and skips target/.git.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "max_results": {"type": "integer", "minimum": 1, "maximum": SEARCH_MAX_RESULTS}
+                    },
+                    "required": ["pattern"]
+                }),
+            ),
         ]
     }
 
@@ -106,6 +140,8 @@ impl Toolbox {
             "read" => self.read(input),
             "write" => self.write(input),
             "edit" => self.edit(input),
+            "grep" => self.grep(input),
+            "glob" => self.glob(input),
             "bash" => self.bash(input).await,
             other => Err(anyhow::anyhow!("unknown tool {other:?}")),
         };
@@ -223,11 +259,19 @@ impl Toolbox {
             .with_context(|| format!("write {}", self.display_path(&path)))?;
         self.mark_observed(&path);
 
+        let diff = TextDiff::from_lines(&text, &updated)
+            .unified_diff()
+            .context_radius(3)
+            .header("before", "after")
+            .to_string();
+        let preview: String = diff.chars().take(4_000).collect();
+
         Ok(format!(
-            "edited {} (replaced {} bytes with {} bytes)",
+            "edited {} (replaced {} bytes with {} bytes)\n{}",
             self.display_path(&path),
             old.len(),
-            new.len()
+            new.len(),
+            preview
         ))
     }
 
@@ -243,50 +287,217 @@ impl Toolbox {
             .unwrap_or(BASH_DEFAULT_TIMEOUT)
             .clamp(1, BASH_MAX_TIMEOUT);
 
-        let mut child = Command::new("bash");
-        child
+        let mut child_command = Command::new("bash");
+        child_command
             .arg("-c")
             .arg(command)
             .current_dir(&self.cwd)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .kill_on_drop(true);
 
-        let output = match timeout(Duration::from_secs(timeout_secs), child.output()).await {
-            Ok(result) => result.context("run bash")?,
-            Err(_) => bail!("command timed out after {timeout_secs}s"),
+        #[cfg(unix)]
+        child_command.process_group(0);
+
+        let mut child = child_command.spawn().context("spawn bash")?;
+        let pid = child.id().context("bash process id")?;
+        let _guard = ProcessGroupGuard::new(pid);
+
+        let stdout = child.stdout.take().context("take stdout")?;
+        let stderr = child.stderr.take().context("take stderr")?;
+        let stdout_task = tokio::spawn(read_capped(stdout, BASH_CAPTURE_BYTES));
+        let stderr_task = tokio::spawn(read_capped(stderr, BASH_CAPTURE_BYTES));
+
+        let status = match timeout(Duration::from_secs(timeout_secs), child.wait()).await {
+            Ok(result) => result.context("wait for bash")?,
+            Err(_) => {
+                kill_group(pid);
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                bail!("command timed out after {timeout_secs}s");
+            }
         };
 
+        let (stdout, stdout_truncated) = stdout_task
+            .await
+            .context("join stdout")?
+            .context("read stdout")?;
+        let (stderr, stderr_truncated) = stderr_task
+            .await
+            .context("join stderr")?
+            .context("read stderr")?;
+
         let mut combined = String::new();
-        if !output.stdout.is_empty() {
+        if !stdout.is_empty() {
             combined.push_str("stdout:\n");
-            combined.push_str(&String::from_utf8_lossy(&output.stdout));
+            combined.push_str(&String::from_utf8_lossy(&stdout));
         }
-        if !output.stderr.is_empty() {
+        if !stderr.is_empty() {
             if !combined.is_empty() {
                 combined.push('\n');
             }
             combined.push_str("stderr:\n");
-            combined.push_str(&String::from_utf8_lossy(&output.stderr));
+            combined.push_str(&String::from_utf8_lossy(&stderr));
         }
         if combined.is_empty() {
             combined.push_str("(no output)\n");
         }
 
-        let (body, truncated) = tail_chars(&combined, BASH_MAX_BYTES);
-        let status = output
-            .status
+        let status = status
             .code()
             .map(|code| code.to_string())
             .unwrap_or_else(|| "signal".into());
 
-        Ok(format!(
-            "exit: {status}\n{}{}",
-            body,
-            if truncated {
-                "\n... (output truncated to the last 20KB)\n"
+        if stdout_truncated || stderr_truncated || combined.chars().count() > BASH_MAX_BYTES {
+            let path = temp_output_path(pid);
+            fs::write(&path, &combined)
+                .with_context(|| format!("write full bash output {}", path.display()))?;
+            let (body, _) = tail_chars(&combined, BASH_MAX_BYTES);
+            let qualifier = if stdout_truncated || stderr_truncated {
+                "captured output (capped at 8MB)"
             } else {
-                ""
+                "full output"
+            };
+            return Ok(format!(
+                "exit: {status}\n{body}\n... ({qualifier}: {})\n",
+                path.display()
+            ));
+        }
+
+        Ok(format!("exit: {status}\n{combined}"))
+    }
+
+    fn grep(&self, input: &Value) -> Result<String> {
+        let pattern = input_string(input, "pattern")?;
+        if pattern.is_empty() {
+            bail!("pattern must not be empty");
+        }
+        let regex = Regex::new(pattern).with_context(|| format!("invalid regex {pattern:?}"))?;
+        let root = match input.get("path").and_then(Value::as_str) {
+            Some(path) if !path.trim().is_empty() => self.resolve_existing(path)?,
+            _ => self.cwd.clone(),
+        };
+        let include = match input.get("include").and_then(Value::as_str) {
+            Some(glob) if !glob.trim().is_empty() => Some(
+                GlobBuilder::new(glob)
+                    .literal_separator(false)
+                    .build()
+                    .with_context(|| format!("invalid include glob {glob:?}"))?
+                    .compile_matcher(),
+            ),
+            _ => None,
+        };
+        let max = input
+            .get("max_results")
+            .and_then(Value::as_u64)
+            .unwrap_or(100)
+            .clamp(1, SEARCH_MAX_RESULTS as u64) as usize;
+
+        let walker = WalkBuilder::new(&root)
+            .standard_filters(true)
+            .require_git(false)
+            .filter_entry(|entry| {
+                let name = entry.file_name().to_string_lossy();
+                name != ".git" && name != "target" && name != "node_modules"
+            })
+            .build();
+
+        let mut matches = Vec::new();
+        let mut truncated = false;
+
+        'outer: for entry in walker {
+            let entry = entry.context("walk workspace")?;
+            if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+                continue;
             }
-        ))
+            let path = entry.path();
+            let relative = self.display_path(path);
+            if let Some(matcher) = &include {
+                if !matcher.is_match(&relative) {
+                    continue;
+                }
+            }
+            if entry.metadata().map(|meta| meta.len()).unwrap_or(0) > 2_000_000 {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(path) else {
+                continue;
+            };
+            if text.contains('\0') {
+                continue;
+            }
+
+            for (index, line) in text.lines().enumerate() {
+                if !regex.is_match(line) {
+                    continue;
+                }
+                let preview: String = line.chars().take(500).collect();
+                matches.push(format!("{relative}:{}: {preview}", index + 1));
+                if matches.len() >= max {
+                    truncated = true;
+                    break 'outer;
+                }
+            }
+        }
+
+        if matches.is_empty() {
+            return Ok(format!("no matches for {pattern:?}"));
+        }
+
+        let mut output = matches.join("\n");
+        if truncated {
+            output.push_str(&format!("\n... (stopped at {max} matches)"));
+        }
+        Ok(output)
+    }
+
+    fn glob(&self, input: &Value) -> Result<String> {
+        let pattern = input_string(input, "pattern")?;
+        if pattern.trim().is_empty() {
+            bail!("pattern must not be empty");
+        }
+        let matcher = GlobBuilder::new(pattern)
+            .literal_separator(false)
+            .build()
+            .with_context(|| format!("invalid glob {pattern:?}"))?
+            .compile_matcher();
+        let max = input
+            .get("max_results")
+            .and_then(Value::as_u64)
+            .unwrap_or(SEARCH_MAX_RESULTS as u64)
+            .clamp(1, SEARCH_MAX_RESULTS as u64) as usize;
+
+        let walker = WalkBuilder::new(&self.cwd)
+            .standard_filters(true)
+            .require_git(false)
+            .filter_entry(|entry| {
+                let name = entry.file_name().to_string_lossy();
+                name != ".git" && name != "target" && name != "node_modules"
+            })
+            .build();
+
+        let mut paths = Vec::new();
+        for entry in walker {
+            let entry = entry.context("walk workspace")?;
+            if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+                continue;
+            }
+            let relative = self.display_path(entry.path());
+            if matcher.is_match(&relative) {
+                paths.push(relative);
+                if paths.len() >= max {
+                    break;
+                }
+            }
+        }
+
+        if paths.is_empty() {
+            return Ok(format!("no files match {pattern:?}"));
+        }
+        paths.sort();
+        Ok(paths.join("\n"))
     }
 
     fn mark_observed(&self, path: &Path) {
@@ -352,6 +563,73 @@ impl Toolbox {
     }
 }
 
+struct ProcessGroupGuard {
+    pid: u32,
+}
+
+impl ProcessGroupGuard {
+    fn new(pid: u32) -> Self {
+        Self { pid }
+    }
+}
+
+impl Drop for ProcessGroupGuard {
+    fn drop(&mut self) {
+        kill_group(self.pid);
+    }
+}
+
+fn kill_group(pid: u32) {
+    #[cfg(unix)]
+    {
+        if pid > 0 {
+            // Negative pid targets the process group created by process_group(0).
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+    }
+}
+
+async fn read_capped<R: AsyncRead + Unpin>(
+    mut reader: R,
+    cap: usize,
+) -> std::io::Result<(Vec<u8>, bool)> {
+    let mut data = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    let mut truncated = false;
+
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        if data.len() < cap {
+            let take = (cap - data.len()).min(read);
+            data.extend_from_slice(&buffer[..take]);
+            if take < read {
+                truncated = true;
+            }
+        } else {
+            truncated = true;
+        }
+    }
+
+    Ok((data, truncated))
+}
+
+fn temp_output_path(pid: u32) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!("ni-bash-{pid}-{stamp}.log"))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolResult {
     pub ok: bool,
@@ -376,7 +654,7 @@ fn tail_chars(value: &str, max_chars: usize) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use super::*;
 
@@ -483,6 +761,49 @@ mod tests {
         assert!(result.output.contains("outside") || result.output.contains("escapes"));
 
         let _ = fs::remove_file(outside);
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
+    async fn grep_and_glob_respect_include_and_gitignore() {
+        let directory = temp_workspace("search");
+        fs::create_dir_all(directory.join("src")).expect("src dir");
+        fs::write(directory.join("src/a.rs"), "fn needle() {}\n").expect("fixture");
+        fs::write(directory.join("src/b.txt"), "needle\n").expect("fixture");
+        fs::write(directory.join(".gitignore"), "ignored.rs\n").expect("gitignore");
+        fs::write(directory.join("ignored.rs"), "needle\n").expect("fixture");
+        let tools = Toolbox::new(&directory).expect("toolbox");
+
+        let grep = tools
+            .execute("grep", &json!({"pattern": "needle", "include": "*.rs"}))
+            .await;
+        assert!(grep.ok, "{}", grep.output);
+        assert!(grep.output.contains("src/a.rs:1:"));
+        assert!(!grep.output.contains("b.txt"));
+        assert!(!grep.output.contains("ignored.rs"));
+
+        let glob = tools.execute("glob", &json!({"pattern": "*.rs"})).await;
+        assert!(glob.ok, "{}", glob.output);
+        assert!(glob.output.contains("src/a.rs"));
+        assert!(!glob.output.contains("ignored.rs"));
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
+    async fn bash_timeout_kills_the_process_group() {
+        let directory = temp_workspace("timeout");
+        let tools = Toolbox::new(&directory).expect("toolbox");
+        let started = Instant::now();
+
+        let result = tools
+            .execute("bash", &json!({"command": "sleep 5", "timeout_secs": 1}))
+            .await;
+
+        assert!(!result.ok);
+        assert!(result.output.contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(4));
+
         fs::remove_dir_all(directory).expect("cleanup");
     }
 

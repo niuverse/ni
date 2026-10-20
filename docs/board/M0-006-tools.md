@@ -1,14 +1,15 @@
 +++
 id = "M0-006"
 title = "文件工具：read / write / edit / grep / glob"
-status = "backlog"
+status = "done"
 milestone = "M0"
 module = "tools"
 size = "L"
 priority = "P0"
 updated = "2026-10-20"
+completed = "2026-10-20"
 depends_on = ["M0-001"]
-docs = ["architecture"]
+docs = ["architecture", "exec"]
 +++
 
 ## 范围
@@ -21,11 +22,12 @@ docs = ["architecture"]
 
 ## 验收
 
-- 非唯一 `old_string` 被拒绝，并提示增加上下文。
-- 未读文件 `write` / `edit` 返回可操作的错误。
-- 超大文件读取被截断，模型能按 offset 继续。
-- 工具错误信息包含下一步建议，而不是裸错误码。
+- [x] 非唯一 `old_string` 被拒绝，并提示增加上下文。
+- [x] 未读文件 `write` / `edit` 返回可操作的错误。
+- [x] 超大文件读取被截断，模型能按 offset 继续。
+- [x] `grep` / `glob` 有结果上限，尊重 `.gitignore`，跳过 `target` / `.git`。
+- [x] `edit` 返回 unified diff 预览。
 
 ## 记录
 
-工具描述也是 prompt 表面，描述里写清楚何时用、何时不用、边界和示例。
+五个文件工具已落地；`grep`/`glob` 用 `ignore` + `regex`/`globset`，不依赖外部 ripgrep。工具描述仍是 prompt 表面。

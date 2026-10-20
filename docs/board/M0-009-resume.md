@@ -1,7 +1,7 @@
 +++
 id = "M0-009"
 title = "Resume 与录制回放测试"
-status = "backlog"
+status = "ready"
 milestone = "M0"
 module = "session"
 size = "M"

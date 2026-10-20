@@ -254,12 +254,8 @@ async fn run_exec(
     agent_config.max_steps = max_steps;
 
     let mut line_open = false;
-    let result = run_agent(
-        &provider,
-        &mut session,
-        &agent_config,
-        &prompt,
-        &mut |event| match event {
+    let result = {
+        let mut observer = |event: AgentEvent| match event {
             AgentEvent::TextDelta(delta) => {
                 print!("{delta}");
                 let _ = std::io::stdout().flush();
@@ -286,10 +282,31 @@ async fn run_exec(
                     usage.input_tokens, usage.output_tokens, usage.cached_tokens
                 );
             }
-        },
-    )
-    .await;
+        };
+        let run = run_agent(
+            &provider,
+            &mut session,
+            &agent_config,
+            &prompt,
+            &mut observer,
+        );
+        tokio::pin!(run);
+        tokio::select! {
+            result = &mut run => Some(result),
+            _ = tokio::signal::ctrl_c() => None,
+        }
+    };
 
+    if result.is_none() {
+        let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+        eprintln!("\ncancelled");
+        return Ok(());
+    }
+
+    let result = result.expect("checked above");
+    if result.is_err() {
+        eprintln!("session: {}", session.path().display());
+    }
     if result.is_err() {
         eprintln!("session: {}", session.path().display());
     }

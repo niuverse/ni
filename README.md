@@ -9,9 +9,9 @@ replay, and resume.
 
 ## Status
 
-M0 · Minimal exec. `ni exec` runs a real coding turn end-to-end: provider,
-four tools, session log, and auth. The next step is hardening the tools and loop
-(sandbox, approvals, resume, compaction).
+M0 · Tools and loop hardened. `ni exec` runs a real coding turn end-to-end with
+six tools, bash process-group cancellation, session log, and auth. The next step
+is resume/fixtures, then approval/sandbox.
 
 ## Quick start
 

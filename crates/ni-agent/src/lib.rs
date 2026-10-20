@@ -300,6 +300,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fixes_a_failing_fixture_with_scripted_tools() {
+        let directory = temp_dir("fixture-fix");
+        fs::write(directory.join("test.sh"), "#!/usr/bin/env bash\nexit 1\n").expect("fixture");
+        let mut session = SessionLog::create(directory.as_path()).expect("session");
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("read_1".into()),
+                    name: Some("read".into()),
+                    arguments: "{\"path\":\"test.sh\"}".into(),
+                }),
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 1,
+                    id: Some("edit_1".into()),
+                    name: Some("edit".into()),
+                    arguments: "{\"path\":\"test.sh\",\"old\":\"exit 1\",\"new\":\"exit 0\"}"
+                        .into(),
+                }),
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 2,
+                    id: Some("bash_1".into()),
+                    name: Some("bash".into()),
+                    arguments: "{\"command\":\"bash test.sh\"}".into(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("fixed".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        let config = AgentConfig::new("test-model", directory.clone());
+
+        let outcome = run(
+            &provider,
+            &mut session,
+            &config,
+            "fix the failing test",
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+
+        assert_eq!(outcome.final_text, "fixed");
+        assert!(outcome.turns >= 2);
+        let test_script = fs::read_to_string(directory.join("test.sh")).expect("read fixed script");
+        assert!(test_script.contains("exit 0"));
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
     async fn enforces_max_steps() {
         let directory = temp_dir("max-steps");
         let mut session = SessionLog::create(directory.as_path()).expect("session");
@@ -379,7 +436,7 @@ mod tests {
 
         let requests = provider.requests();
         assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].tools.len(), 4);
+        assert_eq!(requests[0].tools.len(), 6);
         assert!(requests[1]
             .messages
             .iter()

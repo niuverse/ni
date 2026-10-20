@@ -79,8 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M0: the minimal `ni exec` loop is closed. Provider streaming, auth, four tools, and
-session events work. The next step is hardening: `grep`/`glob` (M0-006), bash
-process-group kill (M0-007), cancellation and full loop tests (M0-008), then
-resume/fixtures (M0-009). Do not start TUI, MCP, subagents, or a plugin system
-before M0's exit criteria are met.
+M0: the `ni exec` loop is closed and hardened. Provider streaming, auth, six tools,
+bash process groups, cancellation, and session events work. The next card is
+`M0-009` (resume + recorded fixtures), then M1's approval/sandbox/TUI. Do not
+start TUI, MCP, subagents, or a plugin system before M0's exit criteria are met.

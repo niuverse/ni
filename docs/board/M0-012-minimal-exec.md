@@ -30,4 +30,4 @@ docs = ["exec", "architecture"]
 
 ## 记录
 
-这是最小闭环，不是安全闭环：`bash` 可执行任意命令，没有 approval/sandbox；`grep`/`glob`、进程组 kill、resume、compaction 仍未完成。真实 DeepSeek 测试在临时工作区执行，session 已清理。
+后续 M0-006/007/008 已补齐 grep/glob、进程组超时和取消。这是最小闭环，不是安全闭环：`bash` 可执行任意命令，没有 approval/sandbox；`grep`/`glob`、进程组 kill、resume、compaction 仍未完成。真实 DeepSeek 测试在临时工作区执行，session 已清理。

@@ -55,8 +55,10 @@ session_start
 |---|---|---|
 | `read` | 带行号读取文本 | 最多 2000 行 / 50KB；支持 offset/limit |
 | `write` | 新建或完整覆盖 | 已存在的文件必须先 `read` |
-| `edit` | 精确字符串替换 | 必须唯一匹配；先 `read` |
-| `bash` | 在 cwd 执行命令 | 默认 120s 超时；合并输出，只回尾部 20KB |
+| `edit` | 精确字符串替换 | 必须唯一匹配；先 `read`；返回 unified diff |
+| `grep` | 正则搜索文本 | 尊重 `.gitignore`；结果上限 200 |
+| `glob` | glob 列文件 | 尊重 `.gitignore`；结果上限 200 |
+| `bash` | 在 cwd 执行命令 | 独立进程组；默认 120s 超时；尾部 20KB + 临时输出路径 |
 
 文件工具会把路径 canonicalize 到工作区内部；`../` 或绝对路径逃逸会被拒绝。`bash` 是逃生舱，不经过这层路径策略。
 
@@ -77,13 +79,15 @@ session_start
 - 本地 mock SSE server 可以完整跑 text 与 tool 两条路径，不消耗 token。
 - 脚本化 provider 的 agent 测试覆盖：无工具完成、工具后继续、max steps。
 - 每次 turn 写 `assistant_message`、`turn_end`、`tool_result`，usage 含 cached tokens。
+- scripted provider 测试覆盖 read → edit → bash 修掉一个失败 fixture。
+- Ctrl-C 会 drop provider stream 和工具 future；bash 的进程组会被清理。
 
 ## 明确还没有
 
-- `grep` / `glob`（M0-006）。
-- bash 进程组 kill、输出全文指针（M0-007）。
+- approval / OS sandbox / network 开关（M1-002）；bash 仍可访问工作区外。
 - resume / replay / compaction（M0-009、M2）。
-- 并行工具、审批、sandbox、TUI。
+- 并行工具；当前顺序执行。
+- SessionRuntime 的 Command/Event 通道；当前是函数边界。
 - 上下文预算；长任务可能撞上下文上限。
 
 ## 调试

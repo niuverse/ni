@@ -124,9 +124,9 @@
         "crates/ni-agent/src/lib.rs"
       ],
       "notes": [
-        "只读工具可并发/写操作串行是后续优化；当前顺序执行工具。",
         "assistant 消息先落盘，再落 tool_result。",
-        "max steps 到达时停止并报错，不静默退出。"
+        "max steps 到达时停止并报错，不静默退出。",
+        "Ctrl-C 通过 drop future 取消 provider/工具；bash 进程组被清理。"
       ]
     },
     {
@@ -170,15 +170,15 @@
       "title": "Tools",
       "layer": "adapters",
       "status": "active",
-      "summary": "最小四工具：read / write / edit / bash；路径限制、read-before-write、输出截断。",
-      "contract": "Toolbox::execute(name, input) -> ToolResult；已有文件必须先 read；bash 默认 120s 超时。",
+      "summary": "六个工具：read / write / edit / grep / glob / bash；路径限制、read-before-write、搜索预算、进程组超时。",
+      "contract": "Toolbox::execute(name, input) -> ToolResult；已有文件必须先 read；grep/glob 尊重 .gitignore；bash 使用独立进程组。",
       "paths": [
         "crates/ni-tools/src/lib.rs"
       ],
       "notes": [
-        "grep / glob 还没实现；可以先用 bash。",
-        "bash 是逃生舱，不经过文件路径策略。",
-        "输出截断保留尾部，避免撑爆上下文。"
+        "grep / glob 使用 ignore + regex/globset，不依赖外部 rg。",
+        "bash 超时会杀进程组，尾部 20KB + 临时输出路径。",
+        "写操作串行；当前工具调用顺序执行。"
       ]
     },
     {
@@ -376,6 +376,17 @@
       "refs": [
         "M0-012",
         "exec"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "六工具与 loop 加固完成",
+      "detail": "grep/glob、bash 进程组与超时、Ctrl-C 取消、fixture 修复测试都已落地。",
+      "refs": [
+        "M0-006",
+        "M0-007",
+        "M0-008"
       ]
     }
   ]
