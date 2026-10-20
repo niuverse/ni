@@ -161,6 +161,8 @@ pub enum Event {
         id: String,
         call_id: String,
         task: String,
+        #[serde(default)]
+        profile: String,
         session: String,
         max_steps: u64,
         timeout_secs: u64,
@@ -318,6 +320,7 @@ mod tests {
             id: "call_1.1".into(),
             call_id: "call_1".into(),
             task: "inspect".into(),
+            profile: "explore".into(),
             session: "sub.jsonl".into(),
             max_steps: 6,
             timeout_secs: 120,

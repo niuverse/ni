@@ -707,6 +707,18 @@
         "dashboard",
         "M4-001"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-003 完成：Explore/Worker subagent profiles",
+      "detail": "profile 写入 spawn 事件；Explore 只读 + 只读插件；Worker 可写并共享 W1 写锁，write_scope 约束 write/edit；mutating 插件不下放。",
+      "refs": [
+        "M4-003",
+        "M4-002",
+        "adr-0014",
+        "loop"
+      ]
     }
   ]
 }

@@ -92,13 +92,15 @@ user input
 
 ## Subagent
 
-`subagent` 是第七个工具，也是唯一的编排工具：接收 1–4 个只读任务，并行运行，每个任务一个独立 session 日志。
+`subagent` 是第七个工具，也是唯一的编排工具：接收 1–4 个任务，并行运行，每个任务一个独立 session 日志。
 
-- 子 agent 只能使用 `read` / `grep` / `glob`；sandbox 为 read-only + network off；没有 write/edit/bash，也没有 `subagent`，不能递归。
-- 父 session 记录 `subagent_spawn` / `subagent_result`，包含子 session 路径；子 `session_start.id` 等于 spawn id。
+- `profile: explore`（默认）：`read` / `grep` / `glob` + 只读 external tools；sandbox read-only + network off；没有 write/edit/bash，也没有 `subagent`，不能递归。
+- `profile: worker`：`read` / `write` / `edit` / `grep` / `glob` / `bash` + 只读 external tools；继承父 sandbox；`write_scope` 约束 write/edit 路径。
+- W1：父和所有 Worker 共享一个全局 write lock；write/edit/bash 串行。bash 不受 path scope 约束。
+- mutating external tools 和 full-access 不默认下放给子 agent。
+- 父 session 记录 `subagent_spawn`（含 profile）/ `subagent_result`，包含子 session 路径；子 `session_start.id` 等于 spawn id。
 - 父模型只收到一条 tool_result：每个任务的摘要 + 日志路径；完整 transcript 留在子日志里。
-- 每个任务有独立 `max_steps`、`timeout_secs` 和 context budget；超时/失败返回 `ok=false`，父 agent 继续。
-- 写操作仍只在父 session 串行执行。决策见 ADR-0011。
+- 每个任务有独立 `max_steps`、`timeout_secs` 和 context budget；超时/失败返回 `ok=false`，父 agent 继续。决策见 ADR-0011/0014。
 
 ## Plan mode 与 Goal
 

@@ -79,9 +79,10 @@ A task is not done until:
 
 ## Current focus
 
-M0–M3 are done; M4 is active. M4-001 and M4-002 are done: CommandRegistry,
-TUI slash auto-menu, `/plan`, `/goal`, and the session-scoped sidecar
-extension host for external tools. M4-003 (subagent Explore/Worker capability
-profiles) is next. Keep the event log
+M0–M3 are done; M4 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
+TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
+host, and subagent Explore/Worker profiles with W1 write serialization.
+M4-004 (full inheritance) is the next open card, with M4-005/006/007 in
+backlog. Keep the event log
 as the only durable state; plugins are capability-scoped and out-of-process,
 never a second durable store.

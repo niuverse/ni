@@ -21,8 +21,25 @@ const MAX_EVENT_TASK_CHARS: usize = 4_000;
 const SUBAGENT_CONTEXT_BUDGET: usize = 16_000;
 const SUBAGENT_TOOLS: [&str; 3] = ["read", "grep", "glob"];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubagentProfile {
+    Explore,
+    Worker,
+}
+
+impl SubagentProfile {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Explore => "explore",
+            Self::Worker => "worker",
+        }
+    }
+}
+
 struct TaskSpec {
     prompt: String,
+    profile: SubagentProfile,
+    write_scope: Option<Vec<String>>,
     max_steps: usize,
     timeout_secs: u64,
 }
@@ -74,7 +91,7 @@ async fn run_tasks(
     let mut jobs = Vec::with_capacity(tasks.len());
     for (index, task) in tasks.into_iter().enumerate() {
         let id = format!("{}.{}", call.id, index + 1);
-        let config = subagent_config(parent_config, task.max_steps);
+        let config = subagent_config(parent_config, &task);
         let mut session = SessionLog::create(&directory)?;
         session.append(&Event::SessionStart {
             id: id.clone(),
@@ -94,6 +111,7 @@ async fn run_tasks(
             id: id.clone(),
             call_id: call.id.clone(),
             task: task.prompt.chars().take(MAX_EVENT_TASK_CHARS).collect(),
+            profile: task.profile.as_str().to_string(),
             session: session_path.display().to_string(),
             max_steps: task.max_steps as u64,
             timeout_secs: task.timeout_secs,
@@ -193,6 +211,34 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
             if prompt.chars().count() > MAX_PROMPT_CHARS {
                 bail!("task {} prompt is too long", index + 1);
             }
+            let profile = match task
+                .get("profile")
+                .and_then(Value::as_str)
+                .unwrap_or("explore")
+            {
+                "explore" => SubagentProfile::Explore,
+                "worker" => SubagentProfile::Worker,
+                other => bail!("task {} has unknown profile {other:?}", index + 1),
+            };
+            let write_scope = task
+                .get("write_scope")
+                .and_then(Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .filter(|values| !values.is_empty());
+            if profile == SubagentProfile::Explore && write_scope.is_some() {
+                bail!(
+                    "task {} is explore-only and cannot declare write_scope",
+                    index + 1
+                );
+            }
             let max_steps = task
                 .get("max_steps")
                 .and_then(Value::as_u64)
@@ -203,6 +249,8 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
                 .map_or(120, |secs| secs.clamp(1, MAX_TIMEOUT_SECS));
             Ok(TaskSpec {
                 prompt: prompt.to_string(),
+                profile,
+                write_scope,
                 max_steps,
                 timeout_secs,
             })
@@ -210,32 +258,66 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
         .collect()
 }
 
-fn subagent_config(parent: &AgentConfig, max_steps: usize) -> AgentConfig {
+fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
     let mut config = AgentConfig::new(parent.model.clone(), parent.working_dir.clone());
-    config.max_steps = max_steps.clamp(1, MAX_STEPS);
-    config.system_prompt = format!(
-        "You are a read-only exploration subagent working inside {}.\n\
-         You may use read, grep, and glob only. Do not modify files and do not run shell commands.\n\
-         Answer with a concise summary that includes file paths and line numbers. \
-         The parent agent sees only this summary; the full transcript stays in your own session log.\n\
-         Do not ask questions.",
-        parent.working_dir.display()
-    );
-    config.sandbox = SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off);
-    config.approval = ApprovalMode::Never;
-    config.allow_unsandboxed = false;
+    config.max_steps = task.max_steps.clamp(1, MAX_STEPS);
     config.context.budget_tokens = parent
         .context
         .budget_tokens
         .clamp(1_000, SUBAGENT_CONTEXT_BUDGET);
     config.context.compact_at_percent = 75;
     config.context.keep_recent_turns = 1;
-    config.allowed_tools = Some(
-        SUBAGENT_TOOLS
+    config.extension_host = parent.extension_host.clone();
+    config.write_lock = parent.write_lock.clone();
+
+    let mut allowed = match task.profile {
+        SubagentProfile::Explore => SUBAGENT_TOOLS
             .iter()
             .map(|name| (*name).to_string())
-            .collect(),
-    );
+            .collect::<Vec<_>>(),
+        SubagentProfile::Worker => ["read", "write", "edit", "grep", "glob", "bash"]
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>(),
+    };
+    if let Some(host) = &parent.extension_host {
+        allowed.extend(host.read_only_tools());
+    }
+    allowed.sort();
+    allowed.dedup();
+    config.allowed_tools = Some(allowed);
+
+    match task.profile {
+        SubagentProfile::Explore => {
+            config.system_prompt = format!(
+                "You are a read-only exploration subagent working inside {}.\n\
+                 You may use read, grep, glob, and read-only external tools only. \n\
+                 Do not modify files and do not run shell commands.\n\
+                 Answer with a concise summary that includes file paths and line numbers. \n\
+                 The parent agent sees only this summary; the full transcript stays in your own session log.\n\
+                 Do not ask questions.",
+                parent.working_dir.display()
+            );
+            config.sandbox = SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off);
+            config.approval = ApprovalMode::Never;
+            config.allow_unsandboxed = false;
+        }
+        SubagentProfile::Worker => {
+            config.system_prompt = format!(
+                "You are a Worker subagent working inside {}.\n\
+                 You may use read, write, edit, grep, glob, bash, and read-only external tools.\n\
+                 Writes are serialized by a shared workspace write lock; respect the declared write scope.\n\
+                 Do not delegate to another subagent. Keep changes scoped and verify them before returning.\n\
+                 The parent agent sees only your final summary; the full transcript stays in your own session log.\n\
+                 Do not ask questions.",
+                parent.working_dir.display()
+            );
+            config.sandbox = parent.sandbox;
+            config.approval = parent.approval;
+            config.allow_unsandboxed = false;
+            config.write_scope = task.write_scope.clone();
+        }
+    }
     config
 }
 

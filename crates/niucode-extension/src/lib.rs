@@ -29,6 +29,8 @@ pub struct MountInfo {
     pub version: String,
     pub tools: Vec<String>,
     pub manifest: PathBuf,
+    /// Read-only plugins may be exposed to subagent Explore/Worker profiles.
+    pub read_only: bool,
 }
 
 pub struct MountReport {
@@ -198,6 +200,7 @@ async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)>
             version,
             tools: names,
             manifest: path.to_path_buf(),
+            read_only: manifest.read_only,
         },
     ))
 }
@@ -298,6 +301,17 @@ impl ExtensionHost {
         &self.mounts
     }
 
+    /// External tool names that are safe to expose to read-only subagents.
+    pub fn read_only_tools(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for mount in &self.mounts {
+            if mount.read_only {
+                names.extend(mount.tools.iter().cloned());
+            }
+        }
+        names
+    }
+
     pub fn is_empty(&self) -> bool {
         self.plugins.is_empty()
     }
@@ -354,6 +368,10 @@ struct Manifest {
     timeout_secs: u64,
     #[serde(default = "default_protocol")]
     protocol: u64,
+    /// Default true: external tools are treated as read-only for subagent
+    /// capability views. Set false only for explicitly trusted mutating tools.
+    #[serde(default = "default_read_only")]
+    read_only: bool,
 }
 
 fn default_timeout() -> u64 {
@@ -362,6 +380,10 @@ fn default_timeout() -> u64 {
 
 fn default_protocol() -> u64 {
     PROTOCOL_VERSION
+}
+
+fn default_read_only() -> bool {
+    true
 }
 
 fn validate_name(name: &str) -> Result<()> {

@@ -159,23 +159,25 @@ niucode tui  --context-budget 128000 --keep-recent-turns 4
 
 ## Subagent
 
-主模型可以调用 `subagent` 并行跑只读探索；任务不共享写权限，也不能递归：
+主模型可以调用 `subagent` 并行跑探索或 Worker 任务；任务不共享上下文，也不能递归：
 
 ```json
 {
   "tasks": [
-    {"prompt": "find the failing test and report file:line", "max_steps": 6, "timeout_secs": 120},
-    {"prompt": "map the auth flow and report file:line", "timeout_secs": 60}
+    {"prompt": "find the failing test and report file:line", "profile": "explore"},
+    {"prompt": "implement the smallest fix in src/auth", "profile": "worker", "write_scope": ["src/auth"]}
   ]
 }
 ```
 
-- 子 agent 只能使用 `read` / `grep` / `glob`；sandbox 为 read-only + network off。
-- 每个任务一个独立 session，默认放在父 session 同目录的 `<parent-stem>.subagents/`；父 session 记录 `subagent_spawn` / `subagent_result`，包含路径。
+- `profile: explore`（默认）：`read/grep/glob` + 只读 external tools；sandbox read-only + network off。
+- `profile: worker`：`read/write/edit/grep/glob/bash` + 只读 external tools；继承父 sandbox，写操作共享全局 write lock。
+- `write_scope` 只约束 write/edit 路径；bash 不受路径 scope 约束，但会被同一个写锁串行化。
+- 父 session 记录 `subagent_spawn`（含 profile）/ `subagent_result`；每个任务一个独立 session，默认在 `<parent-stem>.subagents/`。
 - 默认 `max_steps=6`（上限 12）、`timeout_secs=120`（上限 600）；context budget 为 `min(parent, 16k)`。
 - 父模型只收到一条 tool_result：每个任务的摘要 + 子日志路径；完整 transcript 不进入父上下文。
 - 超时/provider 错误/max steps 都返回 `ok=false`，父 agent 继续。
-- 决策见 ADR-0011。
+- mutating external tools 不进入子 agent；`full-access` 也不默认下放。决策见 ADR-0011/0014。
 
 ## External tools
 

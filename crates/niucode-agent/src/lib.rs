@@ -72,6 +72,12 @@ pub struct AgentConfig {
     /// Optional session-scoped sidecar host. External tools are merged into the
     /// advertised tool list and dispatched after the built-ins.
     pub extension_host: Option<Arc<niucode_extension::ExtensionHost>>,
+    /// Shared W1 write lock. Parent and Worker subagents use the same lock so
+    /// mutating built-ins never race on one workspace.
+    pub write_lock: Option<Arc<tokio::sync::Mutex<()>>>,
+    /// Optional workspace-relative path prefixes for write/edit. bash is not
+    /// path-scoped; it is serialized by `write_lock` instead.
+    pub write_scope: Option<Vec<String>>,
 }
 
 impl AgentConfig {
@@ -99,6 +105,8 @@ impl AgentConfig {
             plan_mode: false,
             goal: None,
             extension_host: None,
+            write_lock: None,
+            write_scope: None,
         }
     }
 }
@@ -318,10 +326,29 @@ pub async fn run_with_history(
                 .allowed_tools
                 .as_ref()
                 .is_none_or(|allowed| allowed.iter().any(|name| name == &call.name));
+            // W1: one workspace, one write lock. The guard is held through the
+            // tool call (including approval) so parent and Worker never race.
+            let _write_guard = if matches!(call.name.as_str(), "write" | "edit" | "bash") {
+                match &config.write_lock {
+                    Some(lock) => Some(lock.lock().await),
+                    None => None,
+                }
+            } else {
+                None
+            };
+            let scope_allowed = write_in_scope(config, &call);
             let result = if !available {
                 niucode_tools::ToolResult {
                     ok: false,
                     output: format!("tool {} is not available to this agent", call.name),
+                }
+            } else if !scope_allowed {
+                niucode_tools::ToolResult {
+                    ok: false,
+                    output: format!(
+                        "path is outside this Worker write scope ({}); use a scoped path or ask the parent",
+                        call.input.get("path").and_then(Value::as_str).unwrap_or("")
+                    ),
                 }
             } else if call.name == "subagent" {
                 subagent::run_tool(provider, session, config, &call).await
@@ -381,6 +408,23 @@ pub async fn run_with_history(
         "max steps reached ({}); the task is not complete",
         config.max_steps
     )
+}
+
+fn write_in_scope(config: &AgentConfig, call: &ToolCall) -> bool {
+    if !matches!(call.name.as_str(), "write" | "edit") {
+        return true;
+    }
+    let Some(scopes) = &config.write_scope else {
+        return true;
+    };
+    let Some(path) = call.input.get("path").and_then(Value::as_str) else {
+        return false;
+    };
+    let path = path.trim_start_matches("./");
+    scopes.iter().any(|scope| {
+        let scope = scope.trim().trim_start_matches("./").trim_end_matches('/');
+        !scope.is_empty() && (path == scope || path.starts_with(&format!("{scope}/")))
+    })
 }
 
 fn requires_approval(tool: &str) -> bool {
@@ -928,5 +972,22 @@ mod tests {
             .any(|event| matches!(event, Event::ToolResult { ok: true, .. })));
 
         fs::remove_dir_all(directory).expect("cleanup");
+    }
+    #[test]
+    fn write_scope_requires_a_workspace_prefix() {
+        let mut config = AgentConfig::new("test", ".");
+        config.write_scope = Some(vec!["src".into(), "crates/app".into()]);
+        let call = |path: &str| ToolCall {
+            id: "call_1".into(),
+            name: "write".into(),
+            input: json!({"path": path, "content": "x"}),
+        };
+
+        assert!(write_in_scope(&config, &call("src/main.rs")));
+        assert!(write_in_scope(&config, &call("./src/lib.rs")));
+        assert!(write_in_scope(&config, &call("crates/app/src/main.rs")));
+        assert!(!write_in_scope(&config, &call("srcx/main.rs")));
+        assert!(!write_in_scope(&config, &call("tests/main.rs")));
+        assert!(!write_in_scope(&config, &call("")));
     }
 }

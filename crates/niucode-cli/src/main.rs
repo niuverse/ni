@@ -632,6 +632,7 @@ async fn run_tui(
     agent_config.allow_unsandboxed = allow_unsandboxed;
     agent_config.context.budget_tokens = context_budget;
     agent_config.context.keep_recent_turns = keep_recent_turns;
+    agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     let extension_host = mount_extensions(&working_dir, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 
@@ -851,6 +852,7 @@ async fn run_exec(
     agent_config.allow_unsandboxed = allow_unsandboxed;
     agent_config.context.budget_tokens = context_budget;
     agent_config.context.keep_recent_turns = keep_recent_turns;
+    agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     let extension_host = mount_extensions(&agent_config.working_dir, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 

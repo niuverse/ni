@@ -237,7 +237,7 @@ impl Toolbox {
             ),
             ToolSpec::function(
                 "subagent",
-                "Run one or more read-only exploration subagents in parallel. Each task gets its own session log, step/token/time budget, and can use read/grep/glob only. Returns a concise summary and log path per task; use it for broad code search, then make writes yourself.",
+                "Run one or more subagents in parallel. explore is read-only (read/grep/glob + read-only external tools); worker may also write/edit/run bash under a shared write lock and optional write_scope. Each task gets its own session log and budget. Returns a summary and log path per task.",
                 json!({
                     "type": "object",
                     "properties": {
@@ -248,7 +248,14 @@ impl Toolbox {
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "prompt": {"type": "string", "description": "Read-only exploration task"},
+                                    "prompt": {"type": "string", "description": "Task for the subagent"},
+                                    "profile": {"type": "string", "enum": ["explore", "worker"], "default": "explore", "description": "explore = read-only; worker = workspace writes"},
+                                    "write_scope": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "maxItems": 8,
+                                        "description": "Worker only: workspace-relative path prefixes; bash is not path-scoped"
+                                    },
                                     "max_steps": {"type": "integer", "minimum": 1, "maximum": 12},
                                     "timeout_secs": {"type": "integer", "minimum": 1, "maximum": 600}
                                 },

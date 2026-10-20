@@ -352,3 +352,178 @@ async fn a_failed_subagent_does_not_stop_the_parent() {
 
     fs::remove_dir_all(directory).expect("cleanup");
 }
+
+struct WorkerProvider {
+    calls: AtomicUsize,
+    requests: Mutex<Vec<CompletionRequest>>,
+}
+
+#[async_trait]
+impl Provider for WorkerProvider {
+    fn name(&self) -> &str {
+        "worker-test"
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> Result<EventStream, ProviderError> {
+        self.requests.lock().expect("requests").push(request);
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        match call {
+            0 => Ok(Box::pin(stream::iter(subagent_call(json!([
+                {"prompt": "make a small edit", "profile": "worker", "write_scope": ["src"]}
+            ]))))),
+            1 => Ok(Box::pin(stream::iter(text("worker done")))),
+            _ => Ok(Box::pin(stream::iter(text("parent done")))),
+        }
+    }
+}
+
+#[tokio::test]
+async fn worker_profile_advertises_write_tools_and_records_profile() {
+    let directory = temp_dir("worker");
+    let provider = WorkerProvider {
+        calls: AtomicUsize::new(0),
+        requests: Mutex::new(Vec::new()),
+    };
+    let mut session = start_session(&directory);
+    let config = config(&directory);
+    let mut config = config;
+    config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(5),
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "delegate a worker",
+            &mut |_| true,
+            &mut |_| {},
+        ),
+    )
+    .await
+    .expect("worker run")
+    .expect("run");
+    assert_eq!(outcome.final_text, "parent done");
+
+    let loaded = load(session.path()).expect("load parent");
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::SubagentSpawn { profile, .. } if profile == "worker"
+    )));
+
+    let requests = provider.requests.lock().expect("requests");
+    let subagent = &requests[1];
+    let mut names = subagent
+        .tools
+        .iter()
+        .map(|tool| tool.function.name.as_str())
+        .collect::<Vec<_>>();
+    names.sort_unstable();
+    assert_eq!(names, ["bash", "edit", "glob", "grep", "read", "write"]);
+
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+struct ExploreProvider {
+    calls: AtomicUsize,
+    requests: Mutex<Vec<CompletionRequest>>,
+}
+
+#[async_trait]
+impl Provider for ExploreProvider {
+    fn name(&self) -> &str {
+        "explore-ext-test"
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> Result<EventStream, ProviderError> {
+        self.requests.lock().expect("requests").push(request);
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        match call {
+            0 => Ok(Box::pin(stream::iter(subagent_call(json!([
+                {"prompt": "explore with docs", "profile": "explore"}
+            ]))))),
+            1 => Ok(Box::pin(stream::iter(text("explored")))),
+            _ => Ok(Box::pin(stream::iter(text("parent done")))),
+        }
+    }
+}
+
+#[tokio::test]
+async fn explore_profile_can_use_read_only_external_tools() {
+    let directory = temp_dir("explore-ext");
+    std::fs::create_dir_all(directory.join(".niucode/extensions")).expect("extensions");
+    std::fs::write(
+        directory.join(".niucode/extensions/demo.toml"),
+        "name = \"demo\"\ncommand = \"python3\"\nargs = [\"sidecar.py\"]\n",
+    )
+    .expect("manifest");
+    std::fs::write(
+        directory.join("sidecar.py"),
+        r#"import json, sys
+for line in sys.stdin:
+    request = json.loads(line); method = request.get("method")
+    if method == "initialize":
+        result = {"name": "demo", "version": "0.1.0", "tools": [{
+            "name": "demo_echo",
+            "description": "Echo text.",
+            "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}}
+        }]}
+    elif method == "tools/call":
+        text = request.get("params", {}).get("arguments", {}).get("text", "")
+        result = {"ok": True, "output": "echo: " + text}
+    elif method == "shutdown":
+        sys.exit(0)
+    else:
+        result = {"ok": False, "output": "unexpected"}
+    print(json.dumps({"jsonrpc": "2.0", "id": request.get("id"), "result": result}), flush=True)
+"#,
+    )
+    .expect("sidecar");
+    let reserved = niucode_tools::Toolbox::specs()
+        .into_iter()
+        .map(|tool| tool.function.name)
+        .collect::<Vec<_>>();
+    let report = niucode_extension::discover(&directory, &reserved).await;
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+
+    let provider = ExploreProvider {
+        calls: AtomicUsize::new(0),
+        requests: Mutex::new(Vec::new()),
+    };
+    let mut session = start_session(&directory);
+    let mut config = config(&directory);
+    config.extension_host = Some(Arc::new(report.host));
+
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(5),
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "delegate explore",
+            &mut |_| true,
+            &mut |_| {},
+        ),
+    )
+    .await
+    .expect("explore run")
+    .expect("run");
+    assert_eq!(outcome.final_text, "parent done");
+
+    {
+        let requests = provider.requests.lock().expect("requests");
+        let subagent = &requests[1];
+        let mut names = subagent
+            .tools
+            .iter()
+            .map(|tool| tool.function.name.as_str())
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(names, ["demo_echo", "glob", "grep", "read"]);
+    }
+
+    if let Some(host) = &config.extension_host {
+        host.shutdown().await;
+    }
+    std::fs::remove_dir_all(directory).expect("cleanup");
+}
