@@ -83,6 +83,7 @@ pub enum Command {
     Reload,
     Model(Option<String>),
     Permissions(Option<String>),
+    Compact,
     Plan(PlanAction),
     Goal(GoalAction),
     Fork(Option<String>),
@@ -168,6 +169,7 @@ pub fn parse(input: &str) -> Parsed {
         } else {
             Some(rest.to_string())
         }),
+        "compact" => Command::Compact,
         "plan" => match rest {
             "" => Command::Plan(PlanAction::Enter),
             "off" | "exit" => Command::Plan(PlanAction::Exit),
@@ -214,6 +216,7 @@ fn usage(command: &Command) -> String {
         Command::Reload => "/reload".into(),
         Command::Model(_) => "/model [name]".into(),
         Command::Permissions(_) => "/permissions [ask|review|full-access|ci]".into(),
+        Command::Compact => "/compact".into(),
         Command::Plan(action) => match action {
             PlanAction::Enter => "/plan".into(),
             PlanAction::Exit => "/plan off".into(),
@@ -313,6 +316,7 @@ mod tests {
         assert_eq!(parse("/clear extra"), Parsed::Usage("/clear".into()));
         assert_eq!(parse("/reset"), Parsed::Command(Command::Reset));
         assert_eq!(parse("/reload"), Parsed::Command(Command::Reload));
+        assert_eq!(parse("/compact"), Parsed::Command(Command::Compact));
         assert_eq!(parse("/resume"), Parsed::Command(Command::Resume(None)));
         assert_eq!(
             parse("/resume abc.jsonl"),

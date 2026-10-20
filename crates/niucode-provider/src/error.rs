@@ -38,6 +38,10 @@ impl ProviderError {
         match self {
             Self::Http { retryable, .. } => *retryable,
             Self::Network(_) => true,
+            // A provider can return an error payload or a truncated SSE frame;
+            // this is often a transient upstream/proxy failure. The agent only
+            // retries when the stream has not emitted any event yet.
+            Self::Decode(_) => true,
             _ => false,
         }
     }

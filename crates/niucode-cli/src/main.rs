@@ -83,8 +83,8 @@ enum Command {
         /// Override the preset model
         #[arg(long)]
         model: Option<String>,
-        /// Maximum model turns per user request
-        #[arg(long, default_value_t = 24)]
+        /// Maximum model turns per user request (0 = no hard cap)
+        #[arg(long, default_value_t = 0)]
         max_steps: usize,
         /// Approximate context budget in tokens before compaction
         #[arg(long, default_value_t = 64_000)]
@@ -137,8 +137,8 @@ enum Command {
         /// Approximate context budget in tokens before compaction
         #[arg(long, default_value_t = 64_000)]
         context_budget: usize,
-        /// Maximum model turns per user request
-        #[arg(long, default_value_t = 24)]
+        /// Maximum model turns per user request (0 = no hard cap)
+        #[arg(long, default_value_t = 0)]
         max_steps: usize,
         /// Recent user turns kept verbatim when compacting
         #[arg(long, default_value_t = 3)]
@@ -331,7 +331,7 @@ async fn main() -> Result<()> {
                 "deepseek".into(),
                 None,
                 64_000,
-                24,
+                0,
                 3,
                 false,
                 None,

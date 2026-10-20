@@ -311,7 +311,7 @@ impl Provider for ErrorProvider {
             0 => Ok(Box::pin(stream::iter(subagent_call(json!([
                 {"prompt": "failing task"}
             ]))))),
-            1 => Err(ProviderError::Network("boom".into())),
+            1..=4 => Err(ProviderError::Network("boom".into())),
             _ => Ok(Box::pin(stream::iter(text("parent continued")))),
         }
     }

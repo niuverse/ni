@@ -149,7 +149,9 @@
         "/reload 重读 AGENTS.md；/clear 保留 plan/goal；/reset 全量重置；/resume 切换 session。",
         "鼠标 hover 支持绝对行号与相对移动 fallback。",
         "/model 切换当前 provider 内模型；/permissions 映射 ask/review/full-access/ci。",
-        "model_change / permission_change 事件随 resume 恢复；clear 保留、reset 清除。"
+        "model_change / permission_change 事件随 resume 恢复；clear 保留、reset 清除。",
+        "/model 与 /permissions 使用参数下拉；裸命令 Enter 显示当前值。",
+        "默认 max-steps=0（256 安全 cap）；/compact 手动压缩，ContextOverflow 强制 compact。"
       ]
     },
     {
@@ -805,6 +807,40 @@
       "refs": [
         "adr-0015",
         "M4-011",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-012 完成：provider 重试 / 无硬 turn 上限 / manual compact",
+      "detail": "空流 Decode/Network/retryable HTTP 重试 3 次；ContextOverflow 强制 compact；max-steps 默认 0（256 安全 cap）；/compact 可用。",
+      "refs": [
+        "M4-012",
+        "adr-0016",
+        "tui",
+        "loop"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0016 accepted：安全点重试与无硬 turn 上限",
+      "detail": "只在流未产生事件时重试；ContextOverflow 强制 compact 后重试；默认 max-steps=0；手动 /compact。",
+      "refs": [
+        "adr-0016",
+        "M4-012"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "TUI 参数下拉与 provider 韧性",
+      "detail": "/model、/permissions 直接下拉；网络/Decode 空流重试；ContextOverflow 强制 compact；默认无硬 turn 上限；/compact 可用。",
+      "refs": [
+        "M4-011",
+        "M4-012",
+        "adr-0016",
         "tui"
       ]
     }

@@ -16,8 +16,8 @@ use crossterm::event::{
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType, LeaveAlternateScreen};
 use niucode_agent::{
-    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalMode, ApprovalRequest,
-    RunOutcome,
+    build_handoff, estimate_context, project_history, run_with_history, AgentConfig, AgentEvent,
+    ApprovalMode, ApprovalRequest, RunOutcome,
 };
 use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
 use niucode_provider::{ChatMessage, Provider};
@@ -196,7 +196,21 @@ pub async fn run(
     }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        Some(LineEditor::new(commands.clone()))
+        let mut editor = LineEditor::new(commands.clone());
+        editor.set_models(niucode_model_choices(config));
+        editor.set_current_model(config.model.clone());
+        editor.set_permissions(
+            PermissionProfile::ALL
+                .iter()
+                .map(|profile| {
+                    (
+                        profile.as_str().to_string(),
+                        profile.description().to_string(),
+                    )
+                })
+                .collect(),
+        );
+        Some(editor)
     } else {
         None
     };
@@ -291,12 +305,14 @@ pub async fn run(
             ) {
                 Ok(CommandOutcome::Exit) => break,
                 Ok(CommandOutcome::Continue) => {
-                    if state.clear_history {
-                        if let Some(editor) = &mut editor {
+                    if let Some(editor) = &mut editor {
+                        if state.clear_history {
                             editor.clear_history();
                         }
-                        state.clear_history = false;
+                        editor.set_current_model(effective_model(&state, config).to_string());
+                        editor.set_models(niucode_model_choices(config));
                     }
+                    state.clear_history = false;
                     continue;
                 }
                 Err(error) => {
@@ -547,14 +563,18 @@ pub async fn run(
                     err.paint(Tone::Danger, theme::ERR),
                     err.paint(Tone::Danger, &message)
                 );
-                if message.contains("max steps reached") {
+                if message.contains("max steps reached") || message.contains("safety turn cap") {
+                    let current = if config.max_steps == 0 {
+                        "unbounded (safety 256)".to_string()
+                    } else {
+                        config.max_steps.to_string()
+                    };
                     eprintln!(
                         "{}",
                         err.paint(
                             Tone::Warning,
                             format!(
-                                "hint: raise --max-steps (current {}) · project writes are preserved",
-                                config.max_steps
+                                "hint: --max-steps is currently {current}; project writes are preserved"
                             )
                         )
                     );
@@ -686,6 +706,7 @@ fn handle_command(
         SlashCommand::Permissions(arg) => {
             handle_permissions(session, config, state, arg, out, err)?
         }
+        SlashCommand::Compact => compact_now(session, config, out, err)?,
         SlashCommand::Resume(arg) => {
             resume_session(
                 session,
@@ -743,6 +764,54 @@ fn handle_command(
         SlashCommand::Exit => return Ok(CommandOutcome::Exit),
     }
     Ok(CommandOutcome::Continue)
+}
+
+fn compact_now(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    let loaded = load(session.path())?;
+    let before_history = project_history(&loaded.events)?;
+    let before = estimate_context(&before_history, &[]);
+    let handoff = build_handoff(&loaded.events, config.context.keep_recent_turns)?;
+    let mut candidate = loaded.events.clone();
+    candidate.push(Event::Compaction {
+        summary: handoff.summary.clone(),
+        upto: handoff.upto as u64,
+        before_tokens: before as u64,
+        after_tokens: 0,
+        ts: now_ms(),
+    });
+    let after_history = project_history(&candidate)?;
+    let after = estimate_context(&after_history, &[]);
+    if after >= before {
+        bail!("compaction would not reduce context (~{before} → ~{after} tokens)");
+    }
+    session.append(&Event::Compaction {
+        summary: handoff.summary,
+        upto: handoff.upto as u64,
+        before_tokens: before as u64,
+        after_tokens: after as u64,
+        ts: now_ms(),
+    })?;
+    println!(
+        "{} {}",
+        out.paint(Tone::Success, theme::OK),
+        out.paint(
+            Tone::Bright,
+            format!(
+                "compacted {} events · ~{before} → ~{after} tokens",
+                handoff.upto
+            )
+        )
+    );
+    println!(
+        "{}",
+        err.dim("  next turn uses the new projection; raw log is unchanged")
+    );
+    Ok(())
 }
 
 fn handle_model(

@@ -35,9 +35,19 @@ pub enum Input {
     Eof,
 }
 
+#[derive(Clone)]
+struct MenuItem {
+    insert: String,
+    name: String,
+    description: String,
+}
+
 pub struct LineEditor {
     registry: CommandRegistry,
     history: Vec<String>,
+    models: Vec<String>,
+    current_model: String,
+    permissions: Vec<(String, String)>,
 }
 
 impl LineEditor {
@@ -45,7 +55,22 @@ impl LineEditor {
         Self {
             registry,
             history: Vec::new(),
+            models: Vec::new(),
+            current_model: String::new(),
+            permissions: Vec::new(),
         }
+    }
+
+    pub fn set_models(&mut self, models: Vec<String>) {
+        self.models = models;
+    }
+
+    pub fn set_current_model(&mut self, model: impl Into<String>) {
+        self.current_model = model.into();
+    }
+
+    pub fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
+        self.permissions = permissions;
     }
 
     pub fn clear_history(&mut self) {
@@ -66,6 +91,9 @@ impl LineEditor {
         let mut state = State {
             registry: &self.registry,
             history: &mut self.history,
+            models: &self.models,
+            current_model: &self.current_model,
+            permissions: &self.permissions,
             history_index,
             chars: Vec::new(),
             cursor: 0,
@@ -78,6 +106,7 @@ impl LineEditor {
             mouse_failed: false,
             mouse_captured: false,
             mouse_anchor: None,
+            menu_navigated: false,
             raw_prompt,
             styled_prompt,
             theme,
@@ -113,6 +142,9 @@ impl Drop for TerminalGuard {
 struct State<'a> {
     registry: &'a CommandRegistry,
     history: &'a mut Vec<String>,
+    models: &'a [String],
+    current_model: &'a str,
+    permissions: &'a [(String, String)],
     history_index: usize,
     chars: Vec<char>,
     cursor: usize,
@@ -125,6 +157,7 @@ struct State<'a> {
     mouse_failed: bool,
     mouse_captured: bool,
     mouse_anchor: Option<u16>,
+    menu_navigated: bool,
     raw_prompt: &'a str,
     styled_prompt: &'a str,
     theme: Theme,
@@ -206,6 +239,7 @@ impl State<'_> {
                     if self.menu_open {
                         let visible = self.candidates().len().min(MAX_MENU_ROWS);
                         self.selected = (self.selected + 1).min(visible.saturating_sub(1));
+                        self.menu_navigated = true;
                     } else {
                         self.history_down();
                     }
@@ -214,6 +248,7 @@ impl State<'_> {
                 KeyCode::Char('p') => {
                     if self.menu_open {
                         self.selected = self.selected.saturating_sub(1);
+                        self.menu_navigated = true;
                     } else {
                         self.history_up();
                     }
@@ -293,6 +328,7 @@ impl State<'_> {
             KeyCode::Up => {
                 if self.menu_open {
                     self.selected = self.selected.saturating_sub(1);
+                    self.menu_navigated = true;
                 } else {
                     self.history_up();
                 }
@@ -302,6 +338,7 @@ impl State<'_> {
                 if self.menu_open {
                     let visible = self.candidates().len().min(MAX_MENU_ROWS);
                     self.selected = (self.selected + 1).min(visible.saturating_sub(1));
+                    self.menu_navigated = true;
                 } else {
                     self.history_down();
                 }
@@ -324,6 +361,7 @@ impl State<'_> {
                 Ok(None)
             }
             KeyCode::Backspace => {
+                self.menu_navigated = false;
                 if self.cursor > 0 {
                     self.cursor -= 1;
                     self.chars.remove(self.cursor);
@@ -331,6 +369,7 @@ impl State<'_> {
                 Ok(None)
             }
             KeyCode::Delete => {
+                self.menu_navigated = false;
                 self.delete_at_cursor();
                 Ok(None)
             }
@@ -344,10 +383,19 @@ impl State<'_> {
 
     fn enter(&mut self, out: &mut impl Write) -> std::io::Result<Option<Input>> {
         let line = self.line();
+        if self.menu_open
+            && !self.menu_navigated
+            && matches!(line.as_str(), "/model" | "/permissions")
+        {
+            self.menu_open = false;
+            self.remember(&line);
+            self.clear_final(out, true)?;
+            return Ok(Some(Input::Line(line)));
+        }
         let candidates = self.candidates();
         let exact = candidates
             .get(self.selected)
-            .is_some_and(|spec| spec.name == line);
+            .is_some_and(|item| item.insert.trim_end() == line);
         if self.menu_open && !exact {
             self.accept_selected();
             Ok(None)
@@ -359,6 +407,7 @@ impl State<'_> {
     }
 
     fn insert(&mut self, text: &str) {
+        self.menu_navigated = false;
         for c in text.chars() {
             self.chars.insert(self.cursor, c);
             self.cursor += 1;
@@ -389,8 +438,21 @@ impl State<'_> {
         self.chars.iter().collect()
     }
 
-    fn candidates(&self) -> Vec<&CommandSpec> {
-        command_candidates(self.registry, &self.line())
+    fn candidates(&self) -> Vec<MenuItem> {
+        let line = self.line();
+        if let Some(items) =
+            argument_candidates(self.models, self.current_model, self.permissions, &line)
+        {
+            return items;
+        }
+        command_candidates(self.registry, &line)
+            .into_iter()
+            .map(|spec| MenuItem {
+                insert: format!("{} ", spec.name),
+                name: spec.name.clone(),
+                description: spec.description.clone(),
+            })
+            .collect()
     }
 
     fn refresh_menu(&mut self) {
@@ -405,13 +467,13 @@ impl State<'_> {
 
     fn accept_selected(&mut self) {
         let candidates = self.candidates();
-        let Some(spec) = candidates.get(self.selected) else {
+        let Some(item) = candidates.get(self.selected) else {
             return;
         };
-        self.chars = spec.name.chars().collect();
-        self.chars.push(' ');
+        self.chars = item.insert.chars().collect();
         self.cursor = self.chars.len();
         self.menu_open = false;
+        self.menu_navigated = false;
         self.history_index = self.history.len();
     }
 
@@ -639,6 +701,7 @@ impl State<'_> {
                     return false;
                 }
                 self.selected = next as usize;
+                self.menu_navigated = true;
                 true
             }
             MouseEventKind::Down(MouseButton::Left) => {
@@ -647,10 +710,12 @@ impl State<'_> {
             }
             MouseEventKind::ScrollDown => {
                 self.selected = (self.selected + 1).min(rows.saturating_sub(1));
+                self.menu_navigated = true;
                 true
             }
             MouseEventKind::ScrollUp => {
                 self.selected = self.selected.saturating_sub(1);
+                self.menu_navigated = true;
                 true
             }
             _ => false,
@@ -675,12 +740,14 @@ impl State<'_> {
             MouseEventKind::Moved | MouseEventKind::Drag(_) => {
                 if self.selected != index {
                     self.selected = index;
+                    self.menu_navigated = true;
                     return Ok(true);
                 }
                 Ok(false)
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.selected = index;
+                self.menu_navigated = true;
                 self.accept_selected();
                 Ok(true)
             }
@@ -711,6 +778,55 @@ impl State<'_> {
         writeln!(out)?;
         out.flush()
     }
+}
+
+fn argument_candidates(
+    models: &[String],
+    current_model: &str,
+    permissions: &[(String, String)],
+    line: &str,
+) -> Option<Vec<MenuItem>> {
+    let (command, argument) = if line == "/model" {
+        ("model", "")
+    } else if let Some(rest) = line.strip_prefix("/model ") {
+        ("model", rest)
+    } else if line == "/permissions" {
+        ("permissions", "")
+    } else if let Some(rest) = line.strip_prefix("/permissions ") {
+        ("permissions", rest)
+    } else {
+        return None;
+    };
+    if argument.chars().any(char::is_whitespace) {
+        return None;
+    }
+
+    let items = match command {
+        "model" => models
+            .iter()
+            .filter(|model| model.starts_with(argument))
+            .map(|model| MenuItem {
+                insert: format!("/model {model} "),
+                name: model.clone(),
+                description: if model == current_model {
+                    "current model · next turn".to_string()
+                } else {
+                    "switch model · next turn".to_string()
+                },
+            })
+            .collect(),
+        "permissions" => permissions
+            .iter()
+            .filter(|(name, _)| name.starts_with(argument))
+            .map(|(name, description)| MenuItem {
+                insert: format!("/permissions {name} "),
+                name: name.clone(),
+                description: description.clone(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    Some(items)
 }
 
 fn command_candidates<'a>(registry: &'a CommandRegistry, line: &str) -> Vec<&'a CommandSpec> {
@@ -757,6 +873,42 @@ mod tests {
         assert_eq!(menu_index(16, 10, 6), Some(5));
         assert_eq!(menu_index(10, 10, 6), None);
         assert_eq!(menu_index(17, 10, 6), None);
+    }
+
+    #[test]
+    fn argument_candidates_filter_models_and_permissions() {
+        let models = vec![
+            "deepseek-flash".to_string(),
+            "deepseek-pro".to_string(),
+            "deepseek-reasoner".to_string(),
+        ];
+        let permissions = vec![
+            ("ask".to_string(), "workspace-write".to_string()),
+            ("review".to_string(), "workspace-write".to_string()),
+        ];
+        let items = argument_candidates(&models, "deepseek-flash", &permissions, "/model ")
+            .expect("model menu");
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[1].insert, "/model deepseek-pro ");
+        assert!(items[0].description.contains("current"));
+
+        let partial = argument_candidates(&models, "deepseek-flash", &permissions, "/model d")
+            .expect("partial menu");
+        assert_eq!(partial.len(), 3);
+        let filtered =
+            argument_candidates(&models, "deepseek-flash", &permissions, "/model deepseek-p")
+                .expect("filtered menu");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "deepseek-pro");
+
+        let perms = argument_candidates(&models, "deepseek-flash", &permissions, "/permissions r")
+            .expect("permission menu");
+        assert_eq!(perms.len(), 1);
+        assert_eq!(perms[0].insert, "/permissions review ");
+        assert!(
+            argument_candidates(&models, "deepseek-flash", &permissions, "/model pro max")
+                .is_none()
+        );
     }
 
     #[test]

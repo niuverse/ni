@@ -33,4 +33,5 @@ docs = ["adr-0015", "tui"]
 - `PermissionProfile::{Ask,Review,FullAccess,Ci}`；`apply` 只改 AgentConfig 的既有字段。
 - `apply_runtime_config` 在每个 turn 前应用 model/permission；goal 和 plan allowlist 仍在 TUI 层。
 - `/model` 建议列表：`NIUCODE_MODEL_CHOICES` 或内置列表；无 virtual model/router。
+- `/model` / `/permissions` 的参数以行编辑器下拉呈现；裸命令 Enter 显示当前值，方向键/鼠标/Tab 选择后填入。
 - Pi 的 selection/dispatch 分离作为参考；v1 只记录选择，provider 继续使用 `CompletionRequest.model`。

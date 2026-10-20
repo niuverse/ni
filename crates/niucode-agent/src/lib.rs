@@ -7,17 +7,23 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{bail, Result};
 use futures_util::StreamExt;
 use niucode_core::{now_ms, Event, SessionLog, ToolCall, Usage};
-use niucode_provider::{ChatMessage, CompletionRequest, Provider, StreamEvent};
+use niucode_provider::{ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent};
 use niucode_tools::{ChangePreview, SandboxPolicy, Toolbox};
 use serde_json::{json, Value};
 
 mod context;
 mod instructions;
 mod subagent;
+
+const MAX_PROVIDER_RETRIES: usize = 3;
+const RETRY_BASE_MS: u64 = 250;
+const MAX_RETRY_DELAY_SECS: u64 = 10;
+const UNBOUNDED_SAFETY_TURNS: usize = 256;
 
 use context::non_empty;
 pub use context::{
@@ -97,7 +103,9 @@ impl AgentConfig {
 
         Self {
             model: model.into(),
-            max_steps: 12,
+            // 0 means no user-facing hard cap. The loop still has a high
+            // safety ceiling; normal termination is the model's final answer.
+            max_steps: 0,
             system_prompt,
             working_dir,
             sandbox: SandboxPolicy::default(),
@@ -177,10 +185,6 @@ pub async fn run_with_history(
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
-    if config.max_steps == 0 {
-        bail!("max_steps must be greater than zero");
-    }
-
     let toolbox = Toolbox::with_policy_and_fallback(
         &config.working_dir,
         config.sandbox,
@@ -239,8 +243,20 @@ pub async fn run_with_history(
     let mut total_usage = Usage::default();
     let mut compaction_warned = false;
 
-    for turns in 1..=config.max_steps {
-        match maybe_compact(session, config, &system_prompt, &mut messages, &tools)? {
+    let turn_limit = if config.max_steps == 0 {
+        UNBOUNDED_SAFETY_TURNS
+    } else {
+        config.max_steps
+    };
+    for turns in 1..=turn_limit {
+        match maybe_compact(
+            session,
+            config,
+            &system_prompt,
+            &mut messages,
+            &tools,
+            false,
+        )? {
             Some(AgentEvent::Warning(message)) if !compaction_warned => {
                 compaction_warned = true;
                 observer(AgentEvent::Warning(message));
@@ -257,36 +273,114 @@ pub async fn run_with_history(
         request.messages = messages.clone();
         request.tools = tools.clone();
 
-        let mut stream = provider.stream(request).await?;
-        let mut text = String::new();
-        let mut reasoning = String::new();
-        let mut pending = BTreeMap::<u32, PendingCall>::new();
-        let mut usage = None;
+        let mut attempt = 0_usize;
+        let (text, reasoning, pending, usage) = loop {
+            let mut stream = match provider.stream(request.clone()).await {
+                Ok(stream) => stream,
+                Err(error) => {
+                    if error.is_context_overflow() && attempt == 0 {
+                        if let Some(AgentEvent::Compaction {
+                            replaced_events,
+                            before_tokens,
+                            after_tokens,
+                        }) = maybe_compact(
+                            session,
+                            config,
+                            &system_prompt,
+                            &mut messages,
+                            &tools,
+                            true,
+                        )? {
+                            observer(AgentEvent::Compaction {
+                                replaced_events,
+                                before_tokens,
+                                after_tokens,
+                            });
+                            request.messages = messages.clone();
+                            attempt += 1;
+                            continue;
+                        }
+                    }
+                    if error.is_retryable() && attempt < MAX_PROVIDER_RETRIES {
+                        attempt += 1;
+                        tokio::time::sleep(retry_delay(&error, attempt)).await;
+                        continue;
+                    }
+                    return Err(error.into());
+                }
+            };
 
-        while let Some(event) = stream.next().await {
-            match event? {
-                StreamEvent::TextDelta(delta) => {
-                    observer(AgentEvent::TextDelta(delta.clone()));
-                    text.push_str(&delta);
-                }
-                StreamEvent::ReasoningDelta(delta) => {
-                    observer(AgentEvent::ReasoningDelta(delta.clone()));
-                    reasoning.push_str(&delta);
-                }
-                StreamEvent::ToolCallDelta(delta) => {
-                    let call = pending.entry(delta.index).or_default();
-                    if let Some(id) = delta.id {
-                        call.id = Some(id);
+            let mut text = String::new();
+            let mut reasoning = String::new();
+            let mut pending = BTreeMap::<u32, PendingCall>::new();
+            let mut usage = None;
+            let mut emitted = false;
+            let mut stream_error = None;
+
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(StreamEvent::TextDelta(delta)) => {
+                        emitted = true;
+                        observer(AgentEvent::TextDelta(delta.clone()));
+                        text.push_str(&delta);
                     }
-                    if let Some(name) = delta.name {
-                        call.name = Some(name);
+                    Ok(StreamEvent::ReasoningDelta(delta)) => {
+                        emitted = true;
+                        observer(AgentEvent::ReasoningDelta(delta.clone()));
+                        reasoning.push_str(&delta);
                     }
-                    call.arguments.push_str(&delta.arguments);
+                    Ok(StreamEvent::ToolCallDelta(delta)) => {
+                        emitted = true;
+                        let call = pending.entry(delta.index).or_default();
+                        if let Some(id) = delta.id {
+                            call.id = Some(id);
+                        }
+                        if let Some(name) = delta.name {
+                            call.name = Some(name);
+                        }
+                        call.arguments.push_str(&delta.arguments);
+                    }
+                    Ok(StreamEvent::Usage(value)) => {
+                        emitted = true;
+                        usage = Some(value);
+                    }
+                    Ok(StreamEvent::Done { .. }) => emitted = true,
+                    Err(error) => {
+                        stream_error = Some(error);
+                        break;
+                    }
                 }
-                StreamEvent::Usage(value) => usage = Some(value),
-                StreamEvent::Done { .. } => {}
             }
-        }
+
+            if let Some(error) = stream_error {
+                if error.is_context_overflow() && attempt == 0 && !emitted {
+                    if let Some(AgentEvent::Compaction {
+                        replaced_events,
+                        before_tokens,
+                        after_tokens,
+                    }) =
+                        maybe_compact(session, config, &system_prompt, &mut messages, &tools, true)?
+                    {
+                        observer(AgentEvent::Compaction {
+                            replaced_events,
+                            before_tokens,
+                            after_tokens,
+                        });
+                        request.messages = messages.clone();
+                        attempt += 1;
+                        continue;
+                    }
+                }
+                if !emitted && error.is_retryable() && attempt < MAX_PROVIDER_RETRIES {
+                    attempt += 1;
+                    tokio::time::sleep(retry_delay(&error, attempt)).await;
+                    continue;
+                }
+                return Err(error.into());
+            }
+
+            break (text, reasoning, pending, usage);
+        };
 
         let tool_calls = assemble_tool_calls(pending)?;
 
@@ -408,10 +502,14 @@ pub async fn run_with_history(
         }
     }
 
-    bail!(
-        "max steps reached ({}); the task is not complete",
-        config.max_steps
-    )
+    if config.max_steps == 0 {
+        bail!("safety turn cap reached ({UNBOUNDED_SAFETY_TURNS}); the task is not complete")
+    } else {
+        bail!(
+            "max steps reached ({}); the task is not complete",
+            config.max_steps
+        )
+    }
 }
 
 fn write_in_scope(config: &AgentConfig, call: &ToolCall) -> bool {
@@ -445,15 +543,25 @@ fn approval_summary(call: &ToolCall) -> String {
     format!("{} {}", call.name, detail).trim().to_string()
 }
 
+fn retry_delay(error: &ProviderError, attempt: usize) -> Duration {
+    error
+        .retry_after()
+        .unwrap_or_else(|| {
+            Duration::from_millis(RETRY_BASE_MS.saturating_mul(1_u64 << (attempt - 1).min(5)))
+        })
+        .min(Duration::from_secs(MAX_RETRY_DELAY_SECS))
+}
+
 fn maybe_compact(
     session: &mut SessionLog,
     config: &AgentConfig,
     system_prompt: &str,
     messages: &mut Vec<ChatMessage>,
     tools: &[niucode_provider::ToolSpec],
+    force: bool,
 ) -> Result<Option<AgentEvent>> {
     let before = estimate_context(messages, tools);
-    if !config.context.should_compact(before) {
+    if !force && !config.context.should_compact(before) {
         return Ok(None);
     }
 

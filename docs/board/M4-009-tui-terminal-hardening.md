@@ -30,6 +30,6 @@ docs = ["tui"]
 
 - `TerminalGuard::enter/drop`；动态 `sync_mouse_capture`；cursor 查询在菜单打开时、capture 前执行；失败后走相对 hover。
 - TUI 启动先发 `DisableMouseCapture` / `DisableBracketedPaste` / `LeaveAlternateScreen` / `Show` / `ResetColor`，清掉上一次崩溃可能残留的终端模式。
-- `run_tui --max-steps`（默认 24）、`exec --max-steps`（默认 24）；max-steps 提示当前值。
+- `run_tui --max-steps`（当时默认 24）、`exec --max-steps`（当时默认 24）；M4-012 改为默认 0（256 安全 cap）。
 - 复现：`tui --max-steps 1 --replay golden-read.json` → `max steps reached` → 仍出现 prompt；鼠标使能只发生在 `/` 菜单，错误后立即释放。
 - 2048 闭环项目在 `niucode-proj/proj_00`：16 个逻辑测试 + 11 个浏览器 e2e（移动、合并、计分、undo、胜负、键盘、触摸、tile containment）。

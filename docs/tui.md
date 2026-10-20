@@ -60,7 +60,7 @@ niucode ▸ exit
 - `subagent` 调用会显示任务输入，完成后显示每个子任务的摘要和独立日志路径；父上下文只收到这一条 tool_result。
 - 工具结果显示 `✓` / `✗`，短输出用 `│` 缩进；超过 12 行或 2 KB 时折叠为摘要和 `:last to expand`。
 - `╰─ turn N` 在该 turn 的工具结果结束后打印，包含 input / output / cache 百分比。
-- `--max-steps` 控制每个用户请求的最大模型 turn 数，默认 24；达到上限时打印 `max steps reached` 和提升提示，已写入的项目文件保留，可直接继续下一条 prompt。
+- `--max-steps` 控制每个用户请求的最大模型 turn 数；默认 `0` 表示不设用户级上限（内部 256 安全 cap）。显式设置时达到上限会打印 `max steps reached`，已写入的项目文件保留。
 - `⇣ compacted · N events · ~before → ~after tokens` 表示上下文压缩；失败显示 `! warning: compaction skipped: ...` 并保留原上下文。
 - `:last` 重新打印最近一次工具输出；`:help` 显示可用命令。展开只保留在当前进程内，完整输出始终在 session JSONL 里。
 - 文本增量直接写到 stdout，首 token 到达即渲染。
@@ -79,7 +79,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `↑` / `↓` 调出当前进程内的历史输入；`Ctrl-C` 清空当前行；`Ctrl-D` 退出；`Ctrl-L` 清屏。
 - 超长输入、光标移动、退格、删除、Home/End 由行编辑器处理，不再依赖终端自身回显。
 - 非 TTY 时走原来的逐行 `read_line`，方便管道和测试。
-- 当前补全只覆盖 slash 命令名；`/fork` 的 event ID 需要直接输入。
+- 参数补全覆盖 `/model`（模型）和 `/permissions`（profile）；`/fork` 的 event ID 仍需直接输入。
 
 ## Plan mode 与 Goal
 
@@ -100,8 +100,9 @@ TTY 下使用 readline 风格的行编辑器：
 | `/reset` | 新建对话 session，并清除 plan/goal/pending/输入历史，重新读取 AGENTS.md；旧 session 保留。 |
 | `/resume [path|id]` | 无参数列出最近 8 个 session；带参数切换并恢复其 history / plan / goal。 |
 | `/reload` | 重新读取 AGENTS.md 并显示 sources/digest；下一次 turn 生效。 |
-| `/model [name]` | 显示当前生效模型与建议；`/model <name>` 切换当前 provider 内的模型，下一次 turn 生效。 |
-| `/permissions [profile]` | 显示当前 sandbox/network/approval；切换 ask/review/full-access/ci。 |
+| `/model [name]` | 输入 `/model` 直接打开模型下拉；↑↓/鼠标选择，Enter 填入，再 Enter 执行；只允许当前 provider。 |
+| `/compact` | 立即生成确定性 handoff 并写入 compaction 事件；下一次 turn 使用压缩后的投影。 |
+| `/permissions [profile]` | 输入 `/permissions` 直接打开 profile 下拉；切换 ask/review/full-access/ci。 |
 | `/plan` | 进入只读 plan mode；`/plan off` / `/plan approve` 退出；`/plan status` 查看。 |
 | `/goal <condition>` | 设置目标并立即启动 goal run（最多 6 轮）；`/goal` 查看；`/goal run` 重新启动；`/goal stop` 停止；`/goal clear` 清除。 |
 | `/fork [event-id]` | 复制当前 session 的前缀到新 session 并切换过去；默认 fork 到最后一个事件。 |
@@ -121,7 +122,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；cwd/model 不一致会警告。无参数列出最近 session。
 - `/reload` 只重读 AGENTS.md 指令；扩展 manifest 在 session 启动时挂载，重新加载需要重启 TUI。
 - `/model` 是运行时模型选择：写入 `model_change` 事件，`/resume` 恢复，`/clear` 保留，`/reset` 清除。切换只允许当前 provider preset；跨 provider 需要重启。请求仍然走同一个 endpoint/auth，下一次 turn 使用新 model；切换 turn 可能失去 prompt cache。
-- 建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。
+- `/model` 和 `/permissions` 直接打开参数下拉：输入命令后→↑↓/鼠标选择（或 Tab 选第一项）→Enter 填入→再 Enter 执行；直接 Enter 显示当前值，不误改配置。建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。
 - `/permissions` 只映射已有 policy 字段：`ask` = workspace-write/off/ask，`review` = workspace-write/off/on-failure，`full-access` = full-access/on/never，`ci` = read-only/off/never。写入 `permission_change` 事件；`/resume` 恢复，`/clear` 保留，`/reset` 清除。`/plan` 仍然是独立 mode。
 - full-access 会打印隔离关闭警告；profile 变更只在下一个 turn 生效。
 - `/status` 显示生效 model、sandbox/network/approval、permission profile 和鼠标模式；tmux 下会提示 `tmux set -g mouse on`。
