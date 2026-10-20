@@ -8,10 +8,13 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use crossterm::cursor::MoveTo;
-use crossterm::event::{self, Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::cursor::{MoveTo, Show};
+use crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, Event as TerminalEvent, KeyCode, KeyEvent,
+    KeyModifiers,
+};
 use crossterm::execute;
-use crossterm::terminal::{self, Clear, ClearType};
+use crossterm::terminal::{self, Clear, ClearType, LeaveAlternateScreen};
 use niucode_agent::{
     project_history, run_with_history, AgentConfig, AgentEvent, ApprovalRequest, RunOutcome,
 };
@@ -83,6 +86,7 @@ pub async fn run(
     config: &AgentConfig,
     history: Vec<ChatMessage>,
 ) -> Result<()> {
+    reset_terminal_modes();
     let out = Theme::detect_stdout();
     let err = Theme::detect_stderr();
     if std::io::stderr().is_terminal() {
@@ -794,6 +798,19 @@ async fn goal_after_turn(
         }
     }
     Ok(())
+}
+
+fn reset_terminal_modes() {
+    let mut out = std::io::stdout();
+    let _ = execute!(
+        out,
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        LeaveAlternateScreen,
+        Show,
+        crossterm::style::ResetColor
+    );
+    let _ = std::io::Write::flush(&mut out);
 }
 
 fn run_init(config: &AgentConfig, out: Theme) -> Result<()> {

@@ -54,6 +54,7 @@ niucode ▸ exit
 - 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-R` 用当前输入做反向历史搜索，重复按继续向前找。
 - `Ctrl-N` / `Ctrl-P` 等同 `↓` / `↑`；`Ctrl-Left/Right` 或 `Alt-B/F` 按词移动；`Ctrl-L` 清屏；支持 bracketed paste。
 - 鼠标捕获只在 slash 菜单打开时启用；菜单关闭后终端恢复原生复制/拖拽。退出、panic 或 Ctrl-C 都会经 `TerminalGuard` 释放 raw mode / bracketed paste / mouse capture。
+- 启动时主动关闭残留的 mouse reporting / bracketed paste / alternate screen，修复上一次异常退出后“终端卡住、无法复制”的状态。
 - 非 TTY（管道/脚本）自动退化为逐行输入，不启用行编辑。
 - `◆` 标记 assistant 文本，`◇` 标记折叠后的 reasoning，`»` 标记工具调用。
 - `subagent` 调用会显示任务输入，完成后显示每个子任务的摘要和独立日志路径；父上下文只收到这一条 tool_result。
