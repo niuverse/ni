@@ -930,6 +930,17 @@
         "adr-0019",
         "M5-003"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-003 完成：inline ratatui 默认输入层",
+      "detail": "多行输入、mouse picker hover/click、@ 文件补全与根 .gitignore；默认 inline，linear 仅 capability fallback；原生 transcript/scrollback。",
+      "refs": [
+        "M5-003",
+        "adr-0019",
+        "tui"
+      ]
     }
   ]
 }

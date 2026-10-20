@@ -1,10 +1,10 @@
 +++
 id = "tui"
-title = "线性 TUI、Diff Pager 与审批"
+title = "Inline TUI、Diff Pager 与审批"
 kind = "doc"
 status = "living"
 order = 33
-summary = "niucode tui：Geek 风格的流式输出、符号化工具状态、审批 diff pager、输出折叠、分层指令与缓存命中率。"
+summary = "niucode tui：ratatui inline 输入层、原生 transcript scrollback、审批 diff pager、工具状态与缓存命中率。"
 +++
 
 ## 用法
@@ -29,7 +29,7 @@ niucode tui --max-steps 40
 ███╗   ██╗██╗██╗   ██╗ ██████╗ ██████╗ ██████╗ ███████╗
 ...
 minimal · observable · event-sourced · v0.1.0
-linear session · :help commands · Ctrl-C cancels the turn
+inline input · native scrollback · :help commands · Ctrl-C cancels the turn
 
 niucode ▸ find the failing test
 » bash {"command":"cargo test"}
@@ -53,8 +53,8 @@ niucode ▸ exit
 - `Tab` 补全 slash 命令；多个匹配时显示带说明的候选列表。唯一前缀会显示灰色内联提示。
 - 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-R` 用当前输入做反向历史搜索，重复按继续向前找。
 - `Ctrl-N` / `Ctrl-P` 等同 `↓` / `↑`；`Ctrl-Left/Right` 或 `Alt-B/F` 按词移动；`Ctrl-L` 清屏；支持 bracketed paste。
-- `NIUCODE_TUI_INLINE=1` 可试用 ratatui inline 输入层（picker/help、input、footer）；未完成 parity 前默认仍是 linear。
-- 鼠标捕获只在 slash 菜单打开时启用；菜单关闭后终端恢复原生复制/拖拽。退出、panic 或 Ctrl-C 都会经 `TerminalGuard` 释放 raw mode / bracketed paste / mouse capture。
+- 默认是 ratatui inline 输入层（picker/help、3 行输入、footer）；`NIUCODE_TUI_LINEAR=1` 只在终端不支持 cursor position 时作为 fallback。
+- 鼠标捕获只在 picker 打开时启用，hover/click 用绝对屏幕坐标命中；菜单关闭后终端恢复原生复制/拖拽。退出、panic 或 Ctrl-C 都会经 `TerminalGuard` 释放 raw mode / bracketed paste / mouse capture。
 - 启动时主动关闭残留的 mouse reporting / bracketed paste / alternate screen，修复上一次异常退出后“终端卡住、无法复制”的状态。
 - 非 TTY（管道/脚本）自动退化为逐行输入，不启用行编辑。
 - `◆` 标记 assistant 文本，`◇` 标记折叠后的 reasoning，`»` 标记工具调用。

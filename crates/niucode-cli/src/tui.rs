@@ -83,6 +83,13 @@ impl PromptEditor {
         }
     }
 
+    fn set_cwd(&mut self, cwd: PathBuf) {
+        match self {
+            Self::Linear(_) => {}
+            Self::Inline(editor) => editor.set_cwd(cwd),
+        }
+    }
+
     fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
         match self {
             Self::Linear(editor) => editor.set_permissions(permissions),
@@ -277,13 +284,14 @@ pub async fn run(
     }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        let mut editor = if std::env::var_os("NIUCODE_TUI_INLINE").is_some() {
-            PromptEditor::Inline(InlineEditor::new(commands.clone()))
-        } else {
+        let mut editor = if std::env::var_os("NIUCODE_TUI_LINEAR").is_some() {
             PromptEditor::Linear(LineEditor::new(commands.clone()))
+        } else {
+            PromptEditor::Inline(InlineEditor::new(commands.clone()))
         };
         editor.set_models(niucode_model_choices(config, provider_factory));
         editor.set_current_model(format!("{}/{}", config.provider, config.model));
+        editor.set_cwd(config.working_dir.clone());
         editor.set_permissions(
             PermissionProfile::ALL
                 .iter()
@@ -1928,7 +1936,8 @@ fn reset_screen(theme: Theme) {
         );
         eprintln!(
             "{}",
-            theme.dim("linear session · :help commands · Ctrl-C cancels the turn")
+            theme
+                .dim("inline input · native scrollback · :help commands · Ctrl-C cancels the turn")
         );
     }
 }
@@ -2149,7 +2158,9 @@ fn banner_lines(width: usize) -> Vec<String> {
             env!("CARGO_PKG_VERSION")
         ));
     }
-    lines.push("linear session · :help commands · Ctrl-C cancels the turn".to_string());
+    lines.push(
+        "inline input · native scrollback · :help commands · Ctrl-C cancels the turn".to_string(),
+    );
     lines
 }
 

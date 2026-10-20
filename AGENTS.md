@@ -83,10 +83,11 @@ M0–M3 are done; M4 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
 M4-004/M4-005/M4-009/M4-010/M4-011/M4-012 are done; M4-006/007/008 are backlog.
-M5-001/M5-002 are done: provider catalog and canonical selection, plus the
-global per-project workspace/session index. There is no project-local
-`.niucode`; state lives in `~/.niucode/projects/<key>/`. TUI inline ratatui is an opt-in foundation in M5-003 review;
-`/init`, skills, and M4-007 security gate remain.
+M5-001/M5-002/M5-003 are done: provider catalog and canonical selection,
+global per-project workspace/session index, and the inline ratatui input
+layer (native transcript scrollback). There is no project-local `.niucode`;
+state lives in `~/.niucode/projects/<key>/`. `/init`, skills, and M4-007
+security gate remain.
 `/goal run` is TUI-only; headless `exec --goal` is M4-008. TUI mouse capture
 is menu-scoped, terminal state is restored by `TerminalGuard`, session
 lifecycle is `/clear` vs `/reset` vs `/resume`, and runtime selection is
