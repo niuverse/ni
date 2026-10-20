@@ -15,7 +15,8 @@ fn temp_dir(tag: &str) -> PathBuf {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("work/.niucode/extensions")).expect("dirs");
+    fs::create_dir_all(dir.join("work")).expect("dirs");
+    fs::create_dir_all(dir.join("home")).expect("home");
     dir
 }
 
@@ -24,8 +25,28 @@ fn exec_mounts_calls_and_unmounts_a_sidecar() {
     let dir = temp_dir("exec");
     let work = dir.join("work");
     let sessions = dir.join("sessions");
+    let home = dir.join("home");
+    let bootstrap = Command::new(env!("CARGO_BIN_EXE_niucode"))
+        .args(["session", "new"])
+        .current_dir(&work)
+        .env("NIUCODE_HOME", &home)
+        .output()
+        .expect("bootstrap workspace");
+    assert!(
+        bootstrap.status.success(),
+        "bootstrap stderr: {}",
+        String::from_utf8_lossy(&bootstrap.stderr)
+    );
+    let project = fs::read_dir(home.join("projects"))
+        .expect("projects")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.is_dir())
+        .expect("project workspace");
+    let extensions = project.join("extensions");
+    fs::create_dir_all(&extensions).expect("extensions");
     fs::write(
-        work.join(".niucode/extensions/demo.toml"),
+        extensions.join("demo.toml"),
         r#"
 name = "demo"
 command = "python3"
@@ -81,6 +102,7 @@ for line in sys.stdin:
             "--network",
             "on",
         ])
+        .env("NIUCODE_HOME", &home)
         .output()
         .expect("run niucode");
     assert!(

@@ -335,6 +335,22 @@
         "mount/unmount/error 写入父 session 事件。",
         "capability sandbox、worker pool、subagent 共享在 M4-007。"
       ]
+    },
+    {
+      "id": "workspace",
+      "title": "Workspace",
+      "layer": "state",
+      "status": "active",
+      "summary": "全局 per-project 工作区：project key、sessions、proposals、backups、extensions、cache、worktrees、config、gc。",
+      "contract": "不创建项目 .niucode；session/title 由事件日志派生；GC 默认 dry-run。",
+      "paths": [
+        "crates/niucode-cli/src/workspace.rs",
+        "crates/niucode-cli/src/tui.rs"
+      ],
+      "notes": [
+        "项目根零状态；旧 flat sessions/extensions 硬切。",
+        "ToolResult 1 MiB 预算。"
+      ]
     }
   ],
   "relations": [
@@ -402,6 +418,11 @@
       "from": "tui",
       "to": "extensions",
       "label": "mount"
+    },
+    {
+      "from": "cli",
+      "to": "workspace",
+      "label": "resolve"
     }
   ],
   "events": [
@@ -874,6 +895,18 @@
         "M5-001",
         "adr-0017",
         "provider",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-002 完成：全局 per-project 工作区",
+      "detail": "~/.niucode/projects/<key>；项目根零 .niucode；project.toml；session 标题/--all；config defaults；gc dry-run/apply；ToolResult 1 MiB；旧路径硬切。",
+      "refs": [
+        "M5-002",
+        "adr-0018",
+        "workspace",
         "tui"
       ]
     }

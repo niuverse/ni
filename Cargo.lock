@@ -1228,8 +1228,10 @@ dependencies = [
  "niucode-provider",
  "niucode-tools",
  "rpassword",
+ "serde",
  "serde_json",
  "tokio",
+ "toml",
  "unicode-width",
 ]
 

@@ -21,6 +21,9 @@ mod instructions;
 mod subagent;
 
 const MAX_PROVIDER_RETRIES: usize = 3;
+const MAX_TOOL_OUTPUT_BYTES: usize = 1_048_576;
+const TOOL_OUTPUT_HEAD_BYTES: usize = 65_536;
+const TOOL_OUTPUT_TAIL_BYTES: usize = 65_536;
 const RETRY_BASE_MS: u64 = 250;
 const MAX_RETRY_DELAY_SECS: u64 = 10;
 const UNBOUNDED_SAFETY_TURNS: usize = 256;
@@ -440,7 +443,7 @@ pub async fn run_with_history(
                 None
             };
             let scope_allowed = write_in_scope(config, &call);
-            let result = if !available {
+            let mut result = if !available {
                 niucode_tools::ToolResult {
                     ok: false,
                     output: format!("tool {} is not available to this agent", call.name),
@@ -489,6 +492,7 @@ pub async fn run_with_history(
                 toolbox.execute(&call.name, &call.input).await
             };
 
+            result.output = cap_tool_output(result.output);
             session.append(&Event::ToolResult {
                 call_id: call.id.clone(),
                 ok: result.ok,
@@ -546,6 +550,27 @@ fn approval_summary(call: &ToolCall) -> String {
     };
     let detail = detail.unwrap_or("").chars().take(240).collect::<String>();
     format!("{} {}", call.name, detail).trim().to_string()
+}
+
+fn cap_tool_output(output: String) -> String {
+    let bytes = output.as_bytes();
+    if bytes.len() <= MAX_TOOL_OUTPUT_BYTES {
+        return output;
+    }
+    let mut head_end = TOOL_OUTPUT_HEAD_BYTES.min(bytes.len());
+    while head_end > 0 && !output.is_char_boundary(head_end) {
+        head_end -= 1;
+    }
+    let mut tail_start = bytes.len().saturating_sub(TOOL_OUTPUT_TAIL_BYTES);
+    while tail_start < bytes.len() && !output.is_char_boundary(tail_start) {
+        tail_start += 1;
+    }
+    let omitted = tail_start.saturating_sub(head_end);
+    format!(
+        "{}\n… truncated {omitted} bytes …\n{}",
+        &output[..head_end],
+        &output[tail_start..]
+    )
 }
 
 fn retry_delay(error: &ProviderError, attempt: usize) -> Duration {
@@ -1090,6 +1115,21 @@ mod tests {
 
         fs::remove_dir_all(directory).expect("cleanup");
     }
+    #[test]
+    fn caps_tool_output_with_head_and_tail() {
+        let input = format!(
+            "{}{}{}",
+            "a".repeat(200_000),
+            "b".repeat(1_200_000),
+            "c".repeat(200_000)
+        );
+        let output = cap_tool_output(input);
+        assert!(output.len() < 1_048_576 + 1_000);
+        assert!(output.starts_with("a"));
+        assert!(output.ends_with('c'));
+        assert!(output.contains("truncated"));
+    }
+
     #[test]
     fn write_scope_requires_a_workspace_prefix() {
         let mut config = AgentConfig::new("test", ".");

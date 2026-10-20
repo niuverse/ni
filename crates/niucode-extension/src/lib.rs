@@ -42,16 +42,23 @@ pub struct MountReport {
 /// sidecar, and register its tools. Reserved tool names (usually built-ins)
 /// are rejected rather than shadowed.
 pub async fn discover(workspace: &Path, reserved: &[String]) -> MountReport {
+    let directory = workspace.join(".niucode/extensions");
+    discover_in(&directory, workspace, reserved).await
+}
+
+/// Discover manifests from an explicit directory while resolving relative
+/// command paths against `workspace`. The CLI uses the global per-project
+/// extension store; tests can point at a temp directory directly.
+pub async fn discover_in(directory: &Path, workspace: &Path, reserved: &[String]) -> MountReport {
     let mut host = ExtensionHost::default();
     let mut errors = Vec::new();
     let mut reserved = reserved.iter().cloned().collect::<HashSet<_>>();
 
-    let directory = workspace.join(".niucode/extensions");
     if !directory.is_dir() {
         return MountReport { host, errors };
     }
 
-    let mut manifests = match std::fs::read_dir(&directory) {
+    let mut manifests = match std::fs::read_dir(directory) {
         Ok(entries) => entries
             .filter_map(Result::ok)
             .map(|entry| entry.path())

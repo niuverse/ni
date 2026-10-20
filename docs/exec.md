@@ -23,6 +23,7 @@ niucode exec "fix the build" \
 
 # 换模型 / 限制轮数 / 上下文预算
 niucode exec "..." --model deepseek-v4-pro --max-steps 0
+# sessions default to ~/.niucode/projects/<key>/sessions/
 niucode exec "..." --context-budget 128000 --keep-recent-turns 4
 
 # 机器可读的 JSONL 事件流

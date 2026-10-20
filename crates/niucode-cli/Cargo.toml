@@ -20,6 +20,8 @@ niucode-extension = { path = "../niucode-extension" }
 niucode-provider = { path = "../niucode-provider" }
 niucode-tools = { path = "../niucode-tools" }
 rpassword.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true

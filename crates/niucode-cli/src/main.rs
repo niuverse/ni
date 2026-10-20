@@ -10,7 +10,7 @@ use niucode_agent::{
 };
 use niucode_auth::AuthStore;
 use niucode_core::{now_ms, Event, SessionLog};
-use niucode_extension::{discover, ExtensionHost};
+use niucode_extension::{discover_in, ExtensionHost};
 use niucode_provider::{
     ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider, ReplayProvider,
     StreamEvent, ThinkingMode,
@@ -30,6 +30,7 @@ mod session_ops;
 mod slash;
 mod theme;
 mod tui;
+mod workspace;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -74,6 +75,18 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+    /// Report or reclaim ~/.niucode storage (dry-run by default)
+    Gc {
+        /// Remove derived caches, old proposals, and old backups
+        #[arg(long)]
+        apply: bool,
+        /// Also delete old sessions (requires --yes)
+        #[arg(long)]
+        prune_sessions: bool,
+        /// Confirm destructive --prune-sessions
+        #[arg(long)]
+        yes: bool,
     },
     /// Run one coding task through the agent loop
     Exec {
@@ -251,6 +264,11 @@ async fn main() -> Result<()> {
             session_dir,
         }) => run_fork(path, at, session_dir),
         Some(Command::Provider { command }) => run_provider(command).await,
+        Some(Command::Gc {
+            apply,
+            prune_sessions,
+            yes,
+        }) => run_gc(apply, prune_sessions, yes),
         Some(Command::Auth { command }) => run_auth(command),
         Some(Command::Exec {
             prompt,
@@ -351,15 +369,155 @@ async fn main() -> Result<()> {
     }
 }
 
+fn run_gc(apply: bool, prune_sessions: bool, yes: bool) -> Result<()> {
+    if prune_sessions && !yes {
+        bail!("--prune-sessions requires --yes");
+    }
+    let root = workspace::global_root()?;
+    let projects = root.join("projects");
+    if !projects.is_dir() {
+        println!("workspace {} · empty", root.display());
+        return Ok(());
+    }
+    let mut total = 0_u64;
+    let mut entries = std::fs::read_dir(&projects)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    entries.sort();
+    for project in entries {
+        let sizes = [
+            ("sessions", project.join("sessions")),
+            ("proposals", project.join("proposals")),
+            ("backups", project.join("backups")),
+            ("cache", project.join("cache")),
+            ("worktrees", project.join("worktrees")),
+        ];
+        let mut project_total = 0_u64;
+        for (name, path) in &sizes {
+            let size = directory_size(path);
+            project_total += size;
+            if size > 0 {
+                println!(
+                    "{:<10} {:>10}  {}",
+                    name,
+                    human_bytes(size),
+                    project.display()
+                );
+            }
+        }
+        total += project_total;
+        println!(
+            "{:<10} {:>10}  {}",
+            "total",
+            human_bytes(project_total),
+            project.display()
+        );
+        if apply {
+            removed_old_files(&project.join("backups"), 5);
+            removed_old_files(&project.join("proposals"), 10);
+            let _ = std::fs::remove_dir_all(project.join("cache"));
+            println!("  applied derived cleanup for {}", project.display());
+        }
+        if prune_sessions && yes {
+            removed_old_sessions(&project.join("sessions"), 30, 50);
+        }
+    }
+    println!("workspace {} · {}", root.display(), human_bytes(total));
+    if !apply && !prune_sessions {
+        println!("dry-run only; use --apply for derived cleanup or --prune-sessions --yes");
+    }
+    Ok(())
+}
+
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| {
+            entry
+                .metadata()
+                .map(|metadata| {
+                    if metadata.is_dir() {
+                        directory_size(&entry.path())
+                    } else {
+                        metadata.len()
+                    }
+                })
+                .unwrap_or(0)
+        })
+        .sum()
+}
+
+fn human_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{:.1} GiB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 {
+        format!("{:.1} MiB", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.1} KiB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn removed_old_files(directory: &Path, keep: usize) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, path))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (_, path) in files.into_iter().skip(keep) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+fn removed_old_sessions(directory: &Path, days: u64, keep: usize) {
+    let cutoff =
+        std::time::SystemTime::now().checked_sub(std::time::Duration::from_secs(days * 86_400));
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, path))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (index, (modified, path)) in files.into_iter().enumerate() {
+        if index >= keep || cutoff.is_some_and(|cutoff| modified < cutoff) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 async fn mount_extensions(
-    workspace: &Path,
+    workspace: &workspace::Workspace,
     session: &mut SessionLog,
 ) -> Result<Option<Arc<ExtensionHost>>> {
     let reserved = Toolbox::specs()
         .into_iter()
         .map(|tool| tool.function.name)
         .collect::<Vec<_>>();
-    let report = discover(workspace, &reserved).await;
+    let report = discover_in(
+        &workspace.extensions,
+        workspace.extension_workspace(),
+        &reserved,
+    )
+    .await;
     for error in &report.errors {
         eprintln!("warning: extension: {error}");
         session.append(&Event::ExtensionError {
@@ -407,7 +565,10 @@ async fn unmount_extensions(
 fn run_session(command: SessionCommand) -> Result<()> {
     match command {
         SessionCommand::New { dir } => {
-            let dir = dir.unwrap_or_else(default_sessions_dir);
+            let dir = match dir {
+                Some(dir) => dir,
+                None => workspace::Workspace::discover(&std::env::current_dir()?)?.sessions,
+            };
             let mut log = SessionLog::create(&dir)?;
             log.append(&Event::SessionStart {
                 id: log.id().to_string(),
@@ -454,7 +615,10 @@ fn run_session(command: SessionCommand) -> Result<()> {
             Ok(())
         }
         SessionCommand::List { dir } => {
-            let dir = dir.unwrap_or_else(default_sessions_dir);
+            let dir = match dir {
+                Some(dir) => dir,
+                None => workspace::Workspace::discover(&std::env::current_dir()?)?.sessions,
+            };
             for path in niucode_core::session::list(&dir)? {
                 println!("{}", path.display());
             }
@@ -562,6 +726,18 @@ async fn run_tui(
         }
     }
 
+    let global_config = workspace::load_config()?;
+    let preset = if preset == "deepseek" {
+        global_config.defaults.provider.clone().unwrap_or(preset)
+    } else {
+        preset
+    };
+    let model = model.or(global_config.defaults.model.clone());
+    let context_budget = if context_budget == 0 {
+        global_config.defaults.context_budget.unwrap_or(0)
+    } else {
+        context_budget
+    };
     let preset = parse_provider(&preset)?;
     let (provider, model, auth_source, provider_factory) = if let Some(path) = &replay {
         let provider = ReplayProvider::load(path)?;
@@ -624,10 +800,11 @@ async fn run_tui(
         },
     };
 
+    let workspace = workspace::Workspace::discover(&working_dir)?;
     let (mut session, history) = if let Some((path, history, _)) = resumed {
         (SessionLog::open(&path)?, history)
     } else {
-        let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
+        let session_dir = session_dir.unwrap_or_else(|| workspace.sessions.clone());
         let mut session = SessionLog::create(&session_dir)?;
         session.append(&Event::SessionStart {
             id: session.id().to_string(),
@@ -664,7 +841,7 @@ async fn run_tui(
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
-    let extension_host = mount_extensions(&working_dir, &mut session).await?;
+    let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 
     let theme = Theme::detect_stderr();
@@ -699,6 +876,18 @@ async fn run_tui(
         "{} {}",
         theme.dim("session"),
         theme.paint(Tone::Bright, session.path().display())
+    );
+    eprintln!(
+        "{} {}",
+        theme.dim("workspace"),
+        theme.paint(
+            Tone::Bright,
+            format!(
+                "{} ({})",
+                workspace.project_dir.display(),
+                workspace.project_key
+            )
+        )
     );
 
     let result = tui::run(
@@ -774,6 +963,18 @@ async fn run_exec(
         bail!("--json cannot prompt for approval; use --approval never or a working sandbox");
     }
 
+    let global_config = workspace::load_config()?;
+    let preset = if preset == "deepseek" {
+        global_config.defaults.provider.clone().unwrap_or(preset)
+    } else {
+        preset
+    };
+    let model = model.or(global_config.defaults.model.clone());
+    let context_budget = if context_budget == 0 {
+        global_config.defaults.context_budget.unwrap_or(0)
+    } else {
+        context_budget
+    };
     let preset = parse_provider(&preset)?;
     let (provider, model, auth_source, _provider_factory) = if let Some(path) = &replay {
         let provider = ReplayProvider::load(path)?;
@@ -845,10 +1046,11 @@ async fn run_exec(
         },
     };
 
+    let workspace = workspace::Workspace::discover(&working_dir)?;
     let (mut session, history) = if let Some((path, history, _)) = resumed {
         (SessionLog::open(&path)?, history)
     } else {
-        let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
+        let session_dir = session_dir.unwrap_or_else(|| workspace.sessions.clone());
         let mut session = SessionLog::create(&session_dir)?;
         session.append(&Event::SessionStart {
             id: session.id().to_string(),
@@ -901,7 +1103,7 @@ async fn run_exec(
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
-    let extension_host = mount_extensions(&agent_config.working_dir, &mut session).await?;
+    let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 
     if json {
@@ -1380,16 +1582,6 @@ fn preset_env(preset: Preset, base: bool) -> Option<String> {
     std::env::var(name)
         .ok()
         .filter(|value| !value.trim().is_empty())
-}
-
-fn default_sessions_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("NIUCODE_HOME") {
-        return PathBuf::from(home).join("sessions");
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".niucode").join("sessions");
-    }
-    PathBuf::from(".niucode").join("sessions")
 }
 
 #[cfg(test)]

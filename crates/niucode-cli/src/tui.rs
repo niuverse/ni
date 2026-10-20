@@ -3,7 +3,8 @@
 //! It only consumes `AgentEvent`s and calls the same `run_with_history` entry
 //! point as headless exec. No loop internals are imported here.
 
-use std::io::{IsTerminal, Write};
+use std::fs::File;
+use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -1409,11 +1410,75 @@ fn resolve_session_path(directory: &Path, arg: &str) -> Result<PathBuf> {
     bail!("session not found: {arg} · use /resume to list recent sessions")
 }
 
-fn recent_sessions(directory: &Path) -> Vec<(PathBuf, u64)> {
+#[derive(Debug, Clone)]
+struct RecentSession {
+    path: PathBuf,
+    modified: u64,
+    title: String,
+    provider: String,
+    model: String,
+}
+
+fn session_summary(path: &Path) -> (String, String, String) {
+    let mut provider = String::new();
+    let mut model = String::new();
+    let mut user = None;
+    let mut goal = None;
+    if let Ok(file) = File::open(path) {
+        for line in BufReader::new(file).lines().take(400).flatten() {
+            let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            match event.get("type").and_then(|value| value.as_str()) {
+                Some("session_start") => {
+                    provider = event
+                        .get("provider")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    model = event
+                        .get("model")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+                Some("user_message") if user.is_none() => {
+                    user = event
+                        .get("text")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string);
+                }
+                Some("goal_set") if goal.is_none() => {
+                    goal = event
+                        .get("text")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string);
+                }
+                _ => {}
+            }
+            if user.is_some() {
+                break;
+            }
+        }
+    }
+    let title = user
+        .or(goal)
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("session")
+                .to_string()
+        })
+        .replace(['\n', '\r', '\t'], " ");
+    let title = title.trim().chars().take(72).collect::<String>();
+    (title, provider, model)
+}
+
+fn sessions_in(directory: &Path) -> Vec<RecentSession> {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return Vec::new();
     };
-    let mut sessions = entries
+    entries
         .filter_map(Result::ok)
         .filter_map(|entry| {
             let path = entry.path();
@@ -1427,11 +1492,49 @@ fn recent_sessions(directory: &Path) -> Vec<(PathBuf, u64)> {
                 .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                 .map(|duration| duration.as_secs())
                 .unwrap_or(0);
-            Some((path, modified))
+            let (title, provider, model) = session_summary(&path);
+            Some(RecentSession {
+                path,
+                modified,
+                title,
+                provider,
+                model,
+            })
         })
-        .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| right.0.cmp(&left.0)));
-    sessions.truncate(8);
+        .collect()
+}
+
+fn recent_sessions(directory: &Path, all: bool) -> Vec<RecentSession> {
+    let mut sessions = if all {
+        let projects = directory
+            .parent()
+            .and_then(Path::parent)
+            .filter(|path| path.file_name().is_some_and(|name| name == "projects"));
+        match projects {
+            Some(projects) => std::fs::read_dir(projects)
+                .map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter_map(|entry| {
+                            let directory = entry.path().join("sessions");
+                            directory.is_dir().then(|| sessions_in(&directory))
+                        })
+                        .flatten()
+                        .collect()
+                })
+                .unwrap_or_default(),
+            None => sessions_in(directory),
+        }
+    } else {
+        sessions_in(directory)
+    };
+    sessions.sort_by(|left, right| {
+        right
+            .modified
+            .cmp(&left.modified)
+            .then_with(|| right.path.cmp(&left.path))
+    });
+    sessions.truncate(10);
     sessions
 }
 
@@ -1454,8 +1557,9 @@ fn resume_session(
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
 
-    let Some(arg) = arg else {
-        let sessions = recent_sessions(&directory);
+    let list_all = matches!(arg, Some("--all") | Some("all"));
+    let Some(arg) = arg.filter(|value| !matches!(*value, "--all" | "all")) else {
+        let sessions = recent_sessions(&directory, list_all);
         if sessions.is_empty() {
             println!("{}", out.dim("no sessions found in this directory"));
             return Ok(());
@@ -1463,17 +1567,30 @@ fn resume_session(
         println!(
             "{} {}",
             out.accent("resume"),
-            out.dim("recent sessions · /resume <path|id>")
+            out.dim(if list_all {
+                "all projects · /resume <path|id>"
+            } else {
+                "current project · /resume --all for all projects"
+            })
         );
-        for (path, modified) in sessions {
-            let name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("session.jsonl");
+        for session in sessions {
             println!(
                 "{} {}",
-                out.paint(Tone::Bright, format!("  {name}")),
-                out.dim(format!("  {}", format_age(modified)))
+                out.paint(Tone::Bright, format!("  {}", session.title)),
+                out.dim(format!(
+                    "  {}/{} · {}",
+                    if session.provider.is_empty() {
+                        "?"
+                    } else {
+                        &session.provider
+                    },
+                    if session.model.is_empty() {
+                        "?"
+                    } else {
+                        &session.model
+                    },
+                    format_age(session.modified)
+                ))
             );
         }
         return Ok(());
@@ -2081,6 +2198,28 @@ mod tests {
         let wide = banner_lines(100);
         assert!(wide.len() > compact.len());
         assert!(wide[0].contains("███"));
+    }
+
+    #[test]
+    fn session_summary_uses_the_first_user_message() {
+        let directory =
+            std::env::temp_dir().join(format!("niucode-session-summary-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("temp dir");
+        let path = directory.join("s.jsonl");
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"type\":\"session_start\",\"id\":\"s\",\"cwd\":\"/tmp\",\"model\":\"gpt-4o\",\"provider\":\"openai\",\"ts\":1}\n",
+                "{\"type\":\"user_message\",\"text\":\"fix the parser\",\"ts\":2}\n"
+            ),
+        )
+        .expect("session");
+        let (title, provider, model) = session_summary(&path);
+        assert_eq!(title, "fix the parser");
+        assert_eq!(provider, "openai");
+        assert_eq!(model, "gpt-4o");
+        std::fs::remove_dir_all(directory).expect("cleanup");
     }
 
     #[test]
