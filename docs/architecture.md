@@ -63,7 +63,7 @@ user input
 | Engine | Loop / Context | 编排、投影、压缩；不碰 wire format |
 | Adapters | Providers / Tools / Sandbox | 外部世界的适配；不依赖 UI |
 | State | Session | 追加、加载、容错；不解释业务 |
-| Engineering | Dashboard | 项目阅读面；不参与运行时 |
+| Engineering | Dashboard | 架构阅读面（默认 Architecture）；不参与运行时 |
 
 依赖方向只能向下：Interface → Engine → Adapters / State。`ni-core` 不依赖 `ni-cli`，TUI 不 import loop 内部。
 

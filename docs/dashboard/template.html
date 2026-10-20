@@ -12,16 +12,16 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="#/board" data-view="board" aria-label="ni dashboard">
+  <a class="brand" href="#/arch" data-view="arch" aria-label="ni dashboard">
     <span class="brand-mark">ni</span>
     <span class="brand-tag">minimal, observable coding agent</span>
   </a>
 
   <nav class="tabs" aria-label="Views">
-    <button class="tab" type="button" data-view="board">Board</button>
     <button class="tab" type="button" data-view="arch">Architecture</button>
+    <button class="tab" type="button" data-view="work">Work</button>
     <button class="tab" type="button" data-view="docs">Docs</button>
-    <button class="tab" type="button" data-view="timeline">Timeline</button>
+    <button class="tab" type="button" data-view="decisions">Decisions</button>
   </nav>
 
   <div class="top-actions">
@@ -36,18 +36,13 @@
 
 <main class="shell">
   <aside class="rail" aria-label="Project navigation">
-    <section class="rail-section">
-      <div class="rail-head"><h2>Milestones</h2><span id="milestone-count"></span></div>
-      <div id="milestone-list" class="milestone-list"></div>
-    </section>
-
-    <section class="rail-section">
-      <div class="rail-head"><h2>Layers</h2><span id="layer-count"></span></div>
-      <div id="layer-list" class="layer-list"></div>
+    <section class="rail-section rail-map">
+      <div class="rail-head"><h2>Architecture</h2><span id="module-count"></span></div>
+      <div id="map-nav" class="map-nav"></div>
     </section>
 
     <section class="rail-section rail-docs">
-      <div class="rail-head"><h2>Docs</h2><span id="doc-count"></span></div>
+      <div class="rail-head"><h2>Documents</h2><span id="doc-count"></span></div>
       <div id="rail-docs" class="rail-doc-list"></div>
     </section>
 

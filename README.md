@@ -26,7 +26,8 @@ cargo xtask dashboard           # regenerate docs/index.html
 cargo xtask dashboard --check   # fail if the generated dashboard is stale
 ```
 
-The dashboard is a single offline HTML file. Open `docs/index.html` directly;
+The dashboard is a single offline HTML file. Architecture is the first screen;
+Work, Docs, and Decisions are secondary views. Open `docs/index.html` directly;
 no server, CDN, or network access is required.
 
 ## Layout

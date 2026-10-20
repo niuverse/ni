@@ -3,7 +3,8 @@
 
   const DATA = JSON.parse(document.getElementById('ni-data').textContent);
 
-  const VIEWS = ['board', 'arch', 'docs', 'timeline'];
+  const VIEWS = ['arch', 'work', 'docs', 'decisions'];
+  const VIEW_ALIASES = { board: 'work', timeline: 'decisions' };
   const STATUS_COLUMNS = ['backlog', 'ready', 'doing', 'review', 'done'];
   const STATUS_LABEL = {
     backlog: 'Backlog',
@@ -23,7 +24,6 @@
     done: '#3f7d4f',
     blocked: '#b42318',
   };
-  const SIZE_POINTS = { S: 1, M: 2, L: 3 };
   const LAYER_COLORS = {
     interface: '#4c7bd9',
     engine: '#b57436',
@@ -45,7 +45,7 @@
   const layerById = new Map(DATA.layers.map((layer) => [layer.id, layer]));
 
   const state = {
-    view: 'board',
+    view: 'arch',
     milestone: currentMilestoneId(),
     selection: null,
     query: '',
@@ -57,6 +57,10 @@
   function currentMilestoneId() {
     const active = DATA.milestones.find((milestone) => milestone.status === 'active');
     return active ? active.id : 'all';
+  }
+
+  function normalizeView(view) {
+    return VIEW_ALIASES[view] || view;
   }
 
   function esc(value) {
@@ -91,25 +95,6 @@
     return module ? module.title : id;
   }
 
-  function statusBadge(status) {
-    const label = STATUS_LABEL[status] || status;
-    return `<span class="badge badge-${esc(status)}"><span class="dot"></span>${esc(label)}</span>`;
-  }
-
-  function milestoneStats(id) {
-    const cards = DATA.cards.filter((card) => id === 'all' || card.milestone === id);
-    const done = cards.filter((card) => card.status === 'done');
-    const points = cards.reduce((sum, card) => sum + (SIZE_POINTS[card.size] || 1), 0);
-    const donePoints = done.reduce((sum, card) => sum + (SIZE_POINTS[card.size] || 1), 0);
-    return {
-      total: cards.length,
-      done: done.length,
-      points,
-      donePoints,
-      pct: points ? Math.round((donePoints / points) * 100) : 0,
-    };
-  }
-
   function isCardSelected(id) {
     return state.selection?.type === 'card' && state.selection.id === id;
   }
@@ -120,6 +105,31 @@
 
   function isDocSelected(id) {
     return state.selection?.type === 'doc' && state.selection.id === id;
+  }
+
+  function statusBadge(status) {
+    const label = STATUS_LABEL[status] || status;
+    return `<span class="badge badge-${esc(status)}"><span class="dot"></span>${esc(label)}</span>`;
+  }
+
+  function currentFocus() {
+    const milestone = DATA.milestones.find((item) => item.status === 'active');
+    if (!milestone) return null;
+    const cards = DATA.cards.filter((card) => card.milestone === milestone.id && card.status !== 'done');
+    const card = cards.find((item) => item.status === 'doing')
+      || cards.find((item) => item.status === 'ready')
+      || cards.find((item) => item.status === 'review')
+      || cards.find((item) => item.status === 'backlog');
+    return { milestone, card };
+  }
+
+  function relatedModules(id) {
+    const related = new Set();
+    DATA.relations.forEach((relation) => {
+      if (relation.from === id) related.add(relation.to);
+      if (relation.to === id) related.add(relation.from);
+    });
+    return related;
   }
 
   function cardMatches(card, query) {
@@ -176,67 +186,6 @@
     return pa - pb || a.id.localeCompare(b.id);
   }
 
-  function cardHtml(card) {
-    const module = card.module ? moduleById.get(card.module) : null;
-    const selected = isCardSelected(card.id);
-    return `<button class="card${card.status === 'done' ? ' done' : ''}${card.status === 'blocked' ? ' blocked' : ''}${selected ? ' selected' : ''}" type="button" data-card="${esc(card.id)}" aria-pressed="${selected}">
-      <span class="card-top"><span>${esc(card.id)}</span><span class="size">${esc(card.size)}</span></span>
-      <span class="card-title">${esc(card.title)}</span>
-      <span class="card-foot"><span>${module ? esc(module.title) : '—'}</span><span>${esc(fmtDate(card.updated))}</span></span>
-    </button>`;
-  }
-
-  function renderMilestones() {
-    const allStats = milestoneStats('all');
-    let html = `<button class="milestone${state.milestone === 'all' ? ' active' : ''}" type="button" data-milestone="all" aria-pressed="${state.milestone === 'all'}">
-      <span class="milestone-top"><span class="ms-dot"></span><span class="ms-id">ALL</span><span class="ms-title">Every milestone</span></span>
-      <span class="ms-meta"><span>${allStats.done}/${allStats.total}</span><span>${allStats.pct}%</span></span>
-      <span class="progress"><i style="width:${allStats.pct}%"></i></span>
-    </button>`;
-
-    html += DATA.milestones.map((milestone) => {
-      const stats = milestoneStats(milestone.id);
-      return `<button class="milestone${state.milestone === milestone.id ? ' active' : ''}" type="button" data-milestone="${esc(milestone.id)}" aria-pressed="${state.milestone === milestone.id}">
-        <span class="milestone-top"><span class="ms-dot ${esc(milestone.status)}"></span><span class="ms-id">${esc(milestone.id)}</span><span class="ms-title">${esc(milestone.title)}</span></span>
-        <span class="ms-meta"><span>${stats.done}/${stats.total}</span><span>${stats.pct}%</span></span>
-        <span class="progress"><i style="width:${stats.pct}%"></i></span>
-      </button>`;
-    }).join('');
-
-    return html;
-  }
-
-  function renderLayers() {
-    return DATA.layers.map((layer) => {
-      const count = DATA.modules.filter((module) => module.layer === layer.id).length;
-      return `<div class="layer-row"><span class="layer-dot" style="--c:${layerColor(layer.id)}"></span><span class="layer-name">${esc(layer.name)}</span><span class="layer-count">${count}</span></div>`;
-    }).join('');
-  }
-
-  function renderRailDocs() {
-    return DATA.docs.map((doc) => `<button class="rail-doc${isDocSelected(doc.id) ? ' active' : ''}" type="button" data-doc="${esc(doc.id)}" title="${esc(doc.title)}">
-      <span class="rd-kind">${esc(docKind(doc.kind))}</span><span class="rd-title">${esc(doc.title)}</span>
-    </button>`).join('');
-  }
-
-  function renderChrome() {
-    document.getElementById('project-status').textContent = DATA.project.status;
-    document.getElementById('milestone-count').textContent = DATA.milestones.length;
-    document.getElementById('layer-count').textContent = DATA.layers.length;
-    document.getElementById('doc-count').textContent = DATA.docs.length;
-
-    const done = DATA.cards.filter((card) => card.status === 'done').length;
-    document.getElementById('rail-foot').innerHTML = `<span>${done}/${DATA.cards.length} cards done</span><span>${DATA.modules.length} modules · ${DATA.docs.length} docs</span><span>offline · schema v${DATA.meta.schema_version}</span>`;
-
-    const placeholders = {
-      board: 'Filter cards',
-      arch: 'Filter modules',
-      docs: 'Filter documents',
-      timeline: 'Filter events',
-    };
-    search.placeholder = placeholders[state.view] || 'Filter';
-  }
-
   function renderTabs() {
     document.querySelectorAll('.tab').forEach((tab) => {
       const active = tab.dataset.view === state.view;
@@ -246,10 +195,64 @@
     });
   }
 
+  function renderChrome() {
+    document.getElementById('project-status').textContent = DATA.project.status;
+    document.getElementById('module-count').textContent = DATA.modules.length;
+    document.getElementById('doc-count').textContent = DATA.docs.length;
+
+    const focus = currentFocus();
+    let foot = '';
+    if (focus?.card) {
+      foot += `<div class="focus-block"><div class="focus-kicker">Current focus · ${esc(focus.milestone.id)}</div><button class="focus-card" type="button" data-card="${esc(focus.card.id)}"><span class="focus-id">${esc(focus.card.id)}</span><span class="focus-title">${esc(focus.card.title)}</span></button></div>`;
+    } else if (focus) {
+      foot += `<div class="focus-block"><div class="focus-kicker">Current focus · ${esc(focus.milestone.id)}</div><div class="focus-empty">${esc(focus.milestone.goal)}</div></div>`;
+    }
+    foot += `<div class="rail-meta"><span>${DATA.modules.length} modules · ${DATA.relations.length} relations</span><span>offline · schema v${DATA.meta.schema_version}</span></div>`;
+    document.getElementById('rail-foot').innerHTML = foot;
+
+    const placeholders = {
+      arch: 'Filter modules',
+      work: 'Filter cards',
+      docs: 'Filter documents',
+      decisions: 'Filter decisions',
+    };
+    search.placeholder = placeholders[state.view] || 'Filter';
+  }
+
   function renderRail() {
-    document.getElementById('milestone-list').innerHTML = renderMilestones();
-    document.getElementById('layer-list').innerHTML = renderLayers();
+    document.getElementById('map-nav').innerHTML = renderMapNav();
     document.getElementById('rail-docs').innerHTML = renderRailDocs();
+  }
+
+  function renderMapNav() {
+    return DATA.layers.map((layer) => {
+      const modules = DATA.modules.filter((module) => module.layer === layer.id);
+      const rows = modules.map((module) => {
+        const active = isModuleSelected(module.id);
+        return `<button class="map-module${active ? ' active' : ''}" type="button" data-module="${esc(module.id)}" title="${esc(module.summary)}">
+          <span class="map-dot ${esc(module.status)}"></span>
+          <span class="map-title">${esc(module.title)}</span>
+        </button>`;
+      }).join('');
+      return `<div class="map-layer">
+        <div class="map-layer-head"><span class="map-layer-dot" style="--c:${layerColor(layer.id)}"></span><span>${esc(layer.name)}</span><span class="map-layer-n">${modules.length}</span></div>
+        ${rows}
+      </div>`;
+    }).join('');
+  }
+
+  function renderRailDocs() {
+    return DATA.docs.map((doc) => `<button class="rail-doc${isDocSelected(doc.id) ? ' active' : ''}" type="button" data-doc="${esc(doc.id)}" title="${esc(doc.title)}">
+      <span class="rd-kind">${esc(docKind(doc.kind))}</span><span class="rd-title">${esc(doc.title)}</span>
+    </button>`).join('');
+  }
+
+  function render() {
+    renderTabs();
+    renderChrome();
+    renderRail();
+    renderCanvas();
+    renderDetails();
   }
 
   function renderCanvas() {
@@ -257,10 +260,10 @@
     const previousScroll = canvas.scrollTop;
     let html = '';
 
-    if (state.view === 'board') html = boardView();
-    else if (state.view === 'arch') html = archView();
+    if (state.view === 'arch') html = archView();
+    else if (state.view === 'work') html = workView();
     else if (state.view === 'docs') html = docsView();
-    else html = timelineView();
+    else html = decisionsView();
 
     canvas.innerHTML = html;
     canvas.dataset.view = state.view;
@@ -269,9 +272,65 @@
     if (state.view === 'arch') scheduleEdges();
   }
 
-  function boardView() {
-    const milestone = state.milestone === 'all' ? null : milestoneById.get(state.milestone);
-    const stats = milestoneStats(state.milestone);
+  function archView() {
+    const query = state.query.toLowerCase();
+    const selected = state.selection?.type === 'module' ? moduleById.get(state.selection.id) : null;
+    const related = selected ? relatedModules(selected.id) : new Set();
+    const stats = `<span><strong>${DATA.modules.length}</strong> modules</span><span class="sep">·</span><span>${DATA.layers.length} layers</span><span class="sep">·</span><span>${DATA.relations.length} relations</span>`;
+
+    let html = viewHead(
+      'Architecture',
+      'How ni is shaped',
+      '语义分层，不是目录树。选中模块聚焦它的依赖；状态只表示落地程度。',
+      stats,
+    );
+
+    if (selected) {
+      html += `<div class="focus-bar"><span class="focus-label">Focus</span><button class="focus-chip" type="button" data-close>${esc(selected.title)}<span aria-hidden="true">×</span></button></div>`;
+    }
+
+    html += `<div class="arch-canvas${selected ? ' has-focus' : ''}" id="arch-canvas"><svg class="edges" id="arch-edges" aria-hidden="true"></svg>`;
+
+    DATA.layers.forEach((layer, index) => {
+      const modules = DATA.modules.filter((module) => module.layer === layer.id);
+      html += `<section class="arch-layer">
+        <div class="layer-label"><div class="layer-index">${String(index + 1).padStart(2, '0')}</div><h2>${esc(layer.name)}</h2><p>${esc(layer.note)}</p></div>
+        <div class="layer-cards">${modules.map((module) => moduleCard(module, query, selected?.id, related)).join('') || '<div class="empty">No modules yet.</div>'}</div>
+      </section>`;
+    });
+
+    html += `</div>`;
+
+    if (!DATA.modules.some((module) => moduleMatches(module, query))) {
+      html += `<div class="empty" style="margin-top:12px">No modules match this filter.</div>`;
+    }
+
+    return html;
+  }
+
+  function moduleCard(module, query, selectedId, related) {
+    const selected = module.id === selectedId;
+    const isRelated = related.has(module.id);
+    const muted = selectedId && !selected && !isRelated;
+    const dim = query && !moduleMatches(module, query);
+    const classes = [
+      'module-card',
+      module.status === 'planned' ? 'planned' : '',
+      selected ? 'selected' : '',
+      isRelated ? 'related' : '',
+      muted ? 'muted' : '',
+      dim ? 'dim' : '',
+    ].filter(Boolean).join(' ');
+
+    return `<button class="${classes}" type="button" data-module="${esc(module.id)}" style="--module-color:${layerColor(module.layer)}" aria-pressed="${selected}">
+      <span class="module-head"><span>${esc(module.id)}</span><span class="module-status">${esc(STATUS_LABEL[module.status] || module.status)}</span></span>
+      <span class="module-title">${esc(module.title)}</span>
+      <span class="module-summary">${esc(module.summary)}</span>
+      <span class="module-path">${esc(module.paths?.[0] || '—')}</span>
+    </button>`;
+  }
+
+  function workView() {
     const query = state.query.toLowerCase();
     const cards = DATA.cards.filter((card) => {
       const inMilestone = state.milestone === 'all' || card.milestone === state.milestone;
@@ -279,15 +338,16 @@
     });
     const blocked = cards.filter((card) => card.status === 'blocked');
 
-    const statsHtml = `<span><strong>${stats.done}/${stats.total}</strong> done</span><span class="sep">·</span><span>${stats.points} pts</span>`;
-    const title = milestone ? `${milestone.id} · ${milestone.title}` : 'All milestones';
-    const subtitle = milestone ? milestone.goal : 'Every milestone on one board.';
+    let html = viewHead(
+      'Work',
+      'Handoff, not a dashboard',
+      '卡片是 agent 的交接面。进度在这里和 git 里，不在 Architecture 第一屏。',
+    );
 
-    let html = viewHead('Iteration board', title, subtitle, statsHtml);
-    html += `<div class="progress wide" style="margin:-4px 0 15px"><i style="width:${stats.pct}%"></i></div>`;
+    html += `<div class="filters">${milestoneFilter()}</div>`;
 
     if (blocked.length) {
-      html += `<div class="blocked-strip"><div class="blocked-label">Blocked · ${blocked.length}</div><div class="blocked-cards">${blocked.map(cardHtml).join('')}</div></div>`;
+      html += `<div class="blocked-strip"><div class="blocked-label">Blocked</div><div class="blocked-cards">${blocked.map(cardHtml).join('')}</div></div>`;
     }
 
     html += `<div class="board">${STATUS_COLUMNS.map((status) => boardColumn(status, cards)).join('')}</div>`;
@@ -299,60 +359,42 @@
     return html;
   }
 
+  function milestoneFilter() {
+    const items = [
+      ...DATA.milestones.map((milestone) => ({ id: milestone.id, label: milestone.id, title: milestone.title })),
+      { id: 'all', label: 'All', title: 'Every milestone' },
+    ];
+    return items.map((item) => `<button class="filter${state.milestone === item.id ? ' active' : ''}" type="button" data-milestone="${esc(item.id)}" title="${esc(item.title)}" aria-pressed="${state.milestone === item.id}">${esc(item.label)}</button>`).join('');
+  }
+
   function boardColumn(status, cards) {
     const items = cards.filter((card) => card.status === status).sort(compareCards);
-    const warning = status === 'doing' && items.length > 3;
-    return `<section class="column${items.length ? '' : ' empty'}" data-status="${status}">
-      <div class="column-head"><span class="col-dot" style="--c:${STATUS_COLORS[status]}"></span>${esc(STATUS_LABEL[status])}<span class="col-count${warning ? ' warn' : ''}">${items.length}</span></div>
+    return `<section class="column${items.length ? '' : ' empty'}">
+      <div class="column-head"><span class="col-dot" style="--c:${STATUS_COLORS[status]}"></span>${esc(STATUS_LABEL[status])}</div>
       <div class="cards">${items.map(cardHtml).join('')}</div>
     </section>`;
   }
 
-  function archView() {
-    const query = state.query.toLowerCase();
-    const active = DATA.modules.filter((module) => module.status === 'active').length;
-    const stats = `<span><strong>${DATA.modules.length}</strong> modules</span><span class="sep">·</span><span>${active} active</span>`;
-
-    let html = viewHead(
-      'Target architecture',
-      'How ni is shaped',
-      '语义分层，不是目录树。实线标出调用与数据方向；虚线卡片表示尚未落地。',
-      stats,
-    );
-    html += `<div class="arch-canvas" id="arch-canvas"><svg class="edges" id="arch-edges" aria-hidden="true"></svg>`;
-
-    DATA.layers.forEach((layer, index) => {
-      const modules = DATA.modules.filter((module) => module.layer === layer.id);
-      html += `<section class="arch-layer">
-        <div class="layer-label"><div class="layer-index">${String(index + 1).padStart(2, '0')}</div><h2>${esc(layer.name)}</h2><p>${esc(layer.note)}</p></div>
-        <div class="layer-cards">${modules.map((module) => moduleCard(module, query)).join('') || '<div class="empty">No modules yet.</div>'}</div>
-      </section>`;
-    });
-
-    html += `</div>`;
-    return html;
-  }
-
-  function moduleCard(module, query) {
-    const selected = isModuleSelected(module.id);
-    const dim = query && !moduleMatches(module, query);
-    return `<button class="module-card${module.status === 'planned' ? ' planned' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}" type="button" data-module="${esc(module.id)}" style="--module-color:${layerColor(module.layer)}" aria-pressed="${selected}">
-      <span class="module-head"><span>${esc(module.id)}</span><span class="module-status">${esc(STATUS_LABEL[module.status] || module.status)}</span></span>
-      <span class="module-title">${esc(module.title)}</span>
-      <span class="module-summary">${esc(module.summary)}</span>
-      <span class="module-path">${esc(module.paths?.[0] || '—')}</span>
+  function cardHtml(card) {
+    const module = card.module ? moduleById.get(card.module) : null;
+    const selected = isCardSelected(card.id);
+    return `<button class="card${card.status === 'done' ? ' done' : ''}${card.status === 'blocked' ? ' blocked' : ''}${selected ? ' selected' : ''}" type="button" data-card="${esc(card.id)}" aria-pressed="${selected}">
+      <span class="card-top"><span>${esc(card.id)}</span><span class="size">${esc(card.size)}</span></span>
+      <span class="card-title">${esc(card.title)}</span>
+      <span class="card-foot"><span>${module ? esc(module.title) : '—'}</span><span>${esc(fmtDate(card.updated))}</span></span>
     </button>`;
   }
 
   function docsView() {
     const query = state.query.toLowerCase();
     const docs = DATA.docs.filter((doc) => docMatches(doc, query));
-    const stats = `<span><strong>${DATA.docs.length}</strong> docs</span><span class="sep">·</span><span>${DATA.docs.filter((doc) => doc.kind === 'adr').length} ADRs</span>`;
+    const adrCount = DATA.docs.filter((doc) => doc.kind === 'adr').length;
+    const stats = `<span><strong>${DATA.docs.length}</strong> documents</span><span class="sep">·</span><span>${adrCount} ADRs</span>`;
 
     return viewHead(
-      'Documents',
-      'Decisions, architecture, rituals',
-      'ADR 与指南和代码放在一起。点开在右栏阅读，深链可以直接分享。',
+      'Docs',
+      'Source material',
+      'ADR、架构说明和维护指南。点开在右栏阅读；深链可以直接分享。',
       stats,
     ) + `<div class="doc-grid">${docs.map(docCard).join('')}${docs.length ? '' : '<div class="empty">No documents match this filter.</div>'}</div>`;
   }
@@ -367,23 +409,31 @@
     </button>`;
   }
 
-  function timelineView() {
+  function decisionsView() {
     const query = state.query.toLowerCase();
-    const events = DATA.events
-      .filter((event) => eventMatches(event, query))
+    const adrs = DATA.docs.filter((doc) => doc.kind === 'adr' && docMatches(doc, query));
+    const decisions = DATA.events
+      .filter((event) => event.kind === 'decision' && eventMatches(event, query))
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-    const stats = `<span><strong>${DATA.events.length}</strong> events</span>`;
+    const stats = `<span><strong>${DATA.docs.filter((doc) => doc.kind === 'adr').length}</strong> ADRs</span><span class="sep">·</span><span>${DATA.events.filter((event) => event.kind === 'decision').length} decisions</span>`;
 
-    return viewHead(
-      'Timeline',
-      'How the project got here',
-      '决策、里程碑和阶段变化。手工事件为主，后续可以从 git log 自动补充。',
+    let html = viewHead(
+      'Decisions',
+      'Why ni is shaped this way',
+      'ADR 与关键决策。进度事件不进入这里。',
       stats,
-    ) + `<div class="timeline">${events.map(timelineItem).join('')}${events.length ? '' : '<div class="empty">No events match this filter.</div>'}</div>`;
+    );
+
+    html += `<h2 class="section-title">Architecture decision records</h2>`;
+    html += `<div class="doc-grid">${adrs.map(docCard).join('')}${adrs.length ? '' : '<div class="empty">No ADRs match this filter.</div>'}</div>`;
+    html += `<h2 class="section-title">Decision log</h2>`;
+    html += `<div class="timeline">${decisions.map(decisionItem).join('')}${decisions.length ? '' : '<div class="empty">No decisions match this filter.</div>'}</div>`;
+
+    return html;
   }
 
-  function timelineItem(event) {
+  function decisionItem(event) {
     const refs = (event.refs || []).map((ref) => {
       if (cardById.has(ref)) return `<button class="ref-chip" type="button" data-card="${esc(ref)}">${esc(ref)}</button>`;
       if (docById.has(ref)) return `<button class="ref-chip" type="button" data-doc="${esc(ref)}">${esc(ref)}</button>`;
@@ -435,29 +485,33 @@
   }
 
   function overviewDetails() {
-    const active = DATA.milestones.find((milestone) => milestone.status === 'active') || DATA.milestones[0];
-    const stats = milestoneStats(active ? active.id : 'all');
+    const focus = currentFocus();
 
     let html = detailsHead(`Project · ${DATA.project.name}`, false);
     html += `<h1 class="details-title">${esc(DATA.project.title)}</h1>`;
     html += `<p class="view-sub" style="font-size:12px">${esc(DATA.project.summary)}</p>`;
     html += `<div class="overview-stats">
-      <div class="overview-stat"><strong>${DATA.cards.filter((card) => card.status === 'done').length}</strong><span>done</span></div>
       <div class="overview-stat"><strong>${DATA.modules.length}</strong><span>modules</span></div>
+      <div class="overview-stat"><strong>${DATA.layers.length}</strong><span>layers</span></div>
+      <div class="overview-stat"><strong>${DATA.relations.length}</strong><span>relations</span></div>
       <div class="overview-stat"><strong>${DATA.docs.length}</strong><span>docs</span></div>
     </div>`;
 
-    if (active) {
-      html += `<div class="overview-block"><h3>${esc(active.id)} · ${esc(active.title)}</h3><p>${esc(active.goal)}</p><div class="progress wide" style="margin:8px 0 6px"><i style="width:${stats.pct}%"></i></div><div class="hint">${stats.done}/${stats.total} cards · ${stats.pct}%</div></div>`;
-      if (active.exit?.length) {
-        html += `<div class="detail-section"><h2>Exit criteria</h2><ul class="notes">${active.exit.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></div>`;
-      }
+    html += `<div class="detail-section"><h2>How to read</h2><ul class="notes">
+      <li>Architecture：先看层和依赖，再点模块看契约与源码。</li>
+      <li>Work：需要接手任务时再看卡片；进度不在第一屏。</li>
+      <li>Docs / Decisions：为什么这样切，以及被否决的方案。</li>
+    </ul></div>`;
+
+    if (focus?.card) {
+      html += `<div class="detail-section"><h2>Current focus</h2><div class="path-list"><button class="path-chip" type="button" data-card="${esc(focus.card.id)}">${esc(focus.card.id)} · ${esc(focus.card.title)}</button></div></div>`;
     }
 
     html += `<div class="detail-section"><h2>Read next</h2><div class="path-list">
       <button class="path-chip" type="button" data-view="arch">Architecture map</button>
       <button class="path-chip" type="button" data-doc="architecture">Architecture doc</button>
-      <button class="path-chip" type="button" data-doc="readme">Dashboard guide</button>
+      <button class="path-chip" type="button" data-doc="adr-0001">ADR-0001 · Rust</button>
+      <button class="path-chip" type="button" data-doc="adr-0003">ADR-0003 · architecture-first</button>
     </div></div>`;
 
     return html;
@@ -468,7 +522,7 @@
     const milestone = milestoneById.get(card.milestone);
     const docs = (card.docs || []).map((id) => docById.get(id)).filter(Boolean);
 
-    let html = detailsHead(`Task · ${card.id}`);
+    let html = detailsHead(`Work · ${card.id}`);
     html += `<h1 class="details-title">${esc(card.title)}</h1>`;
     html += `<div class="badges">${statusBadge(card.status)}${card.priority ? `<span class="badge">${esc(card.priority)}</span>` : ''}<span class="badge">${esc(card.size)}</span></div>`;
 
@@ -563,7 +617,7 @@
   function openCard(id) {
     const card = cardById.get(id);
     if (!card) return;
-    state.view = 'board';
+    state.view = 'work';
     state.milestone = card.milestone;
     state.selection = { type: 'card', id };
     state.query = '';
@@ -594,8 +648,9 @@
   }
 
   function setView(view) {
-    if (!VIEWS.includes(view)) return;
-    state.view = view;
+    const normalized = normalizeView(view);
+    if (!VIEWS.includes(normalized)) return;
+    state.view = normalized;
     state.selection = null;
     state.query = '';
     search.value = '';
@@ -604,7 +659,7 @@
   }
 
   function setMilestone(id) {
-    state.view = 'board';
+    state.view = 'work';
     state.milestone = id;
     state.selection = null;
     state.query = '';
@@ -633,34 +688,28 @@
   function applyHash() {
     const raw = location.hash.replace(/^#\/?/, '');
     if (!raw) {
-      state.view = 'board';
+      state.view = 'arch';
       state.selection = null;
       render();
+      syncHash();
       return;
     }
 
     const parts = raw.split('/');
-    const view = parts[0];
+    const view = normalizeView(parts[0]);
     const id = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('/')) : '';
 
-    if (!VIEWS.includes(view)) {
-      state.view = 'board';
-      state.selection = null;
-      render();
-      return;
-    }
-
-    state.view = view;
+    state.view = VIEWS.includes(view) ? view : 'arch';
     state.selection = null;
 
     if (id) {
-      if (view === 'board' && cardById.has(id)) {
-        state.selection = { type: 'card', id };
-        state.milestone = cardById.get(id).milestone;
-      } else if (view === 'arch' && moduleById.has(id)) {
+      if (state.view === 'arch' && moduleById.has(id)) {
         state.selection = { type: 'module', id };
         state.sourceIndex = 0;
-      } else if (view === 'docs' && docById.has(id)) {
+      } else if (state.view === 'work' && cardById.has(id)) {
+        state.selection = { type: 'card', id };
+        state.milestone = cardById.get(id).milestone;
+      } else if (state.view === 'docs' && docById.has(id)) {
         state.selection = { type: 'doc', id };
       }
     }
@@ -668,6 +717,7 @@
     state.query = '';
     search.value = '';
     render();
+    syncHash();
   }
 
   function scheduleEdges() {
@@ -707,7 +757,6 @@
       let x2;
       let y2;
       let path;
-      let labelY;
 
       if (b.top > a.bottom + 6) {
         x1 = a.left + a.width / 2 - rect.left;
@@ -716,7 +765,6 @@
         y2 = b.top - rect.top;
         const midY = (y1 + y2) / 2;
         path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
-        labelY = y1 + 12;
       } else if (b.bottom < a.top - 6) {
         x1 = a.left + a.width / 2 - rect.left;
         y1 = a.top - rect.top;
@@ -724,7 +772,6 @@
         y2 = b.bottom - rect.top;
         const midY = (y1 + y2) / 2;
         path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
-        labelY = y1 - 7;
       } else {
         const toRight = b.left >= a.left;
         x1 = (toRight ? a.right : a.left) - rect.left;
@@ -733,7 +780,6 @@
         y2 = b.top + b.height / 2 - rect.top;
         const midX = (x1 + x2) / 2;
         path = `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
-        labelY = a.top - rect.top - 7;
       }
 
       const connected = selectedModule && (relation.from === selectedModule || relation.to === selectedModule);
@@ -742,10 +788,6 @@
       const title = `${relation.from} → ${relation.to}${relation.label ? ` · ${relation.label}` : ''}`;
       parts.push(`<path class="${className}" d="${path}" marker-end="url(#${marker})"><title>${esc(title)}</title></path>`);
 
-      if (connected && relation.label) {
-        const lx = (x1 + x2) / 2;
-        parts.push(`<text class="edge-label edge-label-active" x="${lx}" y="${labelY}" text-anchor="middle">${esc(relation.label)}</text>`);
-      }
     }
 
     svg.innerHTML = parts.join('');
@@ -846,14 +888,6 @@
     if (document.fonts?.ready) {
       document.fonts.ready.then(scheduleEdges).catch(() => {});
     }
-  }
-
-  function render() {
-    renderTabs();
-    renderChrome();
-    renderRail();
-    renderCanvas();
-    renderDetails();
   }
 
   function init() {

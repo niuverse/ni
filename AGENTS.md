@@ -51,20 +51,28 @@ A task is not done until:
 - [ ] `cargo fmt --all --check` and clippy pass.
 - [ ] The matching card in `docs/board/` has the right `status`, `updated`, and
       `completed` (for done).
-- [ ] A decision that changes architecture has an ADR and a timeline event.
+- [ ] A decision that changes architecture has an ADR and a `decision` event.
+- [ ] Module boundaries or owned paths changed → `project.json` updated.
 - [ ] `cargo xtask dashboard` was run and the regenerated `docs/index.html` is included.
 - [ ] The change does not widen the core without an explicit reason.
 
 ## Dashboard conventions
 
+- Architecture is the first screen. Navigation is Architecture / Work / Docs /
+  Decisions. Do not reintroduce progress bars, completion percentages, or card
+  counts into Architecture.
+- Work is a secondary handoff surface: cards and statuses, no progress chrome.
+- Decisions contains ADRs and `kind = "decision"` events only.
 - One card per file in `docs/board/`, TOML frontmatter + Markdown body.
 - Card IDs are stable: `M0-001`, `M1-002`, … Never renumber.
 - `status`: `backlog | ready | doing | review | done | blocked`.
 - `done` requires `completed`; `blocked` requires `blocked_reason`.
 - `project.json` modules are authored, not inferred from folders. `active` and
   `done` modules must own at least one real path.
-- Keep the browser dashboard read-only. A drag-and-drop writer would create a
-  second source of truth and is out of scope.
+- Keep the browser dashboard read-only, framework-free, and a single offline
+  file. No React/Svelte/Vite, zoom/pan, or drag-editing without an ADR.
+- A drag-and-drop writer would create a second source of truth and is out of
+  scope.
 
 ## Current focus
 

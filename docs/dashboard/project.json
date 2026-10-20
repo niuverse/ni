@@ -209,8 +209,8 @@
       "title": "Dashboard",
       "layer": "engineering",
       "status": "active",
-      "summary": "从 project.json、卡片和 Markdown 生成离线单文件看板。",
-      "contract": "cargo xtask dashboard 可重复构建；--check 保证生成物不过期。",
+      "summary": "从 project.json、模块、卡片和 Markdown 生成 architecture-first 的离线单文件看板。",
+      "contract": "默认 Architecture；Work / Docs / Decisions 为二级视图；cargo xtask dashboard 可重复构建，--check 保证生成物不过期。",
       "paths": [
         "crates/xtask/src/main.rs",
         "docs/dashboard/app.js",
@@ -218,8 +218,9 @@
         "docs/dashboard/template.html"
       ],
       "notes": [
-        "卡片一文件，构建时校验引用与状态。",
-        "浏览器只读；改状态走仓库，避免第二个真相源。"
+        "架构视图不显示进度装饰；模块状态只表示落地程度。",
+        "浏览器只读；改状态走仓库，避免第二个真相源。",
+        "不引入前端框架；单文件离线是硬约束。"
       ]
     }
   ],
@@ -294,6 +295,15 @@
         "M0-002",
         "M0-003",
         "M0-004"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Dashboard 以架构为第一屏",
+      "detail": "默认 Architecture，Work 降为二级；进度装饰移除，Decisions 只收决策。ADR-0003。",
+      "refs": [
+        "adr-0003"
       ]
     }
   ]

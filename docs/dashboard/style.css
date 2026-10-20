@@ -30,9 +30,9 @@
   --surface-2: #23211d;
   --ink: #eae6de;
   --muted: #a8a094;
-  --faint: #7e7669;
+  --faint: #8a8275;
   --line: #2d2a25;
-  --line-strong: #433e36;
+  --line-strong: #4a453c;
   --accent: #8fbfae;
   --accent-soft: rgba(143, 191, 174, 0.12);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.18);
@@ -290,7 +290,7 @@ input {
 .shell {
   height: calc(100vh - 58px);
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 392px;
+  grid-template-columns: 224px minmax(0, 1fr) 380px;
 }
 
 .rail {
@@ -300,7 +300,7 @@ input {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   min-width: 0;
 }
 
@@ -549,7 +549,7 @@ input {
 
 .view-title {
   margin: 4px 0 5px;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 650;
   line-height: 1.1;
   letter-spacing: -0.035em;
@@ -765,7 +765,10 @@ input {
 .arch-canvas {
   position: relative;
   min-width: 760px;
-  padding-bottom: 20px;
+  padding: 8px 10px 18px 0;
+  border-radius: 10px;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--ink) 7%, transparent) 0.7px, transparent 0.8px);
+  background-size: 18px 18px;
 }
 
 .edges {
@@ -863,7 +866,7 @@ input {
 
 .module-card {
   position: relative;
-  width: 214px;
+  width: 220px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -897,6 +900,19 @@ input {
 .module-card.dim {
   opacity: 0.22;
   pointer-events: none;
+}
+
+.module-card.muted {
+  opacity: 0.24;
+}
+
+.module-card.related {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.arch-canvas.has-focus .edge:not(.edge-active) {
+  opacity: 0.12;
 }
 
 .module-head {
@@ -1435,14 +1451,15 @@ button.ref-chip:hover {
 }
 
 .overview-stats {
-  display: flex;
-  gap: 18px;
-  margin: 12px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
 }
 
 .overview-stat strong {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.03em;
 }
@@ -1582,6 +1599,227 @@ button.ref-chip:hover {
   accent-color: var(--accent);
 }
 
+/* ---------- architecture-first ---------- */
+
+.map-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.map-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.map-layer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 4px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.map-layer-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--c, var(--faint));
+  flex: none;
+}
+
+.map-layer-n {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0;
+  color: var(--faint);
+}
+
+.map-module {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  text-align: left;
+}
+
+.map-module:hover {
+  background: var(--surface-2);
+}
+
+.map-module.active {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.map-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex: none;
+}
+
+.map-dot.active,
+.map-dot.done {
+  background: var(--st-done);
+}
+
+.map-dot.planned {
+  background: transparent;
+  border: 1px solid var(--faint);
+}
+
+.map-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.map-module.active .map-title {
+  color: var(--ink);
+}
+
+
+.focus-block {
+  padding: 0 6px 10px;
+}
+
+.focus-kicker {
+  margin-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.focus-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.focus-card:hover {
+  border-color: var(--line-strong);
+}
+
+.focus-id {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--faint);
+}
+
+.focus-title {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.focus-empty {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.rail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--faint);
+}
+
+.filters {
+  display: flex;
+  gap: 3px;
+  margin: -4px 0 14px;
+}
+
+.filter {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.filter:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.filter.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.focus-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+}
+
+.focus-label {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.focus-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.focus-chip:hover {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.section-title {
+  margin: 26px 0 10px;
+  color: var(--faint);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.section-title:first-of-type {
+  margin-top: 0;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 1280px) {
@@ -1595,6 +1833,19 @@ button.ref-chip:hover {
 
   .details {
     padding: 16px 16px 40px;
+  }
+
+  .module-card {
+    width: 196px;
+  }
+
+  .arch-canvas {
+    min-width: 0;
+  }
+
+  .board {
+    min-width: 660px;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
   }
 }
 
