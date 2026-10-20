@@ -1,0 +1,14 @@
+[package]
+name = "ni"
+description = "Minimal, observable coding agent"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ni"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ni-core = { path = "../ni-core" }

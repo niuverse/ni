@@ -1,0 +1,2615 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="ni project dashboard: board, architecture, documents, timeline.">
+<title>ni · project dashboard</title>
+<style>
+:root {
+  --bg: #f4f2ee;
+  --surface: #fbfaf7;
+  --surface-2: #eeece6;
+  --ink: #1d1c19;
+  --muted: #6c675e;
+  --faint: #969084;
+  --line: #ded9cf;
+  --line-strong: #c8c1b4;
+  --accent: #2f5d50;
+  --accent-soft: rgba(47, 93, 80, 0.12);
+  --shadow: 0 1px 2px rgba(29, 28, 25, 0.05), 0 8px 24px rgba(29, 28, 25, 0.04);
+  --code-bg: #1e1d1a;
+  --code-ink: #e7e1d5;
+  --code-line: #302d28;
+  --code-muted: #6f6a5f;
+  --st-backlog: #8c8478;
+  --st-ready: #3f6f9f;
+  --st-doing: #b7791f;
+  --st-review: #6f5aa8;
+  --st-done: #3f7d4f;
+  --st-blocked: #b42318;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+[data-theme="dark"] {
+  --bg: #141412;
+  --surface: #1b1a17;
+  --surface-2: #23211d;
+  --ink: #eae6de;
+  --muted: #a8a094;
+  --faint: #7e7669;
+  --line: #2d2a25;
+  --line-strong: #433e36;
+  --accent: #8fbfae;
+  --accent-soft: rgba(143, 191, 174, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.18);
+  --code-bg: #0e0e0d;
+  --code-ink: #ddd7ca;
+  --code-line: #2b2924;
+  --code-muted: #5f5a50;
+  --st-backlog: #9a9285;
+  --st-ready: #76a6d8;
+  --st-doing: #d3a04a;
+  --st-review: #a78fe0;
+  --st-done: #78b98a;
+  --st-blocked: #e06c61;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input {
+  font: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: relative;
+  z-index: 30;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  flex: none;
+}
+
+.brand-tag {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px;
+  flex: none;
+}
+
+.tab {
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.top-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 205px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 7px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search-key {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+  background: var(--surface-2);
+  flex: none;
+}
+
+.search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.search input::placeholder {
+  color: var(--faint);
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--surface);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.icon-button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* ---------- shell ---------- */
+
+.shell {
+  height: calc(100vh - 58px);
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 392px;
+}
+
+.rail {
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 12px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.rail-section {
+  min-width: 0;
+}
+
+.rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 6px 7px;
+}
+
+.rail-head h2 {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--faint);
+}
+
+.rail-head span {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.milestone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.milestone {
+  width: 100%;
+  text-align: left;
+  padding: 7px 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.milestone:hover {
+  background: var(--surface-2);
+}
+
+.milestone.active {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.milestone-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ms-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-backlog);
+  flex: none;
+}
+
+.ms-dot.active {
+  background: var(--st-doing);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-doing) 16%, transparent);
+}
+
+.ms-dot.done {
+  background: var(--st-done);
+}
+
+.ms-id {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ms-title {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-meta {
+  display: flex;
+  justify-content: space-between;
+  margin: 5px 0 5px 14px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.progress {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.progress > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+  transition: width 0.25s ease;
+}
+
+.milestone .progress {
+  margin-left: 14px;
+}
+
+.progress.wide {
+  height: 5px;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.layer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--c, var(--faint));
+  flex: none;
+}
+
+.layer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-count {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.rail-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rail-doc {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding: 5px 6px;
+  border-radius: 5px;
+}
+
+.rail-doc:hover,
+.rail-doc.active {
+  background: var(--surface-2);
+}
+
+.rd-kind {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+
+.rd-title {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-doc.active .rd-title {
+  color: var(--ink);
+}
+
+.rail-foot {
+  margin-top: auto;
+  padding: 12px 6px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+/* ---------- canvas ---------- */
+
+.canvas {
+  overflow: auto;
+  padding: 22px 24px 48px;
+  background: var(--bg);
+  min-width: 0;
+}
+
+.view-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.view-title {
+  margin: 4px 0 5px;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.view-sub {
+  max-width: 680px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.stats strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.stats .sep {
+  color: var(--faint);
+}
+
+/* ---------- board ---------- */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(152px, 1fr));
+  gap: 10px;
+  min-width: 840px;
+  align-items: start;
+}
+
+.column {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px;
+  min-height: 120px;
+}
+
+.column-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.col-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c, var(--st-backlog));
+}
+
+.col-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 0 5px;
+}
+
+.col-count.warn {
+  color: var(--st-doing);
+  border-color: color-mix(in srgb, var(--st-doing) 40%, var(--line));
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.column.empty .cards::after {
+  content: "No cards";
+  display: block;
+  padding: 10px 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.card {
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 9px 7px;
+  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+.card-title {
+  display: block;
+  margin: 5px 0 7px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.38;
+  color: var(--ink);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9.5px;
+  color: var(--faint);
+}
+
+.card-foot span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card.done {
+  opacity: 0.68;
+}
+
+.card.done .card-title {
+  color: var(--muted);
+}
+
+.card.blocked {
+  border-left: 2px solid var(--st-blocked);
+}
+
+.size {
+  font-family: var(--mono);
+  font-size: 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+  color: var(--faint);
+}
+
+.blocked-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px dashed color-mix(in srgb, var(--st-blocked) 45%, var(--line));
+  background: color-mix(in srgb, var(--st-blocked) 5%, transparent);
+  border-radius: 9px;
+  padding: 9px 10px;
+  margin-bottom: 14px;
+}
+
+.blocked-label {
+  padding-top: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--st-blocked);
+  white-space: nowrap;
+}
+
+.blocked-cards {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.blocked-cards .card {
+  width: 210px;
+  background: var(--surface);
+}
+
+/* ---------- architecture ---------- */
+
+.arch-canvas {
+  position: relative;
+  min-width: 760px;
+  padding-bottom: 20px;
+}
+
+.edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.15;
+  opacity: 0.7;
+}
+
+.edge-active {
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  opacity: 1;
+}
+
+.edge-label {
+  fill: var(--faint);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.arrow-head {
+  fill: var(--line-strong);
+}
+
+.arrow-head-active {
+  fill: var(--accent);
+}
+
+.edge-label-active {
+  fill: var(--accent);
+}
+
+.arch-layer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 22px;
+  padding: 15px 0 18px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.arch-layer:first-child {
+  padding-top: 4px;
+}
+
+.arch-layer:last-child {
+  border-bottom: 0;
+}
+
+.layer-label {
+  padding-top: 2px;
+  text-align: right;
+}
+
+.layer-index {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.layer-label h2 {
+  margin: 1px 0 3px;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.layer-label p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+.layer-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.module-card {
+  position: relative;
+  width: 214px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--module-color, var(--faint));
+  border-radius: 7px;
+  padding: 9px 11px 10px;
+  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.module-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.module-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.module-card.planned {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  border-style: dashed;
+  border-top-style: solid;
+}
+
+.module-card.planned .module-summary {
+  color: var(--faint);
+}
+
+.module-card.dim {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.module-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.module-status::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--module-color, var(--faint));
+}
+
+.module-title {
+  display: block;
+  margin: 5px 0 3px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.module-summary {
+  display: block;
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.module-path {
+  display: block;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- docs ---------- */
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.doc-card {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 13px;
+  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.doc-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.doc-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.doc-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.doc-kind {
+  font-family: var(--mono);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--faint);
+}
+
+.doc-status {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--st-done);
+}
+
+.doc-title {
+  display: block;
+  margin: 0 0 5px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.doc-excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.doc-path {
+  display: block;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  position: relative;
+  max-width: 780px;
+  padding-left: 16px;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.tl-item {
+  position: relative;
+  padding: 0 0 22px 14px;
+}
+
+.tl-item::before {
+  content: "";
+  position: absolute;
+  left: -15px;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+}
+
+.tl-date {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: var(--faint);
+}
+
+.tl-kind {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.tl-title {
+  margin: 3px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tl-detail {
+  max-width: 640px;
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.tl-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ref-chip {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--faint);
+}
+
+button.ref-chip:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+/* ---------- details ---------- */
+
+.details {
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  padding: 18px 20px 48px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.details-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.details-title {
+  margin: 2px 0 8px;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 7px;
+  color: var(--muted);
+}
+
+.badge .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge-backlog { color: var(--st-backlog); }
+.badge-ready { color: var(--st-ready); }
+.badge-doing { color: var(--st-doing); }
+.badge-review { color: var(--st-review); }
+.badge-done { color: var(--st-done); }
+.badge-blocked { color: var(--st-blocked); }
+.badge-planned { color: var(--faint); }
+.badge-active { color: var(--st-doing); }
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px 12px;
+  margin: 10px 0 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.meta-k {
+  margin-bottom: 1px;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.meta-v {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.detail-section {
+  margin: 18px 0;
+}
+
+.detail-section h2 {
+  margin: 0 0 7px;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+
+.detail-section p {
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes li {
+  position: relative;
+  padding-left: 10px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.notes li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.path-chip {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inline-link {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 2px;
+}
+
+.relation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.relation {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.relation .arrow {
+  font-family: var(--mono);
+  color: var(--faint);
+}
+
+.relation button {
+  font-size: 10px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+
+.callout {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--st-blocked) 35%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--st-blocked) 5%, transparent);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--st-blocked);
+}
+
+.source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.source-tab {
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-tab.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.source-box {
+  max-height: 420px;
+  padding: 8px 0;
+  border: 1px solid var(--code-line);
+  border-radius: 7px;
+  background: var(--code-bg);
+  overflow: auto;
+}
+
+.source-line {
+  display: flex;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1.55;
+  color: var(--code-ink);
+  white-space: pre;
+}
+
+.source-line .ln {
+  flex: 0 0 3.2em;
+  padding-right: 9px;
+  text-align: right;
+  color: var(--code-muted);
+  user-select: none;
+}
+
+.source-line .lc {
+  padding-right: 12px;
+}
+
+.hint {
+  margin: 5px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+}
+
+.empty {
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.overview-block {
+  margin: 10px 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.overview-block h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+}
+
+.overview-block p {
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.overview-stats {
+  display: flex;
+  gap: 18px;
+  margin: 12px 0;
+}
+
+.overview-stat strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.overview-stat span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+/* ---------- markdown ---------- */
+
+.md {
+  font-size: 12.5px;
+  line-height: 1.68;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md h1,
+.md h2,
+.md h3 {
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.md h1 {
+  margin: 20px 0 8px;
+  font-size: 17px;
+}
+
+.md h2 {
+  margin: 22px 0 7px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+
+.md h3 {
+  margin: 16px 0 5px;
+  font-size: 12.5px;
+}
+
+.md p {
+  margin: 0 0 10px;
+}
+
+.md ul,
+.md ol {
+  margin: 0 0 11px;
+  padding-left: 17px;
+}
+
+.md li {
+  margin: 3px 0;
+}
+
+.md li::marker {
+  color: var(--faint);
+}
+
+.md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 2px;
+}
+
+.md code {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.md pre {
+  margin: 11px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--code-line);
+  border-radius: 7px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  overflow: auto;
+}
+
+.md pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.md blockquote {
+  margin: 11px 0;
+  padding: 1px 11px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+
+.md table {
+  width: 100%;
+  margin: 11px 0;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.md th,
+.md td {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.md hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.md input[type="checkbox"] {
+  margin: 0 5px 0 0;
+  accent-color: var(--accent);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1280px) {
+  .shell {
+    grid-template-columns: 210px minmax(0, 1fr) 344px;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  .details {
+    padding: 16px 16px 40px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .shell {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+
+  .details {
+    display: none;
+  }
+
+  .top-actions .status-chip {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    height: auto;
+    min-height: calc(100vh - 58px);
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .canvas {
+    padding: 16px 14px 32px;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  .tabs .tab {
+    padding: 5px 7px;
+    font-size: 10.5px;
+  }
+
+  .search {
+    width: 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+
+.md li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -17px;
+}
+
+.md li input[type="checkbox"] {
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/board" data-view="board" aria-label="ni dashboard">
+    <span class="brand-mark">ni</span>
+    <span class="brand-tag">minimal, observable coding agent</span>
+  </a>
+
+  <nav class="tabs" aria-label="Views">
+    <button class="tab" type="button" data-view="board">Board</button>
+    <button class="tab" type="button" data-view="arch">Architecture</button>
+    <button class="tab" type="button" data-view="docs">Docs</button>
+    <button class="tab" type="button" data-view="timeline">Timeline</button>
+  </nav>
+
+  <div class="top-actions">
+    <label class="search" aria-label="Filter current view">
+      <span class="search-key">/</span>
+      <input id="search" type="search" autocomplete="off" spellcheck="false" placeholder="Filter">
+    </label>
+    <span class="status-chip" id="project-status"></span>
+    <button class="icon-button" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="shell">
+  <aside class="rail" aria-label="Project navigation">
+    <section class="rail-section">
+      <div class="rail-head"><h2>Milestones</h2><span id="milestone-count"></span></div>
+      <div id="milestone-list" class="milestone-list"></div>
+    </section>
+
+    <section class="rail-section">
+      <div class="rail-head"><h2>Layers</h2><span id="layer-count"></span></div>
+      <div id="layer-list" class="layer-list"></div>
+    </section>
+
+    <section class="rail-section rail-docs">
+      <div class="rail-head"><h2>Docs</h2><span id="doc-count"></span></div>
+      <div id="rail-docs" class="rail-doc-list"></div>
+    </section>
+
+    <div class="rail-foot" id="rail-foot"></div>
+  </aside>
+
+  <section class="canvas" id="canvas" aria-label="Project view" tabindex="-1"></section>
+  <aside class="details" id="details" aria-label="Details"></aside>
+</main>
+
+<noscript>
+  <p style="padding:24px;font-family:monospace">This dashboard needs JavaScript. Source files live in docs/dashboard/.</p>
+</noscript>
+
+<script id="ni-data" type="application/json">{"project":{"name":"ni","title":"ni","tagline":"minimal, observable coding agent","summary":"一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。","status":"M0 · Bootstrap","repo":"niuverse/ni","language":"Rust"},"milestones":[{"id":"M0","title":"Bootstrap","status":"active","goal":"跑通 headless 闭环：一个 provider、六个工具、可恢复的会话。","exit":["ni exec 能修复一个真实小 bug","session 可 resume，坏尾行不丢历史","loop / tools 有离线 fixture 测试"]},{"id":"M1","title":"Interaction","status":"planned","goal":"把审批、沙箱和流式交互补齐，让 harness 可以放心跑长任务。","exit":["TUI 流式输出与 diff 预览","sandbox / approval / network 三轴生效","Ctrl-C 取消并杀掉工具进程组"]},{"id":"M2","title":"Context","status":"planned","goal":"让长会话稳定且便宜：压缩、分层指令、缓存可观测。","exit":["compaction 生成可执行 handoff","AGENTS.md 按目录分层发现","cached token 命中率可见"]},{"id":"M3","title":"Scale","status":"planned","goal":"多会话、回放与子代理。","exit":["exec --json 成为稳定协议","fork / replay 可用","subagent 有独立日志并可汇总"]}],"layers":[{"id":"interface","name":"Interface","note":"CLI、TUI、事件流"},{"id":"engine","name":"Engine","note":"turn loop 与上下文投影"},{"id":"adapters","name":"Adapters","note":"模型、工具、沙箱"},{"id":"state","name":"State","note":"append-only 事件日志"},{"id":"engineering","name":"Engineering","note":"构建、看板、测试"}],"modules":[{"id":"cli","title":"CLI","layer":"interface","status":"active","summary":"解析参数、组装 session 与 loop，提供 headless 入口。","contract":"ni exec \u003cprompt\u003e 启动一次运行；ni session 管理日志。不持有对话状态。","paths":["crates/ni-cli/src/main.rs"],"notes":["CLI 只做参数与生命周期，不实现 turn 逻辑。","输出模式分 human 与 --json，后者从第一天就稳定。"],"sources":[{"path":"crates/ni-cli/src/main.rs","language":"rust","text":"use std::path::PathBuf;\n\nuse anyhow::Result;\nuse clap::{Parser, Subcommand};\nuse ni_core::{now_ms, Event, SessionLog};\n\n#[derive(Debug, Parser)]\n#[command(name = \"ni\", version, about = \"Minimal, observable coding agent\")]\nstruct Cli {\n    #[command(subcommand)]\n    command: Option\u003cCommand\u003e,\n}\n\n#[derive(Debug, Subcommand)]\nenum Command {\n    /// Inspect and create append-only session logs\n    Session {\n        #[command(subcommand)]\n        command: SessionCommand,\n    },\n}\n\n#[derive(Debug, Subcommand)]\nenum SessionCommand {\n    /// Create a session and print its path\n    New {\n        /// Directory for the session file\n        #[arg(long)]\n        dir: Option\u003cPathBuf\u003e,\n    },\n    /// Print the events in a session file\n    Show {\n        /// Path to a .jsonl session file\n        path: PathBuf,\n    },\n    /// List session files\n    List {\n        /// Directory containing session files\n        #[arg(long)]\n        dir: Option\u003cPathBuf\u003e,\n    },\n}\n\nfn main() -\u003e Result\u003c()\u003e {\n    let cli = Cli::parse();\n    match cli.command {\n        Some(Command::Session { command }) =\u003e run_session(command),\n        None =\u003e {\n            print_banner();\n            Ok(())\n        }\n    }\n}\n\nfn run_session(command: SessionCommand) -\u003e Result\u003c()\u003e {\n    match command {\n        SessionCommand::New { dir } =\u003e {\n            let dir = dir.unwrap_or_else(default_sessions_dir);\n            let mut log = SessionLog::create(\u0026dir)?;\n            log.append(\u0026Event::SessionStart {\n                id: log.id().to_string(),\n                cwd: std::env::current_dir()?.display().to_string(),\n                model: \"unset\".into(),\n                ts: now_ms(),\n            })?;\n            println!(\"{}\", log.path().display());\n            Ok(())\n        }\n        SessionCommand::Show { path } =\u003e {\n            let loaded = ni_core::load(\u0026path)?;\n            println!(\"session  {}\", path.display());\n            println!(\"events   {}\", loaded.events.len());\n            println!(\"warnings {}\", loaded.warnings.len());\n            for warning in \u0026loaded.warnings {\n                eprintln!(\"warning: {warning}\");\n            }\n            for event in \u0026loaded.events {\n                println!(\"{:\u003e13}  {}\", event.ts(), event.kind());\n            }\n            Ok(())\n        }\n        SessionCommand::List { dir } =\u003e {\n            let dir = dir.unwrap_or_else(default_sessions_dir);\n            for path in ni_core::session::list(\u0026dir)? {\n                println!(\"{}\", path.display());\n            }\n            Ok(())\n        }\n    }\n}\n\nfn default_sessions_dir() -\u003e PathBuf {\n    if let Ok(home) = std::env::var(\"NI_HOME\") {\n        return PathBuf::from(home).join(\"sessions\");\n    }\n    if let Ok(home) = std::env::var(\"HOME\") {\n        return PathBuf::from(home).join(\".ni\").join(\"sessions\");\n    }\n    PathBuf::from(\".ni\").join(\"sessions\")\n}\n\nfn print_banner() {\n    println!(\n        \"ni {} · minimal, observable coding agent\",\n        env!(\"CARGO_PKG_VERSION\")\n    );\n    println!();\n    println!(\"status   M0 · bootstrap\");\n    println!(\"docs     docs/index.html\");\n    println!(\"sessions {}\", default_sessions_dir().display());\n    println!();\n    println!(\"next     ni session new\");\n    println!(\"         cargo xtask dashboard\");\n}\n","truncated":false}]},{"id":"tui","title":"TUI","layer":"interface","status":"planned","summary":"流式渲染、审批提示、diff 展示；只消费事件流。","contract":"不 import loop 内部；通过事件通道与 core 解耦。","paths":["crates/ni-tui/src/lib.rs"],"notes":["TUI 最后做；先把 headless 跑通。","diff 展示是审批体验的核心，不是装饰。"],"sources":[]},{"id":"loop","title":"Agent Loop","layer":"engine","status":"planned","summary":"唯一的 turn 引擎：project → stream → dispatch → append。","contract":"run(session, input, signal) -\u003e Result\u003cOutcome\u003e；不关心 provider wire format。","paths":["crates/ni-core/src/loop.rs"],"notes":["只读工具可并发，写操作串行。","重试只能在 turn 边界，工具执行后不重放。"],"sources":[]},{"id":"context","title":"Context","layer":"engine","status":"planned","summary":"把全量日志投影成模型上下文：预算、裁剪、compaction。","contract":"project(log, budget) -\u003e Context；有损但不修改日志。","paths":["crates/ni-core/src/context.rs"],"notes":["日志是全量，上下文是投影；压缩只影响投影。","保持前缀稳定以命中 provider prompt cache。"],"sources":[]},{"id":"providers","title":"Providers","layer":"adapters","status":"planned","summary":"把 OpenAI / Anthropic 的流式响应归一化成 StreamEvent。","contract":"Provider::stream(ctx, tools, signal) -\u003e EventStream；错误分可重试、致命、上下文溢出。","paths":["crates/ni-provider/src/lib.rs"],"notes":["适配层要薄，不抹平 provider 的所有怪癖。","usage 必须包含 cached / reasoning tokens。"],"sources":[]},{"id":"tools","title":"Tools","layer":"adapters","status":"planned","summary":"read / write / edit / grep / glob / bash 六个工具与注册表。","contract":"JSON Schema 输入；输出截断并给出续读指针；写操作串行。","paths":["crates/ni-tools/src/lib.rs"],"notes":["edit 用精确字符串替换，要求唯一匹配。","read-before-write 是策略，不是提示词。"],"sources":[]},{"id":"sandbox","title":"Sandbox","layer":"adapters","status":"planned","summary":"sandbox / approval / network 三轴策略。","contract":"执行前返回 allow / ask / deny；bash 必须经过进程组与超时包装。","paths":["crates/ni-sandbox/src/lib.rs"],"notes":["进程内路径校验不是安全边界，bash 能绕过。","没有真沙箱时，变更型 bash 强制审批。"],"sources":[]},{"id":"session","title":"Session Log","layer":"state","status":"active","summary":"append-only JSONL 事件日志，resume 与 fork 的基础。","contract":"SessionLog::append 只追加；load 容忍坏尾行并报告 warning；日志是唯一真相。","paths":["crates/ni-core/src/session.rs","crates/ni-core/src/event.rs"],"notes":["每条事件立即 flush，进程崩溃最多丢最后一行。","内存状态是日志的 fold，不维护第二份真相。"],"sources":[{"path":"crates/ni-core/src/session.rs","language":"rust","text":"//! Append-only JSONL session storage.\n//!\n//! A session is a file of one JSON event per line. Appends are flushed\n//! immediately; loading tolerates a corrupt tail instead of discarding the\n//! whole session.\n\nuse std::fs::{self, File, OpenOptions};\nuse std::io::{BufRead, BufReader, BufWriter, Write};\nuse std::path::{Path, PathBuf};\nuse std::sync::atomic::{AtomicU64, Ordering};\n\nuse anyhow::{Context, Result};\n\nuse crate::event::{now_ms, Event};\n\nstatic SESSION_SEQ: AtomicU64 = AtomicU64::new(0);\n\n#[derive(Debug)]\npub struct LoadedSession {\n    pub events: Vec\u003cEvent\u003e,\n    /// Lines that could not be decoded. The rest of the session is still valid.\n    pub warnings: Vec\u003cString\u003e,\n}\n\n#[derive(Debug)]\npub struct SessionLog {\n    id: String,\n    path: PathBuf,\n    writer: BufWriter\u003cFile\u003e,\n}\n\nimpl SessionLog {\n    /// Create a new session file under `dir`.\n    pub fn create(dir: \u0026Path) -\u003e Result\u003cSelf\u003e {\n        fs::create_dir_all(dir)\n            .with_context(|| format!(\"create session directory {}\", dir.display()))?;\n\n        let seq = SESSION_SEQ.fetch_add(1, Ordering::Relaxed);\n        let id = format!(\"{}-{}-{}\", now_ms(), std::process::id(), seq);\n        let path = dir.join(format!(\"{id}.jsonl\"));\n        let file = OpenOptions::new()\n            .create_new(true)\n            .append(true)\n            .open(\u0026path)\n            .with_context(|| format!(\"create session file {}\", path.display()))?;\n\n        Ok(Self {\n            id,\n            path,\n            writer: BufWriter::new(file),\n        })\n    }\n\n    pub fn id(\u0026self) -\u003e \u0026str {\n        \u0026self.id\n    }\n\n    pub fn path(\u0026self) -\u003e \u0026Path {\n        \u0026self.path\n    }\n\n    /// Append one event and flush it to disk.\n    pub fn append(\u0026mut self, event: \u0026Event) -\u003e Result\u003c()\u003e {\n        serde_json::to_writer(\u0026mut self.writer, event).context(\"serialize session event\")?;\n        self.writer\n            .write_all(b\"\\n\")\n            .context(\"write session event\")?;\n        self.writer.flush().context(\"flush session event\")?;\n        Ok(())\n    }\n}\n\n/// Read a session, reporting undecodable lines as warnings.\npub fn load(path: \u0026Path) -\u003e Result\u003cLoadedSession\u003e {\n    let file = File::open(path).with_context(|| format!(\"open session file {}\", path.display()))?;\n    let reader = BufReader::new(file);\n\n    let mut events = Vec::new();\n    let mut warnings = Vec::new();\n\n    for (index, line) in reader.lines().enumerate() {\n        let line = line.with_context(|| format!(\"read line {}\", index + 1))?;\n        if line.trim().is_empty() {\n            continue;\n        }\n        match serde_json::from_str::\u003cEvent\u003e(\u0026line) {\n            Ok(event) =\u003e events.push(event),\n            Err(error) =\u003e warnings.push(format!(\"line {}: {error}\", index + 1)),\n        }\n    }\n\n    Ok(LoadedSession { events, warnings })\n}\n\n/// List session files in `dir`, sorted by name.\npub fn list(dir: \u0026Path) -\u003e Result\u003cVec\u003cPathBuf\u003e\u003e {\n    if !dir.is_dir() {\n        return Ok(Vec::new());\n    }\n\n    let mut paths = Vec::new();\n    for entry in\n        fs::read_dir(dir).with_context(|| format!(\"read session directory {}\", dir.display()))?\n    {\n        let entry = entry?;\n        let path = entry.path();\n        if path.extension().is_some_and(|ext| ext == \"jsonl\") {\n            paths.push(path);\n        }\n    }\n    paths.sort();\n    Ok(paths)\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    use crate::event::{Event, ToolCall, Usage};\n\n    fn temp_dir(tag: \u0026str) -\u003e PathBuf {\n        static COUNTER: AtomicU64 = AtomicU64::new(0);\n        let n = COUNTER.fetch_add(1, Ordering::Relaxed);\n        let dir = std::env::temp_dir().join(format!(\"ni-core-{tag}-{}-{n}\", now_ms()));\n        let _ = fs::remove_dir_all(\u0026dir);\n        fs::create_dir_all(\u0026dir).expect(\"create temp dir\");\n        dir\n    }\n\n    #[test]\n    fn round_trip_preserves_events() {\n        let dir = temp_dir(\"roundtrip\");\n        let mut log = SessionLog::create(\u0026dir).expect(\"create log\");\n        let ts = now_ms();\n\n        let events = vec![\n            Event::SessionStart {\n                id: log.id().to_string(),\n                cwd: \"/tmp/project\".into(),\n                model: \"test-model\".into(),\n                ts,\n            },\n            Event::UserMessage {\n                text: \"fix the failing test\".into(),\n                ts,\n            },\n            Event::AssistantMessage {\n                text: \"reading the test\".into(),\n                reasoning: Some(\"need the failure output first\".into()),\n                tool_calls: vec![ToolCall {\n                    id: \"call-1\".into(),\n                    name: \"read\".into(),\n                    input: serde_json::json!({\"path\": \"src/lib.rs\"}),\n                }],\n                ts,\n            },\n            Event::ToolResult {\n                call_id: \"call-1\".into(),\n                ok: true,\n                output: \"fn main() {}\".into(),\n                ts,\n            },\n            Event::TurnEnd {\n                usage: Usage {\n                    input_tokens: 120,\n                    output_tokens: 30,\n                    cached_tokens: 80,\n                    reasoning_tokens: 10,\n                },\n                ts,\n            },\n        ];\n\n        for event in \u0026events {\n            log.append(event).expect(\"append\");\n        }\n\n        let loaded = load(log.path()).expect(\"load\");\n        assert_eq!(loaded.events, events);\n        assert!(loaded.warnings.is_empty());\n        assert_eq!(list(\u0026dir).expect(\"list\"), vec![log.path().to_path_buf()]);\n\n        fs::remove_dir_all(dir).expect(\"cleanup\");\n    }\n\n    #[test]\n    fn corrupt_tail_is_a_warning_not_a_failure() {\n        let dir = temp_dir(\"corrupt\");\n        let path = dir.join(\"session.jsonl\");\n        let good = serde_json::to_string(\u0026Event::UserMessage {\n            text: \"hello\".into(),\n            ts: 1,\n        })\n        .expect(\"serialize\");\n        fs::write(\u0026path, format!(\"{good}\\n{{ not json }}\\n\")).expect(\"write fixture\");\n\n        let loaded = load(\u0026path).expect(\"load\");\n        assert_eq!(loaded.events.len(), 1);\n        assert_eq!(loaded.warnings.len(), 1);\n        assert!(loaded.warnings[0].starts_with(\"line 2:\"));\n\n","truncated":true},{"path":"crates/ni-core/src/event.rs","language":"rust","text":"//! Durable session events.\n//!\n//! Events are the only representation of a session that survives the process.\n//! The in-memory conversation is a projection of these events; if something is\n//! not appended here, it does not exist after the process exits.\n\nuse std::time::{SystemTime, UNIX_EPOCH};\n\nuse serde::{Deserialize, Serialize};\n\n/// Milliseconds since the Unix epoch.\npub type Timestamp = u64;\n\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]\npub struct ToolCall {\n    pub id: String,\n    pub name: String,\n    #[serde(default)]\n    pub input: serde_json::Value,\n}\n\n#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]\npub struct Usage {\n    #[serde(default)]\n    pub input_tokens: u64,\n    #[serde(default)]\n    pub output_tokens: u64,\n    #[serde(default)]\n    pub cached_tokens: u64,\n    #[serde(default)]\n    pub reasoning_tokens: u64,\n}\n\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]\n#[serde(tag = \"type\", rename_all = \"snake_case\")]\npub enum Event {\n    SessionStart {\n        id: String,\n        cwd: String,\n        model: String,\n        ts: Timestamp,\n    },\n    UserMessage {\n        text: String,\n        ts: Timestamp,\n    },\n    AssistantMessage {\n        #[serde(default)]\n        text: String,\n        #[serde(default, skip_serializing_if = \"Option::is_none\")]\n        reasoning: Option\u003cString\u003e,\n        #[serde(default)]\n        tool_calls: Vec\u003cToolCall\u003e,\n        ts: Timestamp,\n    },\n    ToolResult {\n        call_id: String,\n        ok: bool,\n        output: String,\n        ts: Timestamp,\n    },\n    TurnEnd {\n        #[serde(default)]\n        usage: Usage,\n        ts: Timestamp,\n    },\n    Compaction {\n        summary: String,\n        /// Number of events replaced by this compaction.\n        upto: u64,\n        ts: Timestamp,\n    },\n    SessionEnd {\n        ts: Timestamp,\n    },\n}\n\nimpl Event {\n    /// Stable name used in logs and tests.\n    pub fn kind(\u0026self) -\u003e \u0026'static str {\n        match self {\n            Self::SessionStart { .. } =\u003e \"session_start\",\n            Self::UserMessage { .. } =\u003e \"user_message\",\n            Self::AssistantMessage { .. } =\u003e \"assistant_message\",\n            Self::ToolResult { .. } =\u003e \"tool_result\",\n            Self::TurnEnd { .. } =\u003e \"turn_end\",\n            Self::Compaction { .. } =\u003e \"compaction\",\n            Self::SessionEnd { .. } =\u003e \"session_end\",\n        }\n    }\n\n    pub fn ts(\u0026self) -\u003e Timestamp {\n        match self {\n            Self::SessionStart { ts, .. }\n            | Self::UserMessage { ts, .. }\n            | Self::AssistantMessage { ts, .. }\n            | Self::ToolResult { ts, .. }\n            | Self::TurnEnd { ts, .. }\n            | Self::Compaction { ts, .. }\n            | Self::SessionEnd { ts } =\u003e *ts,\n        }\n    }\n}\n\npub fn now_ms() -\u003e Timestamp {\n    SystemTime::now()\n        .duration_since(UNIX_EPOCH)\n        .unwrap_or_default()\n        .as_millis() as Timestamp\n}\n","truncated":false}]},{"id":"dashboard","title":"Dashboard","layer":"engineering","status":"active","summary":"从 project.json、卡片和 Markdown 生成离线单文件看板。","contract":"cargo xtask dashboard 可重复构建；--check 保证生成物不过期。","paths":["crates/xtask/src/main.rs","docs/dashboard/app.js","docs/dashboard/style.css","docs/dashboard/template.html"],"notes":["卡片一文件，构建时校验引用与状态。","浏览器只读；改状态走仓库，避免第二个真相源。"],"sources":[{"path":"crates/xtask/src/main.rs","language":"rust","text":"mod load;\nmod model;\nmod render;\nmod validate;\n\nuse std::path::PathBuf;\n\nuse anyhow::{bail, Result};\n\nfn main() -\u003e Result\u003c()\u003e {\n    let mut args = std::env::args().skip(1);\n\n    match args.next().as_deref() {\n        Some(\"dashboard\") =\u003e {\n            let mut check = false;\n            for arg in args {\n                match arg.as_str() {\n                    \"--check\" =\u003e check = true,\n                    other =\u003e bail!(\"unknown argument `{other}`\\n\\n{}\", help_text()),\n                }\n            }\n            let root = find_root()?;\n            let dashboard = load::build(\u0026root)?;\n            render::write_dashboard(\u0026root, \u0026dashboard, check)\n        }\n        Some(\"-h\") | Some(\"--help\") | None =\u003e {\n            println!(\"{}\", help_text());\n            Ok(())\n        }\n        Some(other) =\u003e bail!(\"unknown xtask `{other}`\\n\\n{}\", help_text()),\n    }\n}\n\nfn find_root() -\u003e Result\u003cPathBuf\u003e {\n    let mut dir = std::env::current_dir()?;\n    loop {\n        if dir.join(\"docs/dashboard/project.json\").is_file() {\n            return Ok(dir);\n        }\n        if !dir.pop() {\n            bail!(\"could not find workspace root (docs/dashboard/project.json)\");\n        }\n    }\n}\n\nfn help_text() -\u003e String {\n    [\n        \"xtask\",\n        \"\",\n        \"  cargo xtask dashboard          build docs/index.html\",\n        \"  cargo xtask dashboard --check  fail if generated files are stale\",\n    ]\n    .join(\"\\n\")\n}\n","truncated":false},{"path":"docs/dashboard/app.js","language":"javascript","text":"(() =\u003e {\n  'use strict';\n\n  const DATA = JSON.parse(document.getElementById('ni-data').textContent);\n\n  const VIEWS = ['board', 'arch', 'docs', 'timeline'];\n  const STATUS_COLUMNS = ['backlog', 'ready', 'doing', 'review', 'done'];\n  const STATUS_LABEL = {\n    backlog: 'Backlog',\n    ready: 'Ready',\n    doing: 'Doing',\n    review: 'Review',\n    done: 'Done',\n    blocked: 'Blocked',\n    planned: 'Planned',\n    active: 'Active',\n  };\n  const STATUS_COLORS = {\n    backlog: '#8c8478',\n    ready: '#3f6f9f',\n    doing: '#b7791f',\n    review: '#6f5aa8',\n    done: '#3f7d4f',\n    blocked: '#b42318',\n  };\n  const SIZE_POINTS = { S: 1, M: 2, L: 3 };\n  const LAYER_COLORS = {\n    interface: '#4c7bd9',\n    engine: '#b57436',\n    adapters: '#8768bf',\n    state: '#5c8f4a',\n    engineering: '#8a8175',\n  };\n  const KIND_LABEL = { adr: 'ADR', doc: 'Doc', guide: 'Guide' };\n\n  const canvas = document.getElementById('canvas');\n  const details = document.getElementById('details');\n  const search = document.getElementById('search');\n  const themeButton = document.getElementById('theme-toggle');\n\n  const cardById = new Map(DATA.cards.map((card) =\u003e [card.id, card]));\n  const moduleById = new Map(DATA.modules.map((module) =\u003e [module.id, module]));\n  const docById = new Map(DATA.docs.map((doc) =\u003e [doc.id, doc]));\n  const milestoneById = new Map(DATA.milestones.map((milestone) =\u003e [milestone.id, milestone]));\n  const layerById = new Map(DATA.layers.map((layer) =\u003e [layer.id, layer]));\n\n  const state = {\n    view: 'board',\n    milestone: currentMilestoneId(),\n    selection: null,\n    query: '',\n    sourceIndex: 0,\n  };\n\n  let edgeFrame = 0;\n\n  function currentMilestoneId() {\n    const active = DATA.milestones.find((milestone) =\u003e milestone.status === 'active');\n    return active ? active.id : 'all';\n  }\n\n  function esc(value) {\n    return String(value ?? '').replace(/[\u0026\u003c\u003e\"']/g, (character) =\u003e ({\n      '\u0026': '\u0026amp;',\n      '\u003c': '\u0026lt;',\n      '\u003e': '\u0026gt;',\n      '\"': '\u0026quot;',\n      \"'\": '\u0026#39;',\n    }[character]));\n  }\n\n  function fmtDate(value) {\n    return value ? value.slice(5) : '—';\n  }\n\n  function docKind(kind) {\n    return KIND_LABEL[kind] || String(kind || 'doc').toUpperCase();\n  }\n\n  function layerColor(id) {\n    return LAYER_COLORS[id] || '#8a8175';\n  }\n\n  function layerName(id) {\n    const layer = layerById.get(id);\n    return layer ? layer.name : id;\n  }\n\n  function moduleTitle(id) {\n    const module = moduleById.get(id);\n    return module ? module.title : id;\n  }\n\n  function statusBadge(status) {\n    const label = STATUS_LABEL[status] || status;\n    return `\u003cspan class=\"badge badge-${esc(status)}\"\u003e\u003cspan class=\"dot\"\u003e\u003c/span\u003e${esc(label)}\u003c/span\u003e`;\n  }\n\n  function milestoneStats(id) {\n    const cards = DATA.cards.filter((card) =\u003e id === 'all' || card.milestone === id);\n    const done = cards.filter((card) =\u003e card.status === 'done');\n    const points = cards.reduce((sum, card) =\u003e sum + (SIZE_POINTS[card.size] || 1), 0);\n    const donePoints = done.reduce((sum, card) =\u003e sum + (SIZE_POINTS[card.size] || 1), 0);\n    return {\n      total: cards.length,\n      done: done.length,\n      points,\n      donePoints,\n      pct: points ? Math.round((donePoints / points) * 100) : 0,\n    };\n  }\n\n  function isCardSelected(id) {\n    return state.selection?.type === 'card' \u0026\u0026 state.selection.id === id;\n  }\n\n  function isModuleSelected(id) {\n    return state.selection?.type === 'module' \u0026\u0026 state.selection.id === id;\n  }\n\n  function isDocSelected(id) {\n    return state.selection?.type === 'doc' \u0026\u0026 state.selection.id === id;\n  }\n\n  function cardMatches(card, query) {\n    if (!query) return true;\n    return [card.id, card.title, card.module, card.status, card.priority]\n      .filter(Boolean)\n      .join(' ')\n      .toLowerCase()\n      .includes(query);\n  }\n\n  function moduleMatches(module, query) {\n    if (!query) return true;\n    return [module.id, module.title, module.summary, module.layer, module.status]\n      .filter(Boolean)\n      .join(' ')\n      .toLowerCase()\n      .includes(query);\n  }\n\n  function docMatches(doc, query) {\n    if (!query) return true;\n    return [doc.id, doc.title, doc.kind, doc.status, doc.summary, doc.excerpt, doc.path]\n      .filter(Boolean)\n      .join(' ')\n      .toLowerCase()\n      .includes(query);\n  }\n\n  function eventMatches(event, query) {\n    if (!query) return true;\n    return [event.date, event.kind, event.title, event.detail, ...(event.refs || [])]\n      .filter(Boolean)\n      .join(' ')\n      .toLowerCase()\n      .includes(query);\n  }\n\n  function viewHead(kicker, title, subtitle, stats) {\n    return `\u003cdiv class=\"view-head\"\u003e\n      \u003cdiv\u003e\n        \u003cdiv class=\"kicker\"\u003e${esc(kicker)}\u003c/div\u003e\n        \u003ch1 class=\"view-title\"\u003e${esc(title)}\u003c/h1\u003e\n        ${subtitle ? `\u003cp class=\"view-sub\"\u003e${esc(subtitle)}\u003c/p\u003e` : ''}\n      \u003c/div\u003e\n      ${stats ? `\u003cdiv class=\"stats\"\u003e${stats}\u003c/div\u003e` : ''}\n    \u003c/div\u003e`;\n  }\n\n  function compareCards(a, b) {\n    const priority = { P0: 0, P1: 1, P2: 2 };\n    const pa = priority[a.priority] ?? 9;\n    const pb = priority[b.priority] ?? 9;\n    return pa - pb || a.id.localeCompare(b.id);\n  }\n\n  function cardHtml(card) {\n    const module = card.module ? moduleById.get(card.module) : null;\n    const selected = isCardSelected(card.id);\n    return `\u003cbutton class=\"card${card.status === 'done' ? ' done' : ''}${card.status === 'blocked' ? ' blocked' : ''}${selected ? ' selected' : ''}\" type=\"button\" data-card=\"${esc(card.id)}\" aria-pressed=\"${selected}\"\u003e\n      \u003cspan class=\"card-top\"\u003e\u003cspan\u003e${esc(card.id)}\u003c/span\u003e\u003cspan class=\"size\"\u003e${esc(card.size)}\u003c/span\u003e\u003c/span\u003e\n      \u003cspan class=\"card-title\"\u003e${esc(card.title)}\u003c/span\u003e\n      \u003cspan class=\"card-foot\"\u003e\u003cspan\u003e${module ? esc(module.title) : '—'}\u003c/span\u003e\u003cspan\u003e${esc(fmtDate(card.updated))}\u003c/span\u003e\u003c/span\u003e\n    \u003c/button\u003e`;\n  }\n\n  function renderMilestones() {\n    const allStats = milestoneStats('all');\n    let html = `\u003cbutton class=\"milestone${state.milestone === 'all' ? ' active' : ''}\" type=\"button\" data-milestone=\"all\" aria-pressed=\"${state.milestone === 'all'}\"\u003e\n      \u003cspan class=\"milestone-top\"\u003e\u003cspan class=\"ms-dot\"\u003e\u003c/span\u003e\u003cspan class=\"ms-id\"\u003eALL\u003c/span\u003e\u003cspan class=\"ms-title\"\u003eEvery milestone\u003c/span\u003e\u003c/span\u003e\n      \u003cspan class=\"ms-meta\"\u003e\u003cspan\u003e${allStats.done}/${allStats.total}\u003c/span\u003e\u003cspan\u003e${allStats.pct}%\u003c/span\u003e\u003c/span\u003e\n      \u003cspan class=\"progress\"\u003e\u003ci style=\"width:${allStats.pct}%\"\u003e\u003c/i\u003e\u003c/span\u003e\n    \u003c/button\u003e`;\n\n    html += DATA.milestones.map((milestone) =\u003e {\n      const stats = milestoneStats(milestone.id);\n      return `\u003cbutton class=\"milestone${state.milestone === milestone.id ? ' active' : ''}\" type=\"button\" data-milestone=\"${esc(milestone.id)}\" aria-pressed=\"${state.milestone === milestone.id}\"\u003e\n        \u003cspan class=\"milestone-top\"\u003e\u003cspan class=\"ms-dot ${esc(milestone.status)}\"\u003e\u003c/span\u003e\u003cspan class=\"ms-id\"\u003e${esc(milestone.id)}\u003c/span\u003e\u003cspan class=\"ms-title\"\u003e${esc(milestone.title)}\u003c/span\u003e\u003c/span\u003e\n","truncated":true},{"path":"docs/dashboard/style.css","language":"css","text":":root {\n  --bg: #f4f2ee;\n  --surface: #fbfaf7;\n  --surface-2: #eeece6;\n  --ink: #1d1c19;\n  --muted: #6c675e;\n  --faint: #969084;\n  --line: #ded9cf;\n  --line-strong: #c8c1b4;\n  --accent: #2f5d50;\n  --accent-soft: rgba(47, 93, 80, 0.12);\n  --shadow: 0 1px 2px rgba(29, 28, 25, 0.05), 0 8px 24px rgba(29, 28, 25, 0.04);\n  --code-bg: #1e1d1a;\n  --code-ink: #e7e1d5;\n  --code-line: #302d28;\n  --code-muted: #6f6a5f;\n  --st-backlog: #8c8478;\n  --st-ready: #3f6f9f;\n  --st-doing: #b7791f;\n  --st-review: #6f5aa8;\n  --st-done: #3f7d4f;\n  --st-blocked: #b42318;\n  --sans: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans SC\", \"PingFang SC\", \"Hiragino Sans GB\", sans-serif;\n  --mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n}\n\n[data-theme=\"dark\"] {\n  --bg: #141412;\n  --surface: #1b1a17;\n  --surface-2: #23211d;\n  --ink: #eae6de;\n  --muted: #a8a094;\n  --faint: #7e7669;\n  --line: #2d2a25;\n  --line-strong: #433e36;\n  --accent: #8fbfae;\n  --accent-soft: rgba(143, 191, 174, 0.12);\n  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.18);\n  --code-bg: #0e0e0d;\n  --code-ink: #ddd7ca;\n  --code-line: #2b2924;\n  --code-muted: #5f5a50;\n  --st-backlog: #9a9285;\n  --st-ready: #76a6d8;\n  --st-doing: #d3a04a;\n  --st-review: #a78fe0;\n  --st-done: #78b98a;\n  --st-blocked: #e06c61;\n}\n\n*,\n*::before,\n*::after {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n  height: 100%;\n}\n\nbody {\n  background: var(--bg);\n  color: var(--ink);\n  font-family: var(--sans);\n  font-size: 13px;\n  line-height: 1.5;\n  -webkit-font-smoothing: antialiased;\n  text-rendering: optimizeLegibility;\n  overflow: hidden;\n}\n\nbutton {\n  font: inherit;\n  color: inherit;\n  background: none;\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n}\n\na {\n  color: inherit;\n  text-decoration: none;\n}\n\ninput {\n  font: inherit;\n}\n\n::selection {\n  background: var(--accent-soft);\n}\n\n:focus-visible {\n  outline: 2px solid var(--accent);\n  outline-offset: 2px;\n}\n\n* {\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n\n*::-webkit-scrollbar {\n  width: 8px;\n  height: 8px;\n}\n\n*::-webkit-scrollbar-thumb {\n  background: var(--line);\n  border: 2px solid transparent;\n  border-radius: 99px;\n  background-clip: padding-box;\n}\n\n/* ---------- top bar ---------- */\n\n.topbar {\n  height: 58px;\n  display: flex;\n  align-items: center;\n  gap: 22px;\n  padding: 0 18px;\n  border-bottom: 1px solid var(--line);\n  background: var(--surface);\n  position: relative;\n  z-index: 30;\n}\n\n.brand {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  min-width: 0;\n}\n\n.brand-mark {\n  width: 30px;\n  height: 30px;\n  border-radius: 8px;\n  background: var(--ink);\n  color: var(--bg);\n  display: grid;\n  place-items: center;\n  font-family: var(--mono);\n  font-size: 12px;\n  font-weight: 700;\n  letter-spacing: -0.06em;\n  flex: none;\n}\n\n.brand-tag {\n  font-size: 11px;\n  color: var(--muted);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.tabs {\n  display: flex;\n  gap: 2px;\n  background: var(--surface-2);\n  border: 1px solid var(--line);\n  border-radius: 8px;\n  padding: 3px;\n  flex: none;\n}\n\n.tab {\n  padding: 5px 11px;\n  border-radius: 6px;\n  font-size: 11.5px;\n  color: var(--muted);\n  white-space: nowrap;\n  transition: color 0.12s ease, background 0.12s ease;\n}\n\n.tab:hover {\n  color: var(--ink);\n}\n\n.tab.active {\n  background: var(--surface);\n  color: var(--ink);\n  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);\n}\n\n.top-actions {\n  margin-left: auto;\n  display: flex;\n  align-items: center;\n  gap: 9px;\n}\n\n.search {\n  display: flex;\n  align-items: center;\n","truncated":true},{"path":"docs/dashboard/template.html","language":"html","text":"\u003c!doctype html\u003e\n\u003chtml lang=\"zh-CN\" data-theme=\"light\"\u003e\n\u003chead\u003e\n\u003cmeta charset=\"utf-8\"\u003e\n\u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\"\u003e\n\u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n\u003cmeta name=\"description\" content=\"ni project dashboard: board, architecture, documents, timeline.\"\u003e\n\u003ctitle\u003eni · project dashboard\u003c/title\u003e\n\u003cstyle\u003e\n{{STYLE}}\n\u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n\u003cheader class=\"topbar\"\u003e\n  \u003ca class=\"brand\" href=\"#/board\" data-view=\"board\" aria-label=\"ni dashboard\"\u003e\n    \u003cspan class=\"brand-mark\"\u003eni\u003c/span\u003e\n    \u003cspan class=\"brand-tag\"\u003eminimal, observable coding agent\u003c/span\u003e\n  \u003c/a\u003e\n\n  \u003cnav class=\"tabs\" aria-label=\"Views\"\u003e\n    \u003cbutton class=\"tab\" type=\"button\" data-view=\"board\"\u003eBoard\u003c/button\u003e\n    \u003cbutton class=\"tab\" type=\"button\" data-view=\"arch\"\u003eArchitecture\u003c/button\u003e\n    \u003cbutton class=\"tab\" type=\"button\" data-view=\"docs\"\u003eDocs\u003c/button\u003e\n    \u003cbutton class=\"tab\" type=\"button\" data-view=\"timeline\"\u003eTimeline\u003c/button\u003e\n  \u003c/nav\u003e\n\n  \u003cdiv class=\"top-actions\"\u003e\n    \u003clabel class=\"search\" aria-label=\"Filter current view\"\u003e\n      \u003cspan class=\"search-key\"\u003e/\u003c/span\u003e\n      \u003cinput id=\"search\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Filter\"\u003e\n    \u003c/label\u003e\n    \u003cspan class=\"status-chip\" id=\"project-status\"\u003e\u003c/span\u003e\n    \u003cbutton class=\"icon-button\" id=\"theme-toggle\" type=\"button\" title=\"Toggle theme\" aria-label=\"Toggle theme\"\u003e◐\u003c/button\u003e\n  \u003c/div\u003e\n\u003c/header\u003e\n\n\u003cmain class=\"shell\"\u003e\n  \u003caside class=\"rail\" aria-label=\"Project navigation\"\u003e\n    \u003csection class=\"rail-section\"\u003e\n      \u003cdiv class=\"rail-head\"\u003e\u003ch2\u003eMilestones\u003c/h2\u003e\u003cspan id=\"milestone-count\"\u003e\u003c/span\u003e\u003c/div\u003e\n      \u003cdiv id=\"milestone-list\" class=\"milestone-list\"\u003e\u003c/div\u003e\n    \u003c/section\u003e\n\n    \u003csection class=\"rail-section\"\u003e\n      \u003cdiv class=\"rail-head\"\u003e\u003ch2\u003eLayers\u003c/h2\u003e\u003cspan id=\"layer-count\"\u003e\u003c/span\u003e\u003c/div\u003e\n      \u003cdiv id=\"layer-list\" class=\"layer-list\"\u003e\u003c/div\u003e\n    \u003c/section\u003e\n\n    \u003csection class=\"rail-section rail-docs\"\u003e\n      \u003cdiv class=\"rail-head\"\u003e\u003ch2\u003eDocs\u003c/h2\u003e\u003cspan id=\"doc-count\"\u003e\u003c/span\u003e\u003c/div\u003e\n      \u003cdiv id=\"rail-docs\" class=\"rail-doc-list\"\u003e\u003c/div\u003e\n    \u003c/section\u003e\n\n    \u003cdiv class=\"rail-foot\" id=\"rail-foot\"\u003e\u003c/div\u003e\n  \u003c/aside\u003e\n\n  \u003csection class=\"canvas\" id=\"canvas\" aria-label=\"Project view\" tabindex=\"-1\"\u003e\u003c/section\u003e\n  \u003caside class=\"details\" id=\"details\" aria-label=\"Details\"\u003e\u003c/aside\u003e\n\u003c/main\u003e\n\n\u003cnoscript\u003e\n  \u003cp style=\"padding:24px;font-family:monospace\"\u003eThis dashboard needs JavaScript. Source files live in docs/dashboard/.\u003c/p\u003e\n\u003c/noscript\u003e\n\n\u003cscript id=\"ni-data\" type=\"application/json\"\u003e{{DATA}}\u003c/script\u003e\n\u003cscript\u003e\n{{APP}}\n\u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e\n","truncated":false}]}],"relations":[{"from":"cli","to":"loop","label":"run"},{"from":"tui","to":"loop","label":"run"},{"from":"loop","to":"context","label":"project"},{"from":"loop","to":"providers","label":"stream"},{"from":"loop","to":"tools","label":"dispatch"},{"from":"loop","to":"session","label":"append"},{"from":"context","to":"session","label":"read"},{"from":"tools","to":"sandbox","label":"guard"}],"cards":[{"id":"M0-001","title":"Cargo workspace 与工具链","status":"done","milestone":"M0","module":null,"size":"S","priority":"P0","updated":"2026-10-20","completed":"2026-10-20","depends_on":[],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e三个 crate：\u003ccode\u003eni-core\u003c/code\u003e、\u003ccode\u003eni-cli\u003c/code\u003e、\u003ccode\u003extask\u003c/code\u003e。\u003c/li\u003e\n\u003cli\u003e统一 edition、依赖版本和 workspace lint 入口。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ecargo xtask dashboard\u003c/code\u003e 作为仓库工具入口。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003ecargo test --workspace\u003c/code\u003e 全绿。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ecargo xtask dashboard\u003c/code\u003e 可重复执行。\u003c/li\u003e\n\u003cli\u003e核心 crate 不依赖 CLI 或 UI。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e先保持三个 crate。等 provider、tools、sandbox 真正落地后再拆，避免空 crate。\u003c/p\u003e\n","path":"docs/board/M0-001-workspace.md"},{"id":"M0-002","title":"事件模型与 JSONL 会话日志","status":"done","milestone":"M0","module":"session","size":"M","priority":"P0","updated":"2026-10-20","completed":"2026-10-20","depends_on":[],"docs":["adr-0002"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eEvent\u003c/code\u003e 枚举覆盖 session、user、assistant、tool result、turn end、compaction。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eSessionLog\u003c/code\u003e 只追加，每条事件立即 flush。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eload\u003c/code\u003e 逐行解码，坏行变成 warning，不丢整份历史。\u003c/li\u003e\n\u003cli\u003e单测覆盖 round-trip、坏尾行、空行。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n写入后重新加载，事件序列完全一致。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n最后一行损坏时，前面的历史仍可读。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n\u003ccode\u003eni session show\u003c/code\u003e 能打印事件类型和数量。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e时间戳统一为 Unix 毫秒。\u003ccode\u003ecompaction\u003c/code\u003e 记录被替换的事件数量，后续 resume 用它判断投影边界。\u003c/p\u003e\n","path":"docs/board/M0-002-session-log.md"},{"id":"M0-003","title":"离线项目看板 v0","status":"done","milestone":"M0","module":"dashboard","size":"L","priority":"P1","updated":"2026-10-20","completed":"2026-10-20","depends_on":["M0-001"],"docs":["readme"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e三栏壳：里程碑导航 / 画布 / 详情。\u003c/li\u003e\n\u003cli\u003e四个视图：Board、Architecture、Docs、Timeline。\u003c/li\u003e\n\u003cli\u003e数据源：\u003ccode\u003edocs/dashboard/project.json\u003c/code\u003e + 一卡一文件的 TOML frontmatter。\u003c/li\u003e\n\u003cli\u003e构建为单个 \u003ccode\u003edocs/index.html\u003c/code\u003e，无 CDN、无运行时 fetch，\u003ccode\u003efile://\u003c/code\u003e 可开。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003e--check\u003c/code\u003e 校验引用、状态和生成物是否过期。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n双击 \u003ccode\u003edocs/index.html\u003c/code\u003e 能看到真实 M0 卡片。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n架构图展示模块状态和依赖箭头。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\nADR 与架构文档能在右栏渲染。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n\u003ccode\u003ecargo xtask dashboard --check\u003c/code\u003e 在生成物过期时失败。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e浏览器只读，不提供拖拽回写。状态变更走仓库，避免看板变成第二个真相源。\u003c/p\u003e\n","path":"docs/board/M0-003-dashboard.md"},{"id":"M0-004","title":"CLI 骨架与会话命令","status":"done","milestone":"M0","module":"cli","size":"S","priority":"P0","updated":"2026-10-20","completed":"2026-10-20","depends_on":["M0-001","M0-002"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eni\u003c/code\u003e 无参数时打印版本、状态、会话目录和下一步。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eni session new\u003c/code\u003e 创建会话并写入 \u003ccode\u003esession_start\u003c/code\u003e。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eni session show\u003c/code\u003e 打印事件时间线，\u003ccode\u003eni session list\u003c/code\u003e 列出文件。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n\u003ccode\u003eni session new\u003c/code\u003e 输出可直接被脚本消费的路径。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n\u003ccode\u003eni session show \u0026lt;path\u0026gt;\u003c/code\u003e 显示事件数与 warning。\u003c/li\u003e\n\u003cli\u003e\u003cinput disabled=\"\" type=\"checkbox\" checked=\"\"/\u003e\n默认目录支持 \u003ccode\u003eNI_HOME\u003c/code\u003e / \u003ccode\u003eHOME\u003c/code\u003e 覆盖。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e\u003ccode\u003eexec\u003c/code\u003e 子命令等 loop 落地后再加，避免先有一个假入口。\u003c/p\u003e\n","path":"docs/board/M0-004-cli.md"},{"id":"M0-005","title":"Provider trait 与流式适配","status":"ready","milestone":"M0","module":"providers","size":"L","priority":"P0","updated":"2026-10-20","completed":null,"depends_on":["M0-002"],"docs":["architecture"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e内部统一的 \u003ccode\u003eStreamEvent\u003c/code\u003e：text / reasoning / tool call / usage / done / error。\u003c/li\u003e\n\u003cli\u003e一个真实 provider 的 SSE 适配，优先 OpenAI-compatible。\u003c/li\u003e\n\u003cli\u003e错误分类：可重试、致命、上下文溢出。\u003c/li\u003e\n\u003cli\u003eusage 归一化，保留 cached 与 reasoning tokens。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e录制的 SSE fixture 能解析出完整 turn。\u003c/li\u003e\n\u003cli\u003e429 / 5xx 在 turn 边界重试，工具执行后不重放。\u003c/li\u003e\n\u003cli\u003e上下文溢出返回可识别错误，交给 compaction 处理。\u003c/li\u003e\n\u003cli\u003eprovider 模块不依赖 tools 或 TUI。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e先做一个 provider。第二个 provider 等协议稳定后再加，避免过早抽象。\u003c/p\u003e\n","path":"docs/board/M0-005-provider.md"},{"id":"M0-006","title":"文件工具：read / write / edit / grep / glob","status":"backlog","milestone":"M0","module":"tools","size":"L","priority":"P0","updated":"2026-10-20","completed":null,"depends_on":["M0-001"],"docs":["architecture"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e五个文件工具 + 一个注册表；JSON Schema 描述输入。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eread\u003c/code\u003e 返回行号，单次上限 2000 行 / 50KB，截断时给出续读方式。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eedit\u003c/code\u003e 用精确字符串替换，要求唯一匹配，返回小 diff。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003egrep\u003c/code\u003e / \u003ccode\u003eglob\u003c/code\u003e 结果有上限，并报告总数。\u003c/li\u003e\n\u003cli\u003eread-before-write 策略：未读过的文件拒绝写。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e非唯一 \u003ccode\u003eold_string\u003c/code\u003e 被拒绝，并提示增加上下文。\u003c/li\u003e\n\u003cli\u003e未读文件 \u003ccode\u003ewrite\u003c/code\u003e / \u003ccode\u003eedit\u003c/code\u003e 返回可操作的错误。\u003c/li\u003e\n\u003cli\u003e超大文件读取被截断，模型能按 offset 继续。\u003c/li\u003e\n\u003cli\u003e工具错误信息包含下一步建议，而不是裸错误码。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e工具描述也是 prompt 表面，描述里写清楚何时用、何时不用、边界和示例。\u003c/p\u003e\n","path":"docs/board/M0-006-tools.md"},{"id":"M0-007","title":"Bash 工具：超时、进程组与输出预算","status":"backlog","milestone":"M0","module":"sandbox","size":"M","priority":"P0","updated":"2026-10-20","completed":null,"depends_on":["M0-006"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e在工作目录执行命令，默认超时 120s。\u003c/li\u003e\n\u003cli\u003e启动时 \u003ccode\u003edetached\u003c/code\u003e，取消/超时对进程组发信号，不留孤儿。\u003c/li\u003e\n\u003cli\u003e只回尾部 20KB，完整输出写临时文件并把路径给模型。\u003c/li\u003e\n\u003cli\u003e变更型命令先过 approval 策略（M0 可以是占位实现）。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e超时后子进程及其派生的 \u003ccode\u003esleep\u003c/code\u003e 都被终止。\u003c/li\u003e\n\u003cli\u003e大输出不会撑爆上下文，模型能拿到完整输出路径。\u003c/li\u003e\n\u003cli\u003eCtrl-C 能中断正在跑的命令。\u003c/li\u003e\n\u003cli\u003e非零退出码、stderr 和超时是可区分的三种结果。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003ebash 是能力上限也是风险上限。没有真沙箱时，所有变更型 bash 强制审批。\u003c/p\u003e\n","path":"docs/board/M0-007-bash.md"},{"id":"M0-008","title":"Turn loop 与 ni exec","status":"backlog","milestone":"M0","module":"loop","size":"L","priority":"P0","updated":"2026-10-20","completed":null,"depends_on":["M0-005","M0-006","M0-007"],"docs":["architecture"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e一个 turn：project → stream → dispatch tools → append events。\u003c/li\u003e\n\u003cli\u003e循环直到无 tool call、达到 max steps、被取消或 fatal error。\u003c/li\u003e\n\u003cli\u003e只读工具可并发，写工具串行。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eni exec \"\u0026lt;prompt\u0026gt;\"\u003c/code\u003e headless 入口，输出最终文本和 usage。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e用 scripted provider 修掉 fixture 仓库里的一个失败测试。\u003c/li\u003e\n\u003cli\u003e达到 max steps 时返回明确原因，不静默退出。\u003c/li\u003e\n\u003cli\u003e取消后不再发起 provider 请求或工具调用。\u003c/li\u003e\n\u003cli\u003e每个 turn 的 usage 落在 \u003ccode\u003eturn_end\u003c/code\u003e 事件里。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003eloop 不关心 provider wire format，也不实现工具逻辑。它只编排和记录。\u003c/p\u003e\n","path":"docs/board/M0-008-loop.md"},{"id":"M0-009","title":"Resume 与录制回放测试","status":"backlog","milestone":"M0","module":"session","size":"M","priority":"P1","updated":"2026-10-20","completed":null,"depends_on":["M0-008"],"docs":["adr-0002"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eni exec --resume \u0026lt;session\u0026gt;\u003c/code\u003e 从日志重建上下文继续。\u003c/li\u003e\n\u003cli\u003escripted provider：按预设返回 tool call 序列，完全离线。\u003c/li\u003e\n\u003cli\u003e录制 / 回放 provider 响应的 fixture 目录。\u003c/li\u003e\n\u003cli\u003egolden transcript 测试 loop 行为。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e中断后 resume，模型看到的历史与中断前一致。\u003c/li\u003e\n\u003cli\u003e回放同一 fixture 两次，事件序列一致。\u003c/li\u003e\n\u003cli\u003e工具执行后不重放整个 turn。\u003c/li\u003e\n\u003cli\u003e测试不访问网络、不烧 token。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e测试的价值不在覆盖率，而在让 context / loop 的修改可以离线验证。\u003c/p\u003e\n","path":"docs/board/M0-009-resume.md"},{"id":"M1-001","title":"流式 TUI 与取消","status":"backlog","milestone":"M1","module":"tui","size":"L","priority":"P1","updated":"2026-10-20","completed":null,"depends_on":["M0-008"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e流式渲染文本、reasoning 折叠、工具调用状态。\u003c/li\u003e\n\u003cli\u003e审批提示：单键 allow / deny / allow-for-session。\u003c/li\u003e\n\u003cli\u003ediff 预览，先看再批。\u003c/li\u003e\n\u003cli\u003eCtrl-C 取消当前 turn，二次强制退出。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e首 token 到达即渲染，不等完整响应。\u003c/li\u003e\n\u003cli\u003e审批时终端不丢输入、不卡死。\u003c/li\u003e\n\u003cli\u003e取消后进程组被清理，session 留下明确事件。\u003c/li\u003e\n\u003cli\u003e窄终端（80 列）仍可读。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003eTUI 只消费事件流，不 import loop 内部。先做线性输出，再做花活。\u003c/p\u003e\n","path":"docs/board/M1-001-tui.md"},{"id":"M1-002","title":"Sandbox 三轴与原生隔离","status":"backlog","milestone":"M1","module":"sandbox","size":"L","priority":"P1","updated":"2026-10-20","completed":null,"depends_on":["M0-007"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003esandbox\u003c/code\u003e：read-only / workspace-write / full-access。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eapproval\u003c/code\u003e：ask / on-failure / never。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003enetwork\u003c/code\u003e：on / off。\u003c/li\u003e\n\u003cli\u003eLinux 用 landlock + seccomp，macOS 用 seatbelt；先做一个平台。\u003c/li\u003e\n\u003cli\u003e路径策略与 shell 隔离分开实现，不假装进程内检查是安全边界。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003eworkspace-write 下无法写工作区外路径。\u003c/li\u003e\n\u003cli\u003e网络关闭时子进程连接被拒绝。\u003c/li\u003e\n\u003cli\u003e逃逸尝试留下审计事件，而不是静默失败。\u003c/li\u003e\n\u003cli\u003e无沙箱平台明确降级到强制审批，并提示原因。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e安全模型要能一句话解释清楚：能写哪、能连哪、什么时候问人。\u003c/p\u003e\n","path":"docs/board/M1-002-sandbox.md"},{"id":"M1-003","title":"Diff 预览与输出折叠","status":"backlog","milestone":"M1","module":"tui","size":"M","priority":"P2","updated":"2026-10-20","completed":null,"depends_on":["M1-001"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e统一 diff 渲染：文件头、hunk、增删行、上下文折叠。\u003c/li\u003e\n\u003cli\u003e工具输出超过阈值时折叠，只显示摘要和\"展开\"提示。\u003c/li\u003e\n\u003cli\u003e审批前展示本次写入的完整 diff。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e大 diff 不刷屏，能按文件跳转。\u003c/li\u003e\n\u003cli\u003e行号与新增/删除标记对齐。\u003c/li\u003e\n\u003cli\u003e终端宽度变化后重排不破版。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003ediff 是审批体验的核心。模型说\"改好了\"不算，用户看到 diff 才算。\u003c/p\u003e\n","path":"docs/board/M1-003-diff.md"},{"id":"M2-001","title":"Compaction 与可执行 handoff","status":"backlog","milestone":"M2","module":"context","size":"L","priority":"P1","updated":"2026-10-20","completed":null,"depends_on":["M0-009"],"docs":["adr-0002"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e上下文到 75% 预算时触发压缩。\u003c/li\u003e\n\u003cli\u003e保留最近 N 轮原文和原始用户请求。\u003c/li\u003e\n\u003cli\u003e生成结构化 handoff：目标、已完成、改动文件、当前状态、下一步、约束。\u003c/li\u003e\n\u003cli\u003e压缩结果落成 \u003ccode\u003ecompaction\u003c/code\u003e 事件，resume 时按 \u003ccode\u003eupto\u003c/code\u003e 重建投影。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e压缩后继续任务，不重复已完成步骤。\u003c/li\u003e\n\u003cli\u003e压缩事件可回放，模型上下文与压缩时一致。\u003c/li\u003e\n\u003cli\u003e压缩失败时保留原上下文并提示，不丢历史。\u003c/li\u003e\n\u003cli\u003e长会话 token 成本可见地下降。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e压缩不是\"总结对话\"，是给下一个 turn 或下一个 session 写可执行的交接单。\u003c/p\u003e\n","path":"docs/board/M2-001-compaction.md"},{"id":"M2-002","title":"AGENTS.md 分层发现与缓存指标","status":"backlog","milestone":"M2","module":"context","size":"M","priority":"P2","updated":"2026-10-20","completed":null,"depends_on":["M2-001"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e从 cwd 向上发现 \u003ccode\u003eAGENTS.md\u003c/code\u003e，按距离合并，近者优先。\u003c/li\u003e\n\u003cli\u003esystem prompt 只保留稳定前缀；易变信息放末尾。\u003c/li\u003e\n\u003cli\u003e记录 cached / input tokens，按 turn 汇总命中率。\u003c/li\u003e\n\u003cli\u003e看板 Runs 视图读取 metrics JSONL。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e子目录规范能覆盖根目录规则。\u003c/li\u003e\n\u003cli\u003e修改 \u003ccode\u003eAGENTS.md\u003c/code\u003e 后下一 turn 生效，无需重启。\u003c/li\u003e\n\u003cli\u003e缓存命中率可在 session 事件里看到。\u003c/li\u003e\n\u003cli\u003e前缀变化导致缓存失效时能定位原因。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003e缓存命中率是 context 工程质量最直接的指标。没有指标就不要谈优化。\u003c/p\u003e\n","path":"docs/board/M2-002-agents-cache.md"},{"id":"M3-001","title":"Replay 与 fork","status":"backlog","milestone":"M3","module":"session","size":"M","priority":"P2","updated":"2026-10-20","completed":null,"depends_on":["M2-001"],"docs":["adr-0002"],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eni replay \u0026lt;session\u0026gt;\u003c/code\u003e：按事件重建状态并校验投影。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eni fork \u0026lt;session\u0026gt; --at \u0026lt;event-id\u0026gt;\u003c/code\u003e：复制前缀，生成新 session。\u003c/li\u003e\n\u003cli\u003e事件 id 稳定，fork 后历史可追溯。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003ereplay 不调用模型，输出与原始 turn 的投影一致。\u003c/li\u003e\n\u003cli\u003efork 后原 session 不被修改。\u003c/li\u003e\n\u003cli\u003e坏尾行 fork 时被截断并提示。\u003c/li\u003e\n\u003cli\u003e事件 id 冲突检测。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003efork 是 subagent 和\"试另一条路\"的基础。先有可靠前缀复制，再谈并行。\u003c/p\u003e\n","path":"docs/board/M3-001-replay-fork.md"},{"id":"M3-002","title":"Subagent 与并行只读探索","status":"backlog","milestone":"M3","module":"loop","size":"L","priority":"P2","updated":"2026-10-20","completed":null,"depends_on":["M3-001","M1-002"],"docs":[],"blocked_reason":null,"body_html":"\u003ch2\u003e范围\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e子 session 有独立日志，父 session 记录 spawn / result 事件。\u003c/li\u003e\n\u003cli\u003e只读探索可并行；写操作仍由主 session 串行。\u003c/li\u003e\n\u003cli\u003e子代理有独立步数、token 和超时预算。\u003c/li\u003e\n\u003cli\u003e结果返回摘要 + 完整日志路径，不把整个子上下文塞回父上下文。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e验收\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e两个子代理并行跑互不污染事件日志。\u003c/li\u003e\n\u003cli\u003e子代理超时/失败不影响主 session 继续。\u003c/li\u003e\n\u003cli\u003e父上下文只增加一条结果摘要。\u003c/li\u003e\n\u003cli\u003e能追溯每个结论来自哪个子 session。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e记录\u003c/h2\u003e\n\u003cp\u003esubagent 不是多 agent 框架，只是\"带独立日志的受限子运行\"。先证明单 agent 闭环可靠。\u003c/p\u003e\n","path":"docs/board/M3-002-subagents.md"}],"docs":[{"id":"architecture","title":"架构","kind":"doc","status":"living","order":10,"summary":"ni 的边界、数据流、事件生命周期与明确不做的事。","body_html":"\u003ch2\u003e一句话\u003c/h2\u003e\n\u003cp\u003eni 是一个围绕 \u003cstrong\u003eappend-only 事件日志\u003c/strong\u003e 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、六个工具、三条安全轴。其余都是外围。\u003c/p\u003e\n\u003ch2\u003e设计约束\u003c/h2\u003e\n\u003col\u003e\n\u003cli\u003e\u003cstrong\u003e日志是唯一真相。\u003c/strong\u003e 内存里的对话是日志的投影。任何不落盘的状态，进程退出即不存在。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e上下文是产品。\u003c/strong\u003e 模型看到什么、按什么顺序看到、何时压缩，决定了 agent 的上限。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e工具少而锋利。\u003c/strong\u003e 每多一个工具，就多一份 schema、一类失败模式和一段 prompt。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eprovider 层要薄。\u003c/strong\u003e 只归一化够用的部分，不试图抹平所有 wire format 怪癖。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e安全边界要诚实。\u003c/strong\u003e 进程内路径校验不是沙箱；bash 能绕过的东西，不能假装它不能。\u003c/li\u003e\n\u003c/ol\u003e\n\u003ch2\u003e数据流\u003c/h2\u003e\n\u003cpre\u003e\u003ccode class=\"language-text\"\u003euser input\n   │\n   ▼\n CLI ──► loop ──► context.project(log, budget) ──► provider.stream\n            │                                          │\n            │                                     StreamEvent\n            │                                          ▼\n            │                                   assistant message\n            │                                          │\n            ├────────────── tool calls ◄───────────────┘\n            │                   │\n            │                   ├──► sandbox.guard\n            │                   └──► tools.dispatch (read-only 并发，写串行)\n            │\n            └──► session.append(every event, flush)\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e一个 turn 的边界是 \u003ccode\u003euser_message\u003c/code\u003e 到 \u003ccode\u003eturn_end\u003c/code\u003e。loop 只做四件事：投影、请求、派发、追加。它不解析 SSE，不实现工具，不渲染 UI。\u003c/p\u003e\n\u003ch2\u003e事件生命周期\u003c/h2\u003e\n\u003ctable\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e事件\u003c/th\u003e\u003cth\u003e何时写入\u003c/th\u003e\u003cth\u003e关键字段\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003esession_start\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e创建会话\u003c/td\u003e\u003ctd\u003eid、cwd、model\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003euser_message\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e用户输入\u003c/td\u003e\u003ctd\u003etext\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003eassistant_message\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e一次模型响应结束\u003c/td\u003e\u003ctd\u003etext、reasoning、tool_calls\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003etool_result\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e每个工具执行完\u003c/td\u003e\u003ctd\u003ecall_id、ok、output\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003eturn_end\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e一个 turn 结束\u003c/td\u003e\u003ctd\u003eusage（含 cached / reasoning）\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003ecompaction\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e上下文压缩\u003c/td\u003e\u003ctd\u003esummary、upto\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003e\u003ccode\u003esession_end\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e正常退出\u003c/td\u003e\u003ctd\u003ets\u003c/td\u003e\u003c/tr\u003e\n\u003c/tbody\u003e\u003c/table\u003e\n\u003cp\u003e\u003ccode\u003ecompaction.upto\u003c/code\u003e 表示被摘要替换的事件数量。resume 时先加载全量事件，再按最后一个 compaction 截断投影；原始事件永远保留。\u003c/p\u003e\n\u003ch2\u003e模块边界\u003c/h2\u003e\n\u003ctable\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e层\u003c/th\u003e\u003cth\u003e模块\u003c/th\u003e\u003cth\u003e职责\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\n\u003ctr\u003e\u003ctd\u003eInterface\u003c/td\u003e\u003ctd\u003eCLI / TUI\u003c/td\u003e\u003ctd\u003e参数、生命周期、渲染；不持有对话状态\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003eEngine\u003c/td\u003e\u003ctd\u003eLoop / Context\u003c/td\u003e\u003ctd\u003e编排、投影、压缩；不碰 wire format\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003eAdapters\u003c/td\u003e\u003ctd\u003eProviders / Tools / Sandbox\u003c/td\u003e\u003ctd\u003e外部世界的适配；不依赖 UI\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003eState\u003c/td\u003e\u003ctd\u003eSession\u003c/td\u003e\u003ctd\u003e追加、加载、容错；不解释业务\u003c/td\u003e\u003c/tr\u003e\n\u003ctr\u003e\u003ctd\u003eEngineering\u003c/td\u003e\u003ctd\u003eDashboard\u003c/td\u003e\u003ctd\u003e项目阅读面；不参与运行时\u003c/td\u003e\u003c/tr\u003e\n\u003c/tbody\u003e\u003c/table\u003e\n\u003cp\u003e依赖方向只能向下：Interface → Engine → Adapters / State。\u003ccode\u003eni-core\u003c/code\u003e 不依赖 \u003ccode\u003eni-cli\u003c/code\u003e，TUI 不 import loop 内部。\u003c/p\u003e\n\u003ch2\u003e工具面\u003c/h2\u003e\n\u003cp\u003e第一版只有六个：\u003ccode\u003eread\u003c/code\u003e、\u003ccode\u003ewrite\u003c/code\u003e、\u003ccode\u003eedit\u003c/code\u003e、\u003ccode\u003egrep\u003c/code\u003e、\u003ccode\u003eglob\u003c/code\u003e、\u003ccode\u003ebash\u003c/code\u003e。\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eread\u003c/code\u003e 带行号，单次上限约 2000 行 / 50KB，截断时给出续读方式。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eedit\u003c/code\u003e 用精确字符串替换，要求唯一匹配，返回小 diff；行号会漂移，不用行号。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ebash\u003c/code\u003e 只回尾部约 20KB，完整输出落临时文件；超时杀进程组，不留孤儿。\u003c/li\u003e\n\u003cli\u003e工具错误是 prompt 的一部分：写清楚\"为什么失败、下一步怎么做\"。\u003c/li\u003e\n\u003c/ul\u003e\n\u003cp\u003e\u003ccode\u003ewrite\u003c/code\u003e / \u003ccode\u003eedit\u003c/code\u003e 前必须读过目标文件。这是策略层强制，不是提示词建议。\u003c/p\u003e\n\u003ch2\u003e上下文与压缩\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003eproject(log, budget)\u003c/code\u003e 是全量日志到模型上下文的有损投影。\u003c/li\u003e\n\u003cli\u003esystem + tools + 历史前缀保持稳定，易变内容放末尾，以命中 provider 的 prompt cache。\u003c/li\u003e\n\u003cli\u003e到预算 75% 触发 compaction，保留最近 N 轮原文和原始请求，生成结构化 handoff：目标、已完成、改动文件、当前状态、下一步、约束。\u003c/li\u003e\n\u003cli\u003e压缩结果落成事件，不修改历史。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e安全\u003c/h2\u003e\n\u003cp\u003e三条正交的轴，不要揉成一个开关：\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cstrong\u003esandbox\u003c/strong\u003e：read-only / workspace-write / full-access。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eapproval\u003c/strong\u003e：ask / on-failure / never。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003enetwork\u003c/strong\u003e：on / off。\u003c/li\u003e\n\u003c/ul\u003e\n\u003cp\u003e沙箱用平台原生能力（Linux landlock + seccomp，macOS seatbelt）。没有真沙箱的平台，明确降级为\"变更型 bash 强制审批\"，并告诉用户原因。\u003c/p\u003e\n\u003ch2\u003e明确不做\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e不做通用 agent framework，不为未知用例抽象。\u003c/li\u003e\n\u003cli\u003ev0 不做 MCP、插件系统、多 provider 全家桶、subagent、Web UI。\u003c/li\u003e\n\u003cli\u003e不做浏览器里可编辑的看板；状态变更走仓库。\u003c/li\u003e\n\u003cli\u003e不在 loop 里做 prompt 字符串拼接；prompt 是独立、可版本化的输入。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e开放问题\u003c/h2\u003e\n\u003col\u003e\n\u003cli\u003e\u003ccode\u003eassistant_message\u003c/code\u003e 是否要保留 reasoning 原文，还是只保留摘要？不同 provider 的回传要求不同。\u003c/li\u003e\n\u003cli\u003ecompaction 的 handoff 由模型生成还是模板生成？前者灵活，后者稳定。\u003c/li\u003e\n\u003cli\u003e工具并行度：只读并发之外，是否允许不同文件的写并发？\u003c/li\u003e\n\u003cli\u003e事件 schema 的演进策略：加字段兼容，还是显式版本迁移？\u003c/li\u003e\n\u003c/ol\u003e\n","path":"docs/architecture.md","excerpt":"ni 的边界、数据流、事件生命周期与明确不做的事。"},{"id":"adr-0001","title":"ADR-0001：Rust 作为核心语言","kind":"adr","status":"accepted","order":20,"summary":"性能优先不等于 loop 快几毫秒；Rust 换来的是启动、内存、分发和原生沙箱。","body_html":"\u003ch2\u003e状态\u003c/h2\u003e\n\u003cp\u003eAccepted · 2026-10-20\u003c/p\u003e\n\u003ch2\u003e背景\u003c/h2\u003e\n\u003cp\u003eni 是一个单二进制 CLI：长会话、流式子进程、沙箱、可能的多子代理。语言选型要在两端做取舍：\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cstrong\u003e运行时\u003c/strong\u003e：harness 自身耗时（SSE 解析、JSON、日志、调度）通常只占一个 turn 的 1–5ms，而模型 TTFT + 生成是 1–3s。换语言不会让 agent 明显变快。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e工程形态\u003c/strong\u003e：冷启动、常驻内存、单二进制分发、进程组/信号控制、原生沙箱，这些是 Rust 的真实优势。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e开发迭代\u003c/strong\u003e：Rust 的编译反馈和 async 设计摩擦，会让早期功能吞吐慢 1.5–2x；这是\"写功能慢\"，不是\"运行时慢\"。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e决策\u003c/h2\u003e\n\u003cp\u003e核心使用 Rust，workspace 拆分小 crate：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-text\"\u003ecrates/\n  ni-core/       # 事件、会话、loop、context\n  ni-cli/        # 参数与生命周期\n  ni-provider/   # 后续：wire adapters\n  ni-tools/      # 后续：工具\n  ni-sandbox/    # 后续：策略与平台隔离\n  xtask/         # 仓库工具（看板构建）\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch2\u003e后果\u003c/h2\u003e\n\u003ch3\u003e正向\u003c/h3\u003e\n\u003cul\u003e\n\u003cli\u003e单静态二进制，启动 2–10ms，无 runtime 依赖。\u003c/li\u003e\n\u003cli\u003e常驻内存低，多 session / 子代理时线性成本可控。\u003c/li\u003e\n\u003cli\u003e进程组、超时、信号、fd 管理语义明确，取消链路可靠。\u003c/li\u003e\n\u003cli\u003elandlock / seccomp / seatbelt 可直接调用，不需要 native addon 或外部包装进程。\u003c/li\u003e\n\u003cli\u003e事件、状态机、工具 schema 适合强类型，后期重构成本低。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch3\u003e负向\u003c/h3\u003e\n\u003cul\u003e\n\u003cli\u003e编译反馈比 TS 慢一个数量级。\u003c/li\u003e\n\u003cli\u003easync 流式状态机在接口未定型时摩擦大。\u003c/li\u003e\n\u003cli\u003eOpenAI / Anthropic 的 Rust SDK 不如 TS/Python 成熟，SSE 和事件映射要自己写。\u003c/li\u003e\n\u003cli\u003eTUI 迭代比 Ink/React 慢。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e缓解\u003c/h2\u003e\n\u003col\u003e\n\u003cli\u003eworkspace 拆小 crate，\u003ccode\u003eni-core\u003c/code\u003e 不依赖 CLI / TUI，增量编译范围小。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ebacon\u003c/code\u003e / \u003ccode\u003ecargo-watch\u003c/code\u003e + \u003ccode\u003ecargo check\u003c/code\u003e 作为内循环；链接器用 mold/lld。\u003c/li\u003e\n\u003cli\u003e控制 proc-macro 依赖，provider 边界允许 \u003ccode\u003eserde_json::Value\u003c/code\u003e，内部强类型。\u003c/li\u003e\n\u003cli\u003eheadless first，TUI last；loop / tools 用 scripted provider 离线测试。\u003c/li\u003e\n\u003cli\u003econtext 逻辑写成纯函数 + fixture，改 prompt 策略不需要重编译整个 workspace。\u003c/li\u003e\n\u003c/ol\u003e\n\u003ch2\u003e备选方案\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cstrong\u003eTypeScript / Bun\u003c/strong\u003e：迭代最快，官方 SDK 最全，TUI 生态好。运行时足够，但单二进制、内存和原生沙箱弱。若接下来数周的主要目标是高频试 context 策略，这是更快的选择。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eRust core + TS TUI（JSON-RPC）\u003c/strong\u003e：长期可行，但 v0 多一套协议、进程生命周期和错误映射，违背 minimal。等事件协议稳定后再考虑拆分。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003ePython\u003c/strong\u003e：原型最快，但分发、并发、类型约束和长会话内存都不占优。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e备注\u003c/h2\u003e\n\u003cp\u003e\"Rust 慢一倍\"指的是开发迭代速度，不是运行时。性能优先应当优化 prompt cache、工具输出体积、并行工具和 compaction，而不是期待换语言让模型响应变快。\u003c/p\u003e\n","path":"docs/adr/0001-rust-core.md","excerpt":"性能优先不等于 loop 快几毫秒；Rust 换来的是启动、内存、分发和原生沙箱。"},{"id":"adr-0002","title":"ADR-0002：事件日志是唯一真相","kind":"adr","status":"accepted","order":21,"summary":"内存状态只是 JSONL 日志的 fold；resume、fork、replay 和 compaction 都从日志派生。","body_html":"\u003ch2\u003e状态\u003c/h2\u003e\n\u003cp\u003eAccepted · 2026-10-20\u003c/p\u003e\n\u003ch2\u003e背景\u003c/h2\u003e\n\u003cp\u003eAgent 进程会崩溃、被取消、被重启。如果对话只存在内存里，一次崩溃就丢掉全部上下文；如果另外维护一份\"session 快照\"，它和内存状态迟早不一致。\u003c/p\u003e\n\u003ch2\u003e决策\u003c/h2\u003e\n\u003cp\u003e每个 session 是一个 append-only JSONL 文件，一行一个 \u003ccode\u003eEvent\u003c/code\u003e。内存状态是日志的 fold：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-text\"\u003estate = fold(events)\n\u003c/code\u003e\u003c/pre\u003e\n\u003cul\u003e\n\u003cli\u003e写入：\u003ccode\u003eSessionLog::append\u003c/code\u003e 序列化一行、flush，不改旧行。\u003c/li\u003e\n\u003cli\u003e读取：\u003ccode\u003eload\u003c/code\u003e 逐行解码；坏行变成 warning，不丢整份历史。\u003c/li\u003e\n\u003cli\u003e恢复：\u003ccode\u003eresume\u003c/code\u003e 从日志重建，而不是从快照恢复。\u003c/li\u003e\n\u003cli\u003e分叉：\u003ccode\u003efork\u003c/code\u003e 复制某个前缀，生成新 session。\u003c/li\u003e\n\u003cli\u003e压缩：\u003ccode\u003ecompaction\u003c/code\u003e 事件记录摘要和 \u003ccode\u003eupto\u003c/code\u003e；只影响投影，不删原始事件。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e后果\u003c/h2\u003e\n\u003ch3\u003e正向\u003c/h3\u003e\n\u003cul\u003e\n\u003cli\u003eresume / replay / fork 共用一套机制，测试可离线回放。\u003c/li\u003e\n\u003cli\u003e崩溃最多丢最后一行（未 flush），不会出现\"内存与磁盘不一致\"。\u003c/li\u003e\n\u003cli\u003e审计简单：每个决策、工具调用、usage 都有时间线。\u003c/li\u003e\n\u003cli\u003e压缩是投影变换，可回滚、可对比。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch3\u003e负向\u003c/h3\u003e\n\u003cul\u003e\n\u003cli\u003e日志会增长；长会话需要 compaction 和归档策略。\u003c/li\u003e\n\u003cli\u003e事件 schema 演进需要兼容策略（新增字段可默认，删除/改义要迁移）。\u003c/li\u003e\n\u003cli\u003e日志可能包含敏感内容（文件内容、命令输出），需要权限和清理策略。\u003c/li\u003e\n\u003cli\u003e每次 append 都 flush，吞吐低于批量写；对 agent 的写入频率足够。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e投影规则\u003c/h2\u003e\n\u003col\u003e\n\u003cli\u003e原始事件永远保留。\u003c/li\u003e\n\u003cli\u003e最后一个 \u003ccode\u003ecompaction\u003c/code\u003e 之前的消息不进入模型上下文，替换为摘要。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003etool_result\u003c/code\u003e 必须和对应 \u003ccode\u003eassistant_message.tool_calls\u003c/code\u003e 成对出现；缺失时投影报错，不猜。\u003c/li\u003e\n\u003cli\u003ereasoning 是否进入上下文由 provider 适配层决定，日志始终保留原文。\u003c/li\u003e\n\u003cli\u003e投影是纯函数：相同日志 + 相同预算 → 相同上下文。\u003c/li\u003e\n\u003c/ol\u003e\n\u003ch2\u003e备选方案\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cstrong\u003e内存 messages + 退出时快照\u003c/strong\u003e：实现简单，但崩溃丢上下文，且快照与内存双真相。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e数据库（SQLite）\u003c/strong\u003e：查询和并发更好，但 v0 引入 schema、迁移和依赖；JSONL 可 grep、可 diff、可直接回放。\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003e只存模型可见的投影\u003c/strong\u003e：省空间，但丢掉审计和 fork 能力，压缩不可逆。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e风险与缓解\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e日志过大：按 session 归档，支持 \u003ccode\u003ecompact --archive\u003c/code\u003e；看板 Runs 视图只读聚合指标。\u003c/li\u003e\n\u003cli\u003e敏感信息：session 目录默认 \u003ccode\u003e0700\u003c/code\u003e；提供 \u003ccode\u003eni session redact\u003c/code\u003e 的后续入口。\u003c/li\u003e\n\u003cli\u003e坏行：加载时 warning + 行号；\u003ccode\u003e--strict\u003c/code\u003e 模式用于 CI。\u003c/li\u003e\n\u003c/ul\u003e\n","path":"docs/adr/0002-event-log.md","excerpt":"内存状态只是 JSONL 日志的 fold；resume、fork、replay 和 compaction 都从日志派生。"},{"id":"readme","title":"看板维护指南","kind":"guide","status":null,"order":90,"summary":"docs/ 的源文件、构建命令、卡片格式与每次迭代的更新仪式。","body_html":"\u003ch2\u003e这是什么\u003c/h2\u003e\n\u003cp\u003e\u003ccode\u003edocs/index.html\u003c/code\u003e 是项目唯一的阅读面：看板、架构、文档、时间线共享一个三栏壳。它由仓库里的源文件生成，离线可开，不依赖服务端。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-sh\"\u003ecargo xtask dashboard          # 生成 docs/index.html + model.json + receipt.json\ncargo xtask dashboard --check  # CI：生成物过期、引用断开时失败\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e构建是确定性的：相同输入生成相同 HTML。\u003ccode\u003ereceipt.json\u003c/code\u003e 记录构建时间、git revision 和输入清单，但不参与过期判断，也不入库。\u003c/p\u003e\n\u003ch2\u003e源文件\u003c/h2\u003e\n\u003cpre\u003e\u003ccode class=\"language-text\"\u003edocs/\n  index.html                  # 生成物，提交，file:// 可开\n  dashboard/\n    project.json              # 项目、里程碑、层、模块、关系、时间线\n    template.html             # 单文件壳\n    style.css                 # 三栏与四个视图的样式\n    app.js                    # 无框架渲染\n    model.json                # 生成物：解析后的完整模型\n    receipt.json              # 本地审计信息，gitignore，不入库\n  board/\n    M0-001-workspace.md       # 一张卡一个文件\n  adr/\n    0001-rust-core.md\n    0002-event-log.md\n  architecture.md\n  README.md\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003cstrong\u003e唯一真相\u003c/strong\u003e：\u003ccode\u003eproject.json\u003c/code\u003e + \u003ccode\u003eboard/*.md\u003c/code\u003e + 其余 Markdown。\u003ccode\u003eindex.html\u003c/code\u003e、\u003ccode\u003emodel.json\u003c/code\u003e、\u003ccode\u003ereceipt.json\u003c/code\u003e 永不手改。\u003c/p\u003e\n\u003ch2\u003e卡片格式\u003c/h2\u003e\n\u003cp\u003eTODO frontmatter 用 TOML，正文是给详情栏读的 Markdown：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-toml\"\u003e+++\nid = \"M0-005\"\ntitle = \"Provider trait 与流式适配\"\nstatus = \"ready\"          # backlog | ready | doing | review | done | blocked\nmilestone = \"M0\"\nmodule = \"providers\"      # 可省略；必须是 project.json 里的模块 id\nsize = \"L\"                # S | M | L\npriority = \"P0\"           # 可省略；P0 | P1 | P2\nupdated = \"2026-10-20\"\ncompleted = \"2026-10-20\"  # done 必填\ndepends_on = [\"M0-002\"]\ndocs = [\"architecture\"]   # 可选；必须是文档 id\nblocked_reason = \"\"       # blocked 必填\n+++\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e正文建议四段：\u003ccode\u003e## 范围\u003c/code\u003e、\u003ccode\u003e## 验收\u003c/code\u003e、\u003ccode\u003e## 记录\u003c/code\u003e，需要时加 \u003ccode\u003e## 开放问题\u003c/code\u003e。验收写成可执行的检查，不写\"体验良好\"。\u003c/p\u003e\n\u003ch2\u003e文档格式\u003c/h2\u003e\n\u003cp\u003e所有 \u003ccode\u003edocs/**/*.md\u003c/code\u003e（\u003ccode\u003eboard/\u003c/code\u003e 和 \u003ccode\u003edashboard/\u003c/code\u003e 除外）必须有 frontmatter：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-toml\"\u003e+++\nid = \"adr-0003\"\ntitle = \"ADR-0003：...\"\nkind = \"adr\"              # adr | doc | guide\nstatus = \"proposed\"       # ADR 必填：proposed | accepted | superseded | rejected | draft\norder = 30\nsummary = \"一句话，显示在文档卡片上。\"\n+++\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e文档 id 用于深链：\u003ccode\u003e#/docs/adr-0001\u003c/code\u003e。卡片里的 \u003ccode\u003edocs\u003c/code\u003e 引用按 id 校验。\u003c/p\u003e\n\u003ch2\u003e架构模型\u003c/h2\u003e\n\u003cp\u003e\u003ccode\u003eproject.json\u003c/code\u003e 里手工维护，不从文件名推断：\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003emilestones\u003c/code\u003e：M0–M3，状态 \u003ccode\u003eplanned | active | done\u003c/code\u003e，同一时间最多一个 active。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003elayers\u003c/code\u003e：语义分层，不是目录树。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003emodules\u003c/code\u003e：职责、公开契约、拥有的路径、备注。\u003ccode\u003eactive\u003c/code\u003e / \u003ccode\u003edone\u003c/code\u003e 至少有一个路径真实存在。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003erelations\u003c/code\u003e：\u003ccode\u003efrom\u003c/code\u003e / \u003ccode\u003eto\u003c/code\u003e / \u003ccode\u003elabel\u003c/code\u003e，两端必须是模块 id。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eevents\u003c/code\u003e：时间线的手工事件；\u003ccode\u003erefs\u003c/code\u003e 可以指向卡片或文档 id。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e更新仪式\u003c/h2\u003e\n\u003cp\u003e每次任务结束，按顺序做：\u003c/p\u003e\n\u003col\u003e\n\u003cli\u003e更新对应卡片的 \u003ccode\u003estatus\u003c/code\u003e、\u003ccode\u003eupdated\u003c/code\u003e、必要的 \u003ccode\u003ecompleted\u003c/code\u003e。\u003c/li\u003e\n\u003cli\u003e有架构决策就加一篇 ADR，并在 \u003ccode\u003eproject.json\u003c/code\u003e 的 \u003ccode\u003eevents\u003c/code\u003e 里加一条。\u003c/li\u003e\n\u003cli\u003e跑 \u003ccode\u003ecargo fmt --all \u0026amp;\u0026amp; cargo test --workspace\u003c/code\u003e。\u003c/li\u003e\n\u003cli\u003e跑 \u003ccode\u003ecargo xtask dashboard\u003c/code\u003e，把 \u003ccode\u003edocs/index.html\u003c/code\u003e 一起提交。\u003c/li\u003e\n\u003cli\u003e在 \u003ccode\u003eAGENTS.md\u003c/code\u003e 的 definition of done 里确认这一步没有被跳过。\u003c/li\u003e\n\u003c/ol\u003e\n\u003cp\u003e状态必须反映现实：没有 \u003ccode\u003edoing\u003c/code\u003e 的卡就不要写 \u003ccode\u003edoing\u003c/code\u003e；\u003ccode\u003edone\u003c/code\u003e 必须有完成日期和可验证的验收项。\u003c/p\u003e\n\u003ch2\u003e校验规则\u003c/h2\u003e\n\u003cp\u003e构建时会失败的情况：\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003eschema version 不是 1；id 重复；里程碑 / 模块 / 文档引用不存在。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003edone\u003c/code\u003e 没有 \u003ccode\u003ecompleted\u003c/code\u003e；\u003ccode\u003eblocked\u003c/code\u003e 没有 \u003ccode\u003eblocked_reason\u003c/code\u003e；日期格式错误。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eactive\u003c/code\u003e / \u003ccode\u003edone\u003c/code\u003e 模块的路径一个都不存在。\u003c/li\u003e\n\u003cli\u003eADR 的 status 不在允许集合。\u003c/li\u003e\n\u003cli\u003e关系端点不是模块。\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003e--check\u003c/code\u003e 时生成物与源不一致。\u003c/li\u003e\n\u003c/ul\u003e\n\u003ch2\u003e视觉约定\u003c/h2\u003e\n\u003cul\u003e\n\u003cli\u003e暖纸色底、墨色文字、一个深绿强调色；状态色只用于状态。\u003c/li\u003e\n\u003cli\u003e状态：Backlog 灰、Ready 蓝、Doing 琥珀、Review 紫、Done 绿、Blocked 红。\u003c/li\u003e\n\u003cli\u003e层色只用于模块卡顶部细线和图例，不铺满背景。\u003c/li\u003e\n\u003cli\u003e数字、ID、路径用等宽字体；正文用系统无衬线。\u003c/li\u003e\n\u003cli\u003e不引 CDN、不引外部字体，保证 \u003ccode\u003efile://\u003c/code\u003e 和离线环境一致。\u003c/li\u003e\n\u003c/ul\u003e\n","path":"docs/README.md","excerpt":"docs/ 的源文件、构建命令、卡片格式与每次迭代的更新仪式。"}],"events":[{"date":"2026-10-20","kind":"decision","title":"选择 Rust 作为核心语言","detail":"性能优先，且需要单二进制、低内存和原生沙箱。开发迭代的编译成本用 workspace 拆分和 fixture 测试抵消。","refs":["adr-0001"]},{"date":"2026-10-20","kind":"decision","title":"事件日志作为唯一真相","detail":"内存状态只是日志的 fold；resume、fork、replay 都从日志派生，压缩只改变投影。","refs":["adr-0002"]},{"date":"2026-10-20","kind":"milestone","title":"M0 开工：workspace、看板与会话日志","detail":"落地 cargo workspace、离线看板 v0、SessionLog 与 CLI 骨架。","refs":["M0-001","M0-002","M0-003","M0-004"]}],"meta":{"schema_version":1,"cards":16,"modules":9,"docs":4,"generator":"cargo xtask dashboard"}}</script>
+<script>
+(() => {
+  'use strict';
+
+  const DATA = JSON.parse(document.getElementById('ni-data').textContent);
+
+  const VIEWS = ['board', 'arch', 'docs', 'timeline'];
+  const STATUS_COLUMNS = ['backlog', 'ready', 'doing', 'review', 'done'];
+  const STATUS_LABEL = {
+    backlog: 'Backlog',
+    ready: 'Ready',
+    doing: 'Doing',
+    review: 'Review',
+    done: 'Done',
+    blocked: 'Blocked',
+    planned: 'Planned',
+    active: 'Active',
+  };
+  const STATUS_COLORS = {
+    backlog: '#8c8478',
+    ready: '#3f6f9f',
+    doing: '#b7791f',
+    review: '#6f5aa8',
+    done: '#3f7d4f',
+    blocked: '#b42318',
+  };
+  const SIZE_POINTS = { S: 1, M: 2, L: 3 };
+  const LAYER_COLORS = {
+    interface: '#4c7bd9',
+    engine: '#b57436',
+    adapters: '#8768bf',
+    state: '#5c8f4a',
+    engineering: '#8a8175',
+  };
+  const KIND_LABEL = { adr: 'ADR', doc: 'Doc', guide: 'Guide' };
+
+  const canvas = document.getElementById('canvas');
+  const details = document.getElementById('details');
+  const search = document.getElementById('search');
+  const themeButton = document.getElementById('theme-toggle');
+
+  const cardById = new Map(DATA.cards.map((card) => [card.id, card]));
+  const moduleById = new Map(DATA.modules.map((module) => [module.id, module]));
+  const docById = new Map(DATA.docs.map((doc) => [doc.id, doc]));
+  const milestoneById = new Map(DATA.milestones.map((milestone) => [milestone.id, milestone]));
+  const layerById = new Map(DATA.layers.map((layer) => [layer.id, layer]));
+
+  const state = {
+    view: 'board',
+    milestone: currentMilestoneId(),
+    selection: null,
+    query: '',
+    sourceIndex: 0,
+  };
+
+  let edgeFrame = 0;
+
+  function currentMilestoneId() {
+    const active = DATA.milestones.find((milestone) => milestone.status === 'active');
+    return active ? active.id : 'all';
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[character]));
+  }
+
+  function fmtDate(value) {
+    return value ? value.slice(5) : '—';
+  }
+
+  function docKind(kind) {
+    return KIND_LABEL[kind] || String(kind || 'doc').toUpperCase();
+  }
+
+  function layerColor(id) {
+    return LAYER_COLORS[id] || '#8a8175';
+  }
+
+  function layerName(id) {
+    const layer = layerById.get(id);
+    return layer ? layer.name : id;
+  }
+
+  function moduleTitle(id) {
+    const module = moduleById.get(id);
+    return module ? module.title : id;
+  }
+
+  function statusBadge(status) {
+    const label = STATUS_LABEL[status] || status;
+    return `<span class="badge badge-${esc(status)}"><span class="dot"></span>${esc(label)}</span>`;
+  }
+
+  function milestoneStats(id) {
+    const cards = DATA.cards.filter((card) => id === 'all' || card.milestone === id);
+    const done = cards.filter((card) => card.status === 'done');
+    const points = cards.reduce((sum, card) => sum + (SIZE_POINTS[card.size] || 1), 0);
+    const donePoints = done.reduce((sum, card) => sum + (SIZE_POINTS[card.size] || 1), 0);
+    return {
+      total: cards.length,
+      done: done.length,
+      points,
+      donePoints,
+      pct: points ? Math.round((donePoints / points) * 100) : 0,
+    };
+  }
+
+  function isCardSelected(id) {
+    return state.selection?.type === 'card' && state.selection.id === id;
+  }
+
+  function isModuleSelected(id) {
+    return state.selection?.type === 'module' && state.selection.id === id;
+  }
+
+  function isDocSelected(id) {
+    return state.selection?.type === 'doc' && state.selection.id === id;
+  }
+
+  function cardMatches(card, query) {
+    if (!query) return true;
+    return [card.id, card.title, card.module, card.status, card.priority]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  }
+
+  function moduleMatches(module, query) {
+    if (!query) return true;
+    return [module.id, module.title, module.summary, module.layer, module.status]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  }
+
+  function docMatches(doc, query) {
+    if (!query) return true;
+    return [doc.id, doc.title, doc.kind, doc.status, doc.summary, doc.excerpt, doc.path]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  }
+
+  function eventMatches(event, query) {
+    if (!query) return true;
+    return [event.date, event.kind, event.title, event.detail, ...(event.refs || [])]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  }
+
+  function viewHead(kicker, title, subtitle, stats) {
+    return `<div class="view-head">
+      <div>
+        <div class="kicker">${esc(kicker)}</div>
+        <h1 class="view-title">${esc(title)}</h1>
+        ${subtitle ? `<p class="view-sub">${esc(subtitle)}</p>` : ''}
+      </div>
+      ${stats ? `<div class="stats">${stats}</div>` : ''}
+    </div>`;
+  }
+
+  function compareCards(a, b) {
+    const priority = { P0: 0, P1: 1, P2: 2 };
+    const pa = priority[a.priority] ?? 9;
+    const pb = priority[b.priority] ?? 9;
+    return pa - pb || a.id.localeCompare(b.id);
+  }
+
+  function cardHtml(card) {
+    const module = card.module ? moduleById.get(card.module) : null;
+    const selected = isCardSelected(card.id);
+    return `<button class="card${card.status === 'done' ? ' done' : ''}${card.status === 'blocked' ? ' blocked' : ''}${selected ? ' selected' : ''}" type="button" data-card="${esc(card.id)}" aria-pressed="${selected}">
+      <span class="card-top"><span>${esc(card.id)}</span><span class="size">${esc(card.size)}</span></span>
+      <span class="card-title">${esc(card.title)}</span>
+      <span class="card-foot"><span>${module ? esc(module.title) : '—'}</span><span>${esc(fmtDate(card.updated))}</span></span>
+    </button>`;
+  }
+
+  function renderMilestones() {
+    const allStats = milestoneStats('all');
+    let html = `<button class="milestone${state.milestone === 'all' ? ' active' : ''}" type="button" data-milestone="all" aria-pressed="${state.milestone === 'all'}">
+      <span class="milestone-top"><span class="ms-dot"></span><span class="ms-id">ALL</span><span class="ms-title">Every milestone</span></span>
+      <span class="ms-meta"><span>${allStats.done}/${allStats.total}</span><span>${allStats.pct}%</span></span>
+      <span class="progress"><i style="width:${allStats.pct}%"></i></span>
+    </button>`;
+
+    html += DATA.milestones.map((milestone) => {
+      const stats = milestoneStats(milestone.id);
+      return `<button class="milestone${state.milestone === milestone.id ? ' active' : ''}" type="button" data-milestone="${esc(milestone.id)}" aria-pressed="${state.milestone === milestone.id}">
+        <span class="milestone-top"><span class="ms-dot ${esc(milestone.status)}"></span><span class="ms-id">${esc(milestone.id)}</span><span class="ms-title">${esc(milestone.title)}</span></span>
+        <span class="ms-meta"><span>${stats.done}/${stats.total}</span><span>${stats.pct}%</span></span>
+        <span class="progress"><i style="width:${stats.pct}%"></i></span>
+      </button>`;
+    }).join('');
+
+    return html;
+  }
+
+  function renderLayers() {
+    return DATA.layers.map((layer) => {
+      const count = DATA.modules.filter((module) => module.layer === layer.id).length;
+      return `<div class="layer-row"><span class="layer-dot" style="--c:${layerColor(layer.id)}"></span><span class="layer-name">${esc(layer.name)}</span><span class="layer-count">${count}</span></div>`;
+    }).join('');
+  }
+
+  function renderRailDocs() {
+    return DATA.docs.map((doc) => `<button class="rail-doc${isDocSelected(doc.id) ? ' active' : ''}" type="button" data-doc="${esc(doc.id)}" title="${esc(doc.title)}">
+      <span class="rd-kind">${esc(docKind(doc.kind))}</span><span class="rd-title">${esc(doc.title)}</span>
+    </button>`).join('');
+  }
+
+  function renderChrome() {
+    document.getElementById('project-status').textContent = DATA.project.status;
+    document.getElementById('milestone-count').textContent = DATA.milestones.length;
+    document.getElementById('layer-count').textContent = DATA.layers.length;
+    document.getElementById('doc-count').textContent = DATA.docs.length;
+
+    const done = DATA.cards.filter((card) => card.status === 'done').length;
+    document.getElementById('rail-foot').innerHTML = `<span>${done}/${DATA.cards.length} cards done</span><span>${DATA.modules.length} modules · ${DATA.docs.length} docs</span><span>offline · schema v${DATA.meta.schema_version}</span>`;
+
+    const placeholders = {
+      board: 'Filter cards',
+      arch: 'Filter modules',
+      docs: 'Filter documents',
+      timeline: 'Filter events',
+    };
+    search.placeholder = placeholders[state.view] || 'Filter';
+  }
+
+  function renderTabs() {
+    document.querySelectorAll('.tab').forEach((tab) => {
+      const active = tab.dataset.view === state.view;
+      tab.classList.toggle('active', active);
+      if (active) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
+    });
+  }
+
+  function renderRail() {
+    document.getElementById('milestone-list').innerHTML = renderMilestones();
+    document.getElementById('layer-list').innerHTML = renderLayers();
+    document.getElementById('rail-docs').innerHTML = renderRailDocs();
+  }
+
+  function renderCanvas() {
+    const previousView = canvas.dataset.view || '';
+    const previousScroll = canvas.scrollTop;
+    let html = '';
+
+    if (state.view === 'board') html = boardView();
+    else if (state.view === 'arch') html = archView();
+    else if (state.view === 'docs') html = docsView();
+    else html = timelineView();
+
+    canvas.innerHTML = html;
+    canvas.dataset.view = state.view;
+    canvas.scrollTop = previousView === state.view ? previousScroll : 0;
+
+    if (state.view === 'arch') scheduleEdges();
+  }
+
+  function boardView() {
+    const milestone = state.milestone === 'all' ? null : milestoneById.get(state.milestone);
+    const stats = milestoneStats(state.milestone);
+    const query = state.query.toLowerCase();
+    const cards = DATA.cards.filter((card) => {
+      const inMilestone = state.milestone === 'all' || card.milestone === state.milestone;
+      return inMilestone && cardMatches(card, query);
+    });
+    const blocked = cards.filter((card) => card.status === 'blocked');
+
+    const statsHtml = `<span><strong>${stats.done}/${stats.total}</strong> done</span><span class="sep">·</span><span>${stats.points} pts</span>`;
+    const title = milestone ? `${milestone.id} · ${milestone.title}` : 'All milestones';
+    const subtitle = milestone ? milestone.goal : 'Every milestone on one board.';
+
+    let html = viewHead('Iteration board', title, subtitle, statsHtml);
+    html += `<div class="progress wide" style="margin:-4px 0 15px"><i style="width:${stats.pct}%"></i></div>`;
+
+    if (blocked.length) {
+      html += `<div class="blocked-strip"><div class="blocked-label">Blocked · ${blocked.length}</div><div class="blocked-cards">${blocked.map(cardHtml).join('')}</div></div>`;
+    }
+
+    html += `<div class="board">${STATUS_COLUMNS.map((status) => boardColumn(status, cards)).join('')}</div>`;
+
+    if (!cards.length) {
+      html += `<div class="empty" style="margin-top:12px">No cards match this filter.</div>`;
+    }
+
+    return html;
+  }
+
+  function boardColumn(status, cards) {
+    const items = cards.filter((card) => card.status === status).sort(compareCards);
+    const warning = status === 'doing' && items.length > 3;
+    return `<section class="column${items.length ? '' : ' empty'}" data-status="${status}">
+      <div class="column-head"><span class="col-dot" style="--c:${STATUS_COLORS[status]}"></span>${esc(STATUS_LABEL[status])}<span class="col-count${warning ? ' warn' : ''}">${items.length}</span></div>
+      <div class="cards">${items.map(cardHtml).join('')}</div>
+    </section>`;
+  }
+
+  function archView() {
+    const query = state.query.toLowerCase();
+    const active = DATA.modules.filter((module) => module.status === 'active').length;
+    const stats = `<span><strong>${DATA.modules.length}</strong> modules</span><span class="sep">·</span><span>${active} active</span>`;
+
+    let html = viewHead(
+      'Target architecture',
+      'How ni is shaped',
+      '语义分层，不是目录树。实线标出调用与数据方向；虚线卡片表示尚未落地。',
+      stats,
+    );
+    html += `<div class="arch-canvas" id="arch-canvas"><svg class="edges" id="arch-edges" aria-hidden="true"></svg>`;
+
+    DATA.layers.forEach((layer, index) => {
+      const modules = DATA.modules.filter((module) => module.layer === layer.id);
+      html += `<section class="arch-layer">
+        <div class="layer-label"><div class="layer-index">${String(index + 1).padStart(2, '0')}</div><h2>${esc(layer.name)}</h2><p>${esc(layer.note)}</p></div>
+        <div class="layer-cards">${modules.map((module) => moduleCard(module, query)).join('') || '<div class="empty">No modules yet.</div>'}</div>
+      </section>`;
+    });
+
+    html += `</div>`;
+    return html;
+  }
+
+  function moduleCard(module, query) {
+    const selected = isModuleSelected(module.id);
+    const dim = query && !moduleMatches(module, query);
+    return `<button class="module-card${module.status === 'planned' ? ' planned' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}" type="button" data-module="${esc(module.id)}" style="--module-color:${layerColor(module.layer)}" aria-pressed="${selected}">
+      <span class="module-head"><span>${esc(module.id)}</span><span class="module-status">${esc(STATUS_LABEL[module.status] || module.status)}</span></span>
+      <span class="module-title">${esc(module.title)}</span>
+      <span class="module-summary">${esc(module.summary)}</span>
+      <span class="module-path">${esc(module.paths?.[0] || '—')}</span>
+    </button>`;
+  }
+
+  function docsView() {
+    const query = state.query.toLowerCase();
+    const docs = DATA.docs.filter((doc) => docMatches(doc, query));
+    const stats = `<span><strong>${DATA.docs.length}</strong> docs</span><span class="sep">·</span><span>${DATA.docs.filter((doc) => doc.kind === 'adr').length} ADRs</span>`;
+
+    return viewHead(
+      'Documents',
+      'Decisions, architecture, rituals',
+      'ADR 与指南和代码放在一起。点开在右栏阅读，深链可以直接分享。',
+      stats,
+    ) + `<div class="doc-grid">${docs.map(docCard).join('')}${docs.length ? '' : '<div class="empty">No documents match this filter.</div>'}</div>`;
+  }
+
+  function docCard(doc) {
+    const selected = isDocSelected(doc.id);
+    return `<button class="doc-card${selected ? ' selected' : ''}" type="button" data-doc="${esc(doc.id)}" aria-pressed="${selected}">
+      <span class="doc-top"><span class="doc-kind">${esc(docKind(doc.kind))}</span>${doc.status ? `<span class="doc-status">${esc(doc.status)}</span>` : ''}</span>
+      <span class="doc-title">${esc(doc.title)}</span>
+      <span class="doc-excerpt">${esc(doc.excerpt)}</span>
+      <span class="doc-path">${esc(doc.path)}</span>
+    </button>`;
+  }
+
+  function timelineView() {
+    const query = state.query.toLowerCase();
+    const events = DATA.events
+      .filter((event) => eventMatches(event, query))
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const stats = `<span><strong>${DATA.events.length}</strong> events</span>`;
+
+    return viewHead(
+      'Timeline',
+      'How the project got here',
+      '决策、里程碑和阶段变化。手工事件为主，后续可以从 git log 自动补充。',
+      stats,
+    ) + `<div class="timeline">${events.map(timelineItem).join('')}${events.length ? '' : '<div class="empty">No events match this filter.</div>'}</div>`;
+  }
+
+  function timelineItem(event) {
+    const refs = (event.refs || []).map((ref) => {
+      if (cardById.has(ref)) return `<button class="ref-chip" type="button" data-card="${esc(ref)}">${esc(ref)}</button>`;
+      if (docById.has(ref)) return `<button class="ref-chip" type="button" data-doc="${esc(ref)}">${esc(ref)}</button>`;
+      return `<span class="ref-chip">${esc(ref)}</span>`;
+    }).join('');
+
+    return `<article class="tl-item">
+      <div><span class="tl-date">${esc(event.date)}</span><span class="tl-kind">${esc(event.kind)}</span></div>
+      <h3 class="tl-title">${esc(event.title)}</h3>
+      ${event.detail ? `<p class="tl-detail">${esc(event.detail)}</p>` : ''}
+      ${refs ? `<div class="tl-refs">${refs}</div>` : ''}
+    </article>`;
+  }
+
+  function detailsHead(kicker, closable = true) {
+    return `<div class="details-head"><span class="kicker">${esc(kicker)}</span>${closable ? '<button class="close" type="button" data-close aria-label="Close details">×</button>' : ''}</div>`;
+  }
+
+  function metaItem(key, value) {
+    return `<div class="meta-item"><div class="meta-k">${esc(key)}</div><div class="meta-v">${value}</div></div>`;
+  }
+
+  function renderDetails() {
+    const key = state.selection ? `${state.selection.type}:${state.selection.id}` : 'overview';
+    const changed = details.dataset.key !== key;
+    let html = '';
+
+    if (!state.selection) {
+      html = overviewDetails();
+    } else if (state.selection.type === 'card') {
+      const card = cardById.get(state.selection.id);
+      html = card ? cardDetails(card) : overviewDetails();
+    } else if (state.selection.type === 'module') {
+      const module = moduleById.get(state.selection.id);
+      html = module ? moduleDetails(module) : overviewDetails();
+    } else {
+      const doc = docById.get(state.selection.id);
+      html = doc ? docDetails(doc) : overviewDetails();
+    }
+
+    details.innerHTML = html;
+    details.dataset.key = key;
+    if (changed) details.scrollTop = 0;
+
+    details.querySelectorAll('a[href^="http"]').forEach((link) => {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    });
+  }
+
+  function overviewDetails() {
+    const active = DATA.milestones.find((milestone) => milestone.status === 'active') || DATA.milestones[0];
+    const stats = milestoneStats(active ? active.id : 'all');
+
+    let html = detailsHead(`Project · ${DATA.project.name}`, false);
+    html += `<h1 class="details-title">${esc(DATA.project.title)}</h1>`;
+    html += `<p class="view-sub" style="font-size:12px">${esc(DATA.project.summary)}</p>`;
+    html += `<div class="overview-stats">
+      <div class="overview-stat"><strong>${DATA.cards.filter((card) => card.status === 'done').length}</strong><span>done</span></div>
+      <div class="overview-stat"><strong>${DATA.modules.length}</strong><span>modules</span></div>
+      <div class="overview-stat"><strong>${DATA.docs.length}</strong><span>docs</span></div>
+    </div>`;
+
+    if (active) {
+      html += `<div class="overview-block"><h3>${esc(active.id)} · ${esc(active.title)}</h3><p>${esc(active.goal)}</p><div class="progress wide" style="margin:8px 0 6px"><i style="width:${stats.pct}%"></i></div><div class="hint">${stats.done}/${stats.total} cards · ${stats.pct}%</div></div>`;
+      if (active.exit?.length) {
+        html += `<div class="detail-section"><h2>Exit criteria</h2><ul class="notes">${active.exit.map((item) => `<li>${esc(item)}</li>`).join('')}</ul></div>`;
+      }
+    }
+
+    html += `<div class="detail-section"><h2>Read next</h2><div class="path-list">
+      <button class="path-chip" type="button" data-view="arch">Architecture map</button>
+      <button class="path-chip" type="button" data-doc="architecture">Architecture doc</button>
+      <button class="path-chip" type="button" data-doc="readme">Dashboard guide</button>
+    </div></div>`;
+
+    return html;
+  }
+
+  function cardDetails(card) {
+    const module = card.module ? moduleById.get(card.module) : null;
+    const milestone = milestoneById.get(card.milestone);
+    const docs = (card.docs || []).map((id) => docById.get(id)).filter(Boolean);
+
+    let html = detailsHead(`Task · ${card.id}`);
+    html += `<h1 class="details-title">${esc(card.title)}</h1>`;
+    html += `<div class="badges">${statusBadge(card.status)}${card.priority ? `<span class="badge">${esc(card.priority)}</span>` : ''}<span class="badge">${esc(card.size)}</span></div>`;
+
+    if (card.status === 'blocked' && card.blocked_reason) {
+      html += `<div class="callout">Blocked · ${esc(card.blocked_reason)}</div>`;
+    }
+
+    html += `<div class="meta-grid">
+      ${metaItem('Milestone', milestone ? `${esc(milestone.id)} · ${esc(milestone.title)}` : esc(card.milestone))}
+      ${metaItem('Module', module ? `<button class="inline-link" type="button" data-module="${esc(module.id)}">${esc(module.title)}</button>` : '—')}
+      ${metaItem('Updated', `<span class="mono">${esc(card.updated)}</span>`)}
+      ${metaItem('Completed', card.completed ? `<span class="mono">${esc(card.completed)}</span>` : '—')}
+    </div>`;
+
+    if (card.depends_on?.length) {
+      html += `<div class="detail-section"><h2>Depends on</h2><div class="path-list">${card.depends_on.map((id) => `<button class="path-chip" type="button" data-card="${esc(id)}">${esc(id)} · ${esc(cardById.get(id)?.title || '')}</button>`).join('')}</div></div>`;
+    }
+
+    html += `<div class="md">${card.body_html}</div>`;
+
+    if (docs.length) {
+      html += `<div class="detail-section"><h2>Documents</h2><div class="path-list">${docs.map((doc) => `<button class="path-chip" type="button" data-doc="${esc(doc.id)}">${esc(doc.title)}</button>`).join('')}</div></div>`;
+    }
+
+    html += `<p class="hint">${esc(card.path)}</p>`;
+    return html;
+  }
+
+  function moduleDetails(module) {
+    let html = detailsHead(`Module · ${module.id}`);
+    html += `<h1 class="details-title">${esc(module.title)}</h1>`;
+    html += `<div class="badges">${statusBadge(module.status)}<span class="badge">${esc(layerName(module.layer))}</span></div>`;
+    html += `<p class="view-sub" style="font-size:12px">${esc(module.summary)}</p>`;
+
+    if (module.contract) {
+      html += `<div class="detail-section"><h2>Contract</h2><p>${esc(module.contract)}</p></div>`;
+    }
+
+    if (module.notes?.length) {
+      html += `<div class="detail-section"><h2>Notes</h2><ul class="notes">${module.notes.map((note) => `<li>${esc(note)}</li>`).join('')}</ul></div>`;
+    }
+
+    const incoming = DATA.relations.filter((relation) => relation.to === module.id);
+    const outgoing = DATA.relations.filter((relation) => relation.from === module.id);
+    if (incoming.length || outgoing.length) {
+      const rows = [
+        ...incoming.map((relation) => relationRow(relation, 'in')),
+        ...outgoing.map((relation) => relationRow(relation, 'out')),
+      ].join('');
+      html += `<div class="detail-section"><h2>Relations</h2><div class="relation-list">${rows}</div></div>`;
+    }
+
+    if (module.paths?.length) {
+      html += `<div class="detail-section"><h2>Owned paths</h2><div class="path-list">${module.paths.map((path) => `<span class="path-chip">${esc(path)}</span>`).join('')}</div></div>`;
+    }
+
+    html += `<div class="detail-section"><h2>Source</h2>${sourceView(module)}</div>`;
+    return html;
+  }
+
+  function relationRow(relation, direction) {
+    const other = direction === 'out' ? relation.to : relation.from;
+    return `<div class="relation"><span class="arrow">${direction === 'out' ? '→' : '←'}</span><button type="button" data-module="${esc(other)}">${esc(moduleTitle(other))}</button><span>${esc(relation.label || '')}</span></div>`;
+  }
+
+  function sourceView(module) {
+    if (!module.sources?.length) {
+      return '<div class="empty">Planned module — no source yet. The contract above is the source of truth.</div>';
+    }
+
+    const index = Math.min(state.sourceIndex, module.sources.length - 1);
+    const source = module.sources[index];
+    const tabs = module.sources.map((item, itemIndex) => `<button class="source-tab${itemIndex === index ? ' active' : ''}" type="button" data-source="${itemIndex}" title="${esc(item.path)}">${esc(item.path.split('/').pop())}</button>`).join('');
+    return `<div class="source-tabs">${tabs}</div>${sourceBox(source)}`;
+  }
+
+  function sourceBox(source) {
+    const lines = source.text.replace(/\n$/, '').split('\n');
+    const body = lines.map((line, index) => `<span class="source-line"><span class="ln">${index + 1}</span><span class="lc">${esc(line) || ' '}</span></span>`).join('');
+    return `<div class="source-box" role="region" aria-label="${esc(source.path)}">${body}</div>${source.truncated ? '<p class="hint">Truncated. Open the file in the repository for the full source.</p>' : ''}`;
+  }
+
+  function docDetails(doc) {
+    let html = detailsHead(`${docKind(doc.kind)} · ${doc.id}`);
+    html += `<h1 class="details-title">${esc(doc.title)}</h1>`;
+    html += `<div class="badges">${doc.status ? `<span class="badge">${esc(doc.status)}</span>` : ''}<span class="badge">${esc(docKind(doc.kind))}</span></div>`;
+    html += `<div class="md">${doc.body_html}</div>`;
+    html += `<p class="hint">${esc(doc.path)}</p>`;
+    return html;
+  }
+
+  function openCard(id) {
+    const card = cardById.get(id);
+    if (!card) return;
+    state.view = 'board';
+    state.milestone = card.milestone;
+    state.selection = { type: 'card', id };
+    state.query = '';
+    search.value = '';
+    render();
+    syncHash();
+  }
+
+  function openModule(id) {
+    if (!moduleById.has(id)) return;
+    state.view = 'arch';
+    state.selection = { type: 'module', id };
+    state.sourceIndex = 0;
+    state.query = '';
+    search.value = '';
+    render();
+    syncHash();
+  }
+
+  function openDoc(id) {
+    if (!docById.has(id)) return;
+    state.view = 'docs';
+    state.selection = { type: 'doc', id };
+    state.query = '';
+    search.value = '';
+    render();
+    syncHash();
+  }
+
+  function setView(view) {
+    if (!VIEWS.includes(view)) return;
+    state.view = view;
+    state.selection = null;
+    state.query = '';
+    search.value = '';
+    render();
+    syncHash();
+  }
+
+  function setMilestone(id) {
+    state.view = 'board';
+    state.milestone = id;
+    state.selection = null;
+    state.query = '';
+    search.value = '';
+    render();
+    syncHash();
+  }
+
+  function clearSelection() {
+    state.selection = null;
+    render();
+    syncHash();
+  }
+
+  function syncHash() {
+    let hash = `#/${state.view}`;
+    if (state.selection) hash += `/${encodeURIComponent(state.selection.id)}`;
+    if (location.hash === hash) return;
+    try {
+      history.replaceState(null, '', hash);
+    } catch {
+      location.hash = hash;
+    }
+  }
+
+  function applyHash() {
+    const raw = location.hash.replace(/^#\/?/, '');
+    if (!raw) {
+      state.view = 'board';
+      state.selection = null;
+      render();
+      return;
+    }
+
+    const parts = raw.split('/');
+    const view = parts[0];
+    const id = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('/')) : '';
+
+    if (!VIEWS.includes(view)) {
+      state.view = 'board';
+      state.selection = null;
+      render();
+      return;
+    }
+
+    state.view = view;
+    state.selection = null;
+
+    if (id) {
+      if (view === 'board' && cardById.has(id)) {
+        state.selection = { type: 'card', id };
+        state.milestone = cardById.get(id).milestone;
+      } else if (view === 'arch' && moduleById.has(id)) {
+        state.selection = { type: 'module', id };
+        state.sourceIndex = 0;
+      } else if (view === 'docs' && docById.has(id)) {
+        state.selection = { type: 'doc', id };
+      }
+    }
+
+    state.query = '';
+    search.value = '';
+    render();
+  }
+
+  function scheduleEdges() {
+    cancelAnimationFrame(edgeFrame);
+    edgeFrame = requestAnimationFrame(() => {
+      edgeFrame = requestAnimationFrame(drawEdges);
+    });
+  }
+
+  function drawEdges() {
+    const arch = document.getElementById('arch-canvas');
+    const svg = document.getElementById('arch-edges');
+    if (!arch || !svg) return;
+
+    const rect = arch.getBoundingClientRect();
+    const width = Math.max(arch.scrollWidth, arch.clientWidth);
+    const height = Math.max(arch.scrollHeight, arch.clientHeight);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+
+    const defs = '<defs><marker id="ni-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head" d="M 0 0 L 10 5 L 0 10 z"/></marker><marker id="ni-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head-active" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>';
+    const parts = [defs];
+    const selectedModule = state.selection?.type === 'module' ? state.selection.id : null;
+
+    for (const relation of DATA.relations) {
+      const source = arch.querySelector(`[data-module="${cssEscape(relation.from)}"]`);
+      const target = arch.querySelector(`[data-module="${cssEscape(relation.to)}"]`);
+      if (!source || !target || source.classList.contains('dim') || target.classList.contains('dim')) continue;
+
+      const a = source.getBoundingClientRect();
+      const b = target.getBoundingClientRect();
+      if (a.width === 0 || b.width === 0) continue;
+
+      let x1;
+      let y1;
+      let x2;
+      let y2;
+      let path;
+      let labelY;
+
+      if (b.top > a.bottom + 6) {
+        x1 = a.left + a.width / 2 - rect.left;
+        y1 = a.bottom - rect.top;
+        x2 = b.left + b.width / 2 - rect.left;
+        y2 = b.top - rect.top;
+        const midY = (y1 + y2) / 2;
+        path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+        labelY = y1 + 12;
+      } else if (b.bottom < a.top - 6) {
+        x1 = a.left + a.width / 2 - rect.left;
+        y1 = a.top - rect.top;
+        x2 = b.left + b.width / 2 - rect.left;
+        y2 = b.bottom - rect.top;
+        const midY = (y1 + y2) / 2;
+        path = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+        labelY = y1 - 7;
+      } else {
+        const toRight = b.left >= a.left;
+        x1 = (toRight ? a.right : a.left) - rect.left;
+        y1 = a.top + a.height / 2 - rect.top;
+        x2 = (toRight ? b.left : b.right) - rect.left;
+        y2 = b.top + b.height / 2 - rect.top;
+        const midX = (x1 + x2) / 2;
+        path = `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
+        labelY = a.top - rect.top - 7;
+      }
+
+      const connected = selectedModule && (relation.from === selectedModule || relation.to === selectedModule);
+      const className = connected ? 'edge edge-active' : 'edge';
+      const marker = connected ? 'ni-arrow-active' : 'ni-arrow';
+      const title = `${relation.from} → ${relation.to}${relation.label ? ` · ${relation.label}` : ''}`;
+      parts.push(`<path class="${className}" d="${path}" marker-end="url(#${marker})"><title>${esc(title)}</title></path>`);
+
+      if (connected && relation.label) {
+        const lx = (x1 + x2) / 2;
+        parts.push(`<text class="edge-label edge-label-active" x="${lx}" y="${labelY}" text-anchor="middle">${esc(relation.label)}</text>`);
+      }
+    }
+
+    svg.innerHTML = parts.join('');
+  }
+
+  function cssEscape(value) {
+    if (window.CSS?.escape) return CSS.escape(value);
+    return String(value).replace(/["\\]/g, '\\$&');
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+  }
+
+  function bindEvents() {
+    document.addEventListener('click', (event) => {
+      if (!(event.target instanceof Element)) return;
+      const target = event.target.closest('[data-view],[data-milestone],[data-card],[data-module],[data-doc],[data-source],[data-close]');
+      if (!target) return;
+
+      if (target.dataset.view) {
+        event.preventDefault();
+        setView(target.dataset.view);
+        return;
+      }
+      if (target.dataset.milestone) {
+        setMilestone(target.dataset.milestone);
+        return;
+      }
+      if (target.dataset.card) {
+        openCard(target.dataset.card);
+        return;
+      }
+      if (target.dataset.module) {
+        openModule(target.dataset.module);
+        return;
+      }
+      if (target.dataset.doc) {
+        openDoc(target.dataset.doc);
+        return;
+      }
+      if (target.hasAttribute('data-source')) {
+        state.sourceIndex = Number(target.dataset.source) || 0;
+        renderDetails();
+        return;
+      }
+      if (target.hasAttribute('data-close')) {
+        clearSelection();
+      }
+    });
+
+    search.addEventListener('input', () => {
+      state.query = search.value.trim().toLowerCase();
+      renderCanvas();
+    });
+
+    themeButton.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try {
+        localStorage.setItem('ni-theme', next);
+      } catch {
+        /* file:// or private mode */
+      }
+      scheduleEdges();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+
+      if (event.key === '/' && !typing) {
+        event.preventDefault();
+        search.focus();
+        search.select();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        if (document.activeElement === search) {
+          search.value = '';
+          state.query = '';
+          search.blur();
+          renderCanvas();
+        } else if (state.selection) {
+          clearSelection();
+        }
+        return;
+      }
+
+      if (!typing && ['1', '2', '3', '4'].includes(event.key)) {
+        setView(VIEWS[Number(event.key) - 1]);
+      }
+    });
+
+    window.addEventListener('hashchange', applyHash);
+    window.addEventListener('resize', scheduleEdges);
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scheduleEdges).catch(() => {});
+    }
+  }
+
+  function render() {
+    renderTabs();
+    renderChrome();
+    renderRail();
+    renderCanvas();
+    renderDetails();
+  }
+
+  function init() {
+    const saved = (() => {
+      try {
+        return localStorage.getItem('ni-theme');
+      } catch {
+        return null;
+      }
+    })();
+    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    applyTheme(saved || preferred);
+    bindEvents();
+
+    if (location.hash) {
+      applyHash();
+    } else {
+      render();
+      syncHash();
+    }
+  }
+
+  init();
+})();
+
+</script>
+</body>
+</html>

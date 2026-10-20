@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "ni",
+    "title": "ni",
+    "tagline": "minimal, observable coding agent",
+    "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
+    "status": "M0 · Bootstrap",
+    "repo": "niuverse/ni",
+    "language": "Rust"
+  },
+  "milestones": [
+    {
+      "id": "M0",
+      "title": "Bootstrap",
+      "status": "active",
+      "goal": "跑通 headless 闭环：一个 provider、六个工具、可恢复的会话。",
+      "exit": [
+        "ni exec 能修复一个真实小 bug",
+        "session 可 resume，坏尾行不丢历史",
+        "loop / tools 有离线 fixture 测试"
+      ]
+    },
+    {
+      "id": "M1",
+      "title": "Interaction",
+      "status": "planned",
+      "goal": "把审批、沙箱和流式交互补齐，让 harness 可以放心跑长任务。",
+      "exit": [
+        "TUI 流式输出与 diff 预览",
+        "sandbox / approval / network 三轴生效",
+        "Ctrl-C 取消并杀掉工具进程组"
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "Context",
+      "status": "planned",
+      "goal": "让长会话稳定且便宜：压缩、分层指令、缓存可观测。",
+      "exit": [
+        "compaction 生成可执行 handoff",
+        "AGENTS.md 按目录分层发现",
+        "cached token 命中率可见"
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Scale",
+      "status": "planned",
+      "goal": "多会话、回放与子代理。",
+      "exit": [
+        "exec --json 成为稳定协议",
+        "fork / replay 可用",
+        "subagent 有独立日志并可汇总"
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "interface",
+      "name": "Interface",
+      "note": "CLI、TUI、事件流"
+    },
+    {
+      "id": "engine",
+      "name": "Engine",
+      "note": "turn loop 与上下文投影"
+    },
+    {
+      "id": "adapters",
+      "name": "Adapters",
+      "note": "模型、工具、沙箱"
+    },
+    {
+      "id": "state",
+      "name": "State",
+      "note": "append-only 事件日志"
+    },
+    {
+      "id": "engineering",
+      "name": "Engineering",
+      "note": "构建、看板、测试"
+    }
+  ],
+  "modules": [
+    {
+      "id": "cli",
+      "title": "CLI",
+      "layer": "interface",
+      "status": "active",
+      "summary": "解析参数、组装 session 与 loop，提供 headless 入口。",
+      "contract": "ni exec <prompt> 启动一次运行；ni session 管理日志。不持有对话状态。",
+      "paths": [
+        "crates/ni-cli/src/main.rs"
+      ],
+      "notes": [
+        "CLI 只做参数与生命周期，不实现 turn 逻辑。",
+        "输出模式分 human 与 --json，后者从第一天就稳定。"
+      ]
+    },
+    {
+      "id": "tui",
+      "title": "TUI",
+      "layer": "interface",
+      "status": "planned",
+      "summary": "流式渲染、审批提示、diff 展示；只消费事件流。",
+      "contract": "不 import loop 内部；通过事件通道与 core 解耦。",
+      "paths": [
+        "crates/ni-tui/src/lib.rs"
+      ],
+      "notes": [
+        "TUI 最后做；先把 headless 跑通。",
+        "diff 展示是审批体验的核心，不是装饰。"
+      ]
+    },
+    {
+      "id": "loop",
+      "title": "Agent Loop",
+      "layer": "engine",
+      "status": "planned",
+      "summary": "唯一的 turn 引擎：project → stream → dispatch → append。",
+      "contract": "run(session, input, signal) -> Result<Outcome>；不关心 provider wire format。",
+      "paths": [
+        "crates/ni-core/src/loop.rs"
+      ],
+      "notes": [
+        "只读工具可并发，写操作串行。",
+        "重试只能在 turn 边界，工具执行后不重放。"
+      ]
+    },
+    {
+      "id": "context",
+      "title": "Context",
+      "layer": "engine",
+      "status": "planned",
+      "summary": "把全量日志投影成模型上下文：预算、裁剪、compaction。",
+      "contract": "project(log, budget) -> Context；有损但不修改日志。",
+      "paths": [
+        "crates/ni-core/src/context.rs"
+      ],
+      "notes": [
+        "日志是全量，上下文是投影；压缩只影响投影。",
+        "保持前缀稳定以命中 provider prompt cache。"
+      ]
+    },
+    {
+      "id": "providers",
+      "title": "Providers",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "把 OpenAI / Anthropic 的流式响应归一化成 StreamEvent。",
+      "contract": "Provider::stream(ctx, tools, signal) -> EventStream；错误分可重试、致命、上下文溢出。",
+      "paths": [
+        "crates/ni-provider/src/lib.rs"
+      ],
+      "notes": [
+        "适配层要薄，不抹平 provider 的所有怪癖。",
+        "usage 必须包含 cached / reasoning tokens。"
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "Tools",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "read / write / edit / grep / glob / bash 六个工具与注册表。",
+      "contract": "JSON Schema 输入；输出截断并给出续读指针；写操作串行。",
+      "paths": [
+        "crates/ni-tools/src/lib.rs"
+      ],
+      "notes": [
+        "edit 用精确字符串替换，要求唯一匹配。",
+        "read-before-write 是策略，不是提示词。"
+      ]
+    },
+    {
+      "id": "sandbox",
+      "title": "Sandbox",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "sandbox / approval / network 三轴策略。",
+      "contract": "执行前返回 allow / ask / deny；bash 必须经过进程组与超时包装。",
+      "paths": [
+        "crates/ni-sandbox/src/lib.rs"
+      ],
+      "notes": [
+        "进程内路径校验不是安全边界，bash 能绕过。",
+        "没有真沙箱时，变更型 bash 强制审批。"
+      ]
+    },
+    {
+      "id": "session",
+      "title": "Session Log",
+      "layer": "state",
+      "status": "active",
+      "summary": "append-only JSONL 事件日志，resume 与 fork 的基础。",
+      "contract": "SessionLog::append 只追加；load 容忍坏尾行并报告 warning；日志是唯一真相。",
+      "paths": [
+        "crates/ni-core/src/session.rs",
+        "crates/ni-core/src/event.rs"
+      ],
+      "notes": [
+        "每条事件立即 flush，进程崩溃最多丢最后一行。",
+        "内存状态是日志的 fold，不维护第二份真相。"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "title": "Dashboard",
+      "layer": "engineering",
+      "status": "active",
+      "summary": "从 project.json、卡片和 Markdown 生成离线单文件看板。",
+      "contract": "cargo xtask dashboard 可重复构建；--check 保证生成物不过期。",
+      "paths": [
+        "crates/xtask/src/main.rs",
+        "docs/dashboard/app.js",
+        "docs/dashboard/style.css",
+        "docs/dashboard/template.html"
+      ],
+      "notes": [
+        "卡片一文件，构建时校验引用与状态。",
+        "浏览器只读；改状态走仓库，避免第二个真相源。"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from": "cli",
+      "to": "loop",
+      "label": "run"
+    },
+    {
+      "from": "tui",
+      "to": "loop",
+      "label": "run"
+    },
+    {
+      "from": "loop",
+      "to": "context",
+      "label": "project"
+    },
+    {
+      "from": "loop",
+      "to": "providers",
+      "label": "stream"
+    },
+    {
+      "from": "loop",
+      "to": "tools",
+      "label": "dispatch"
+    },
+    {
+      "from": "loop",
+      "to": "session",
+      "label": "append"
+    },
+    {
+      "from": "context",
+      "to": "session",
+      "label": "read"
+    },
+    {
+      "from": "tools",
+      "to": "sandbox",
+      "label": "guard"
+    }
+  ],
+  "events": [
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "选择 Rust 作为核心语言",
+      "detail": "性能优先，且需要单二进制、低内存和原生沙箱。开发迭代的编译成本用 workspace 拆分和 fixture 测试抵消。",
+      "refs": [
+        "adr-0001"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "事件日志作为唯一真相",
+      "detail": "内存状态只是日志的 fold；resume、fork、replay 都从日志派生，压缩只改变投影。",
+      "refs": [
+        "adr-0002"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M0 开工：workspace、看板与会话日志",
+      "detail": "落地 cargo workspace、离线看板 v0、SessionLog 与 CLI 骨架。",
+      "refs": [
+        "M0-001",
+        "M0-002",
+        "M0-003",
+        "M0-004"
+      ]
+    }
+  ]
+}

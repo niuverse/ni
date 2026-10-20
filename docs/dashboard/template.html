@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="ni project dashboard: board, architecture, documents, timeline.">
+<title>ni · project dashboard</title>
+<style>
+{{STYLE}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/board" data-view="board" aria-label="ni dashboard">
+    <span class="brand-mark">ni</span>
+    <span class="brand-tag">minimal, observable coding agent</span>
+  </a>
+
+  <nav class="tabs" aria-label="Views">
+    <button class="tab" type="button" data-view="board">Board</button>
+    <button class="tab" type="button" data-view="arch">Architecture</button>
+    <button class="tab" type="button" data-view="docs">Docs</button>
+    <button class="tab" type="button" data-view="timeline">Timeline</button>
+  </nav>
+
+  <div class="top-actions">
+    <label class="search" aria-label="Filter current view">
+      <span class="search-key">/</span>
+      <input id="search" type="search" autocomplete="off" spellcheck="false" placeholder="Filter">
+    </label>
+    <span class="status-chip" id="project-status"></span>
+    <button class="icon-button" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="shell">
+  <aside class="rail" aria-label="Project navigation">
+    <section class="rail-section">
+      <div class="rail-head"><h2>Milestones</h2><span id="milestone-count"></span></div>
+      <div id="milestone-list" class="milestone-list"></div>
+    </section>
+
+    <section class="rail-section">
+      <div class="rail-head"><h2>Layers</h2><span id="layer-count"></span></div>
+      <div id="layer-list" class="layer-list"></div>
+    </section>
+
+    <section class="rail-section rail-docs">
+      <div class="rail-head"><h2>Docs</h2><span id="doc-count"></span></div>
+      <div id="rail-docs" class="rail-doc-list"></div>
+    </section>
+
+    <div class="rail-foot" id="rail-foot"></div>
+  </aside>
+
+  <section class="canvas" id="canvas" aria-label="Project view" tabindex="-1"></section>
+  <aside class="details" id="details" aria-label="Details"></aside>
+</main>
+
+<noscript>
+  <p style="padding:24px;font-family:monospace">This dashboard needs JavaScript. Source files live in docs/dashboard/.</p>
+</noscript>
+
+<script id="ni-data" type="application/json">{{DATA}}</script>
+<script>
+{{APP}}
+</script>
+</body>
+</html>
