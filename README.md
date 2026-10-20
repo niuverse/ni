@@ -9,9 +9,9 @@ replay, and resume.
 
 ## Status
 
-M1 · sandbox landed. `ni exec` has six tools, bwrap workspace/network isolation,
-per-tool approval, process-group cancellation, resume, recorded fixtures, and
-auth. The next card is the in-process TUI.
+M1 · TUI landed. `ni exec` and `ni tui` share six tools, bwrap isolation,
+per-tool approval, cancellation, resume, and recorded fixtures. The next card is
+full diff rendering.
 
 ## Quick start
 
@@ -29,6 +29,7 @@ cargo run -p ni -- provider test --preset deepseek
 cargo run -p ni -- exec "read a.txt and summarize it" --no-thinking
 cargo run -p ni -- exec "continue" --resume /path/to/session.jsonl
 cargo run -p ni -- exec "replay" --replay /path/to/fixture.json
+cargo run -p ni -- tui
 cargo run -p ni -- exec "review only" --sandbox read-only
 cargo run -p ni -- exec "fix it" --sandbox workspace-write --network off --approval ask
 cargo run -p ni -- exec "trusted" --sandbox full-access --network on --approval never

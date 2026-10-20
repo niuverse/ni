@@ -35,6 +35,7 @@ impl ApprovalMode {
 pub struct ApprovalRequest {
     pub tool: String,
     pub summary: String,
+    pub preview: Option<String>,
 }
 
 pub struct AgentConfig {
@@ -226,6 +227,7 @@ pub async fn run_with_history(
                 let request = ApprovalRequest {
                     tool: call.name.clone(),
                     summary: approval_summary(&call),
+                    preview: approval_preview(&call),
                 };
                 let allowed = approver(&request);
                 session.append(&Event::Approval {
@@ -272,6 +274,33 @@ fn requires_approval(tool: &str) -> bool {
     matches!(tool, "write" | "edit" | "bash")
 }
 
+fn approval_preview(call: &ToolCall) -> Option<String> {
+    let preview = match call.name.as_str() {
+        "write" => {
+            let content = call.input.get("content").and_then(Value::as_str)?;
+            let mut rendered = String::new();
+            for line in content.lines().take(40) {
+                rendered.push('+');
+                rendered.push_str(line);
+                rendered.push('\n');
+            }
+            rendered
+        }
+        "edit" => {
+            let old = call.input.get("old").and_then(Value::as_str)?;
+            let new = call.input.get("new").and_then(Value::as_str)?;
+            format!("-{old}\n+{new}\n")
+        }
+        _ => return None,
+    };
+
+    let mut truncated: String = preview.chars().take(1_600).collect();
+    if preview.chars().count() > 1_600 {
+        truncated.push_str("\n... (preview truncated)");
+    }
+    Some(truncated)
+}
+
 fn approval_summary(call: &ToolCall) -> String {
     let detail = match call.name.as_str() {
         "bash" => call.input.get("command").and_then(Value::as_str),
@@ -289,6 +318,7 @@ fn approval_summary(call: &ToolCall) -> String {
 /// handoff text.
 pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
+    let mut pending_tools: Vec<String> = Vec::new();
 
     for event in events {
         match event {
@@ -298,6 +328,7 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::Approval { .. }
             | Event::SessionEnd { .. } => {}
             Event::UserMessage { text, .. } => {
+                flush_pending_tools(&mut messages, &mut pending_tools);
                 messages.push(ChatMessage::user(text.clone()));
             }
             Event::AssistantMessage {
@@ -311,13 +342,16 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
                     reasoning.clone().filter(|value| !value.is_empty()),
                     tool_calls.clone(),
                 ));
+                pending_tools = tool_calls.iter().map(|call| call.id.clone()).collect();
             }
             Event::ToolResult {
                 call_id, output, ..
             } => {
+                pending_tools.retain(|pending| pending != call_id);
                 messages.push(ChatMessage::tool(call_id.clone(), output.clone()));
             }
             Event::Compaction { summary, .. } => {
+                flush_pending_tools(&mut messages, &mut pending_tools);
                 messages.push(ChatMessage::system(format!(
                     "Previous context summary:\n{summary}"
                 )));
@@ -325,7 +359,17 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
         }
     }
 
+    flush_pending_tools(&mut messages, &mut pending_tools);
     Ok(messages)
+}
+
+fn flush_pending_tools(messages: &mut Vec<ChatMessage>, pending: &mut Vec<String>) {
+    for call_id in pending.drain(..) {
+        messages.push(ChatMessage::tool(
+            call_id,
+            "cancelled before the tool produced a result".to_string(),
+        ));
+    }
 }
 
 #[derive(Debug, Default)]
@@ -479,8 +523,10 @@ mod tests {
         let mut config = test_config(&directory);
         config.approval = ApprovalMode::Ask;
         let mut requested = 0_usize;
-        let mut approver = |_: &ApprovalRequest| {
+        let mut preview_seen = None;
+        let mut approver = |request: &ApprovalRequest| {
             requested += 1;
+            preview_seen = request.preview.clone();
             false
         };
 
@@ -496,6 +542,9 @@ mod tests {
         .expect("run");
 
         assert_eq!(requested, 1);
+        assert!(preview_seen
+            .as_deref()
+            .is_some_and(|preview| preview.contains("+bad")));
         assert_eq!(outcome.final_text, "stopped");
         assert!(!directory.join("b.txt").exists());
         let loaded = load(session.path()).expect("load");
@@ -543,6 +592,36 @@ mod tests {
         assert_eq!(history[1].reasoning_content.as_deref(), Some("thought"));
         assert_eq!(history[2].role, Role::Tool);
         assert_eq!(history[2].tool_call_id.as_deref(), Some("call_1"));
+    }
+
+    #[test]
+    fn projects_cancelled_tool_call_as_error_result() {
+        let events = vec![
+            Event::AssistantMessage {
+                text: String::new(),
+                reasoning: None,
+                tool_calls: vec![ToolCall {
+                    id: "call_1".into(),
+                    name: "bash".into(),
+                    input: json!({"command": "sleep 30"}),
+                }],
+                ts: 1,
+            },
+            Event::SessionEnd { ts: 2 },
+            Event::UserMessage {
+                text: "next".into(),
+                ts: 3,
+            },
+        ];
+
+        let history = project_history(&events).expect("project history");
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[1].role, Role::Tool);
+        assert!(history[1]
+            .content
+            .as_deref()
+            .is_some_and(|content| content.contains("cancelled")));
+        assert_eq!(history[2].role, Role::User);
     }
 
     #[tokio::test]

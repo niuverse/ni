@@ -79,7 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M1-002 is done: default `workspace-write + network off` via bwrap, per-tool
-approval, and `policy` / `approval` audit events. The next card is `M1-001`
-(in-process TUI), then `M1-003` (diff). Do not start MCP, subagents, or a plugin
-system before the interaction surface is stable.
+M1-001 and M1-002 are done: linear `ni tui`, bwrap `workspace-write + network off`,
+single-key approval, and `policy` / `approval` audit events. The next card is
+`M1-003` (full diff preview and tool-output folding). Do not start MCP, subagents,
+or a plugin system before the interaction surface is stable.

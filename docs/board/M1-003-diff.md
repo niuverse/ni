@@ -1,7 +1,7 @@
 +++
 id = "M1-003"
 title = "Diff 预览与输出折叠"
-status = "backlog"
+status = "ready"
 milestone = "M1"
 module = "tui"
 size = "M"

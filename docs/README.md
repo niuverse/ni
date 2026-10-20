@@ -52,6 +52,7 @@ docs/
   exec.md
   provider.md
   roadmap.md
+  tui.md
   README.md
 ```
 

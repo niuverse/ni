@@ -5,7 +5,7 @@
     "title": "ni",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M1 · TUI",
+    "status": "M1 · Diff",
     "repo": "niuverse/ni",
     "language": "Rust"
   },
@@ -88,8 +88,8 @@
       "title": "CLI",
       "layer": "interface",
       "status": "active",
-      "summary": "参数解析、session/auth/provider 命令，以及 ni exec headless 入口。",
-      "contract": "ni exec <prompt> 启动一次运行；ni session 管理日志。不持有对话状态。",
+      "summary": "参数解析、session/auth/provider 命令，ni exec headless 入口与 ni tui 启动。",
+      "contract": "ni exec / ni tui 启动运行；ni session 管理日志。不持有对话状态。",
       "paths": [
         "crates/ni-cli/src/main.rs"
       ],
@@ -102,15 +102,16 @@
       "id": "tui",
       "title": "TUI",
       "layer": "interface",
-      "status": "planned",
-      "summary": "流式渲染、审批提示、diff 展示；只消费事件流。",
-      "contract": "不 import loop 内部；通过事件通道与 core 解耦。",
+      "status": "active",
+      "summary": "线性 TUI：流式文本、thinking 折叠、工具状态、单键审批、取消与会话复用。",
+      "contract": "只消费 AgentEvent；调用 run_with_history；不 import loop 内部；审批 a/d/s，Ctrl-C 取消当前 turn。",
       "paths": [
-        "crates/ni-tui/src/lib.rs"
+        "crates/ni-cli/src/tui.rs"
       ],
       "notes": [
-        "TUI 最后做；先把 headless 跑通。",
-        "diff 展示是审批体验的核心，不是装饰。"
+        "线性输出优先；全屏布局/滚动区未做。",
+        "diff 预览是工具输入的 +/- 片段，完整 diff 在 M1-003。",
+        "非 TTY 时审批退化为逐行输入，方便管道测试。"
       ]
     },
     {
@@ -417,6 +418,16 @@
       "detail": "默认 workspace-write + network off；read-only、full-access、审批与策略审计事件可用。",
       "refs": [
         "M1-002"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "线性 TUI 落地",
+      "detail": "流式文本、thinking 折叠、工具状态、单键审批、Ctrl-C 取消和 session 复用可用。",
+      "refs": [
+        "M1-001",
+        "tui"
       ]
     }
   ]

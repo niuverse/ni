@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+crossterm.workspace = true
 futures-util.workspace = true
 ni-agent = { path = "../ni-agent" }
 ni-auth = { path = "../ni-auth" }

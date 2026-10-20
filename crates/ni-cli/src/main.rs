@@ -16,6 +16,8 @@ use ni_provider::{
 };
 use ni_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 
+mod tui;
+
 #[derive(Debug, Parser)]
 #[command(name = "ni", version, about = "Minimal, observable coding agent")]
 struct Cli {
@@ -80,6 +82,39 @@ enum Command {
         /// Network: on or off
         #[arg(long, default_value = "off")]
         network: String,
+    },
+    /// Start the interactive linear TUI
+    Tui {
+        /// Provider preset: deepseek or openai
+        #[arg(long, default_value = "deepseek")]
+        preset: String,
+        /// Override the preset model
+        #[arg(long)]
+        model: Option<String>,
+        /// Disable DeepSeek thinking mode
+        #[arg(long)]
+        no_thinking: bool,
+        /// Working directory (defaults to cwd)
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        /// Directory for the session JSONL (defaults to ~/.ni/sessions)
+        #[arg(long)]
+        session_dir: Option<PathBuf>,
+        /// Resume an existing session JSONL
+        #[arg(long)]
+        resume: Option<PathBuf>,
+        /// Sandbox: read-only, workspace-write, or full-access
+        #[arg(long, default_value = "workspace-write")]
+        sandbox: String,
+        /// Approval: ask, on-failure, or never
+        #[arg(long, default_value = "on-failure")]
+        approval: String,
+        /// Network: on or off
+        #[arg(long, default_value = "off")]
+        network: String,
+        /// Replay normalized provider turns from a fixture JSON
+        #[arg(long)]
+        replay: Option<PathBuf>,
     },
 }
 
@@ -183,6 +218,32 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Some(Command::Tui {
+            preset,
+            model,
+            no_thinking,
+            cwd,
+            session_dir,
+            resume,
+            sandbox,
+            approval,
+            network,
+            replay,
+        }) => {
+            run_tui(
+                preset,
+                model,
+                no_thinking,
+                cwd,
+                session_dir,
+                resume,
+                sandbox,
+                approval,
+                network,
+                replay,
+            )
+            .await
+        }
         None => {
             print_banner();
             Ok(())
@@ -225,6 +286,153 @@ fn run_session(command: SessionCommand) -> Result<()> {
             Ok(())
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_tui(
+    preset: String,
+    model: Option<String>,
+    no_thinking: bool,
+    cwd: Option<PathBuf>,
+    session_dir: Option<PathBuf>,
+    resume: Option<PathBuf>,
+    sandbox: String,
+    approval: String,
+    network: String,
+    replay: Option<PathBuf>,
+) -> Result<()> {
+    let mut approval_mode = parse_approval(&approval)?;
+    let policy = SandboxPolicy::new(parse_sandbox(&sandbox)?, parse_network(&network)?);
+    let mut backend = policy.backend();
+    let mut allow_unsandboxed = false;
+    if backend == "unavailable" {
+        match approval_mode {
+            ApprovalMode::Never => bail!(
+                "sandbox backend bwrap is unavailable; install bubblewrap or use --approval ask"
+            ),
+            ApprovalMode::OnFailure => {
+                eprintln!(
+                    "warning: sandbox backend unavailable; falling back to per-action approval (network policy is not enforced)"
+                );
+                approval_mode = ApprovalMode::Ask;
+                allow_unsandboxed = true;
+                backend = "approval-fallback";
+            }
+            ApprovalMode::Ask => {
+                eprintln!(
+                    "warning: sandbox backend unavailable; using per-action approval (network policy is not enforced)"
+                );
+                allow_unsandboxed = true;
+                backend = "approval-fallback";
+            }
+        }
+    }
+
+    let preset = parse_provider(&preset)?;
+    let (provider, model, auth_source): (Arc<dyn Provider>, String, String) =
+        if let Some(path) = &replay {
+            let provider = ReplayProvider::load(path)?;
+            let model = model.unwrap_or_else(|| "replay".into());
+            (Arc::new(provider), model, "replay".into())
+        } else {
+            let store = AuthStore::new()?;
+            let credential = match store.resolve(preset.as_str())? {
+                Some(credential) => credential,
+                None => bail!(
+                    "no credential for {}; run `ni auth set {}` or set {}",
+                    preset.as_str(),
+                    preset.as_str(),
+                    preset.api_key_env()
+                ),
+            };
+
+            let mut config = OpenAiConfig::preset_config(preset)?;
+            config.api_key = credential.key.expose().to_string();
+            if let Some(model) = model {
+                config.model = model;
+            }
+            if no_thinking && preset == Preset::DeepSeek {
+                config.thinking = Some(ThinkingMode::Disabled);
+            }
+            let model = config.model.clone();
+            let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::for_preset(preset, config)?);
+            (provider, model, credential.source.to_string())
+        };
+
+    let resumed = match &resume {
+        Some(path) => {
+            let loaded = ni_core::load(path)?;
+            for warning in &loaded.warnings {
+                eprintln!("warning: {warning}");
+            }
+            let session_cwd = loaded.events.iter().find_map(|event| match event {
+                Event::SessionStart { cwd, .. } => Some(cwd.clone()),
+                _ => None,
+            });
+            let history = project_history(&loaded.events)?;
+            Some((path.clone(), history, session_cwd))
+        }
+        None => None,
+    };
+
+    let working_dir = match cwd {
+        Some(path) => path
+            .canonicalize()
+            .with_context(|| format!("resolve --cwd {}", path.display()))?,
+        None => match resumed.as_ref().and_then(|(_, _, cwd)| cwd.clone()) {
+            Some(path) => PathBuf::from(path)
+                .canonicalize()
+                .context("resolve resumed session cwd")?,
+            None => std::env::current_dir()?.canonicalize()?,
+        },
+    };
+
+    let (mut session, history) = if let Some((path, history, _)) = resumed {
+        (SessionLog::open(&path)?, history)
+    } else {
+        let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
+        let mut session = SessionLog::create(&session_dir)?;
+        session.append(&Event::SessionStart {
+            id: session.id().to_string(),
+            cwd: working_dir.display().to_string(),
+            model: model.clone(),
+            ts: now_ms(),
+        })?;
+        (session, Vec::new())
+    };
+
+    session.append(&Event::Policy {
+        sandbox: policy.mode.as_str().into(),
+        approval: approval_mode.as_str().into(),
+        network: policy.network.as_str().into(),
+        backend: backend.into(),
+        ts: now_ms(),
+    })?;
+
+    let mut agent_config = AgentConfig::new(model.clone(), working_dir.clone());
+    agent_config.sandbox = policy;
+    agent_config.approval = approval_mode;
+    agent_config.allow_unsandboxed = allow_unsandboxed;
+
+    eprintln!(
+        "ni tui · {} · model={model} · auth={} · cwd={}",
+        provider.name(),
+        auth_source,
+        working_dir.display()
+    );
+    if let Some(path) = &replay {
+        eprintln!("replay: {}", path.display());
+    }
+    eprintln!(
+        "policy: sandbox={} network={} approval={} backend={backend}",
+        policy.mode.as_str(),
+        policy.network.as_str(),
+        approval_mode.as_str()
+    );
+    eprintln!("session: {}", session.path().display());
+    eprintln!("type a task; exit/quit to leave; Ctrl-C cancels the current turn");
+
+    tui::run(provider.as_ref(), &mut session, &agent_config, history).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -389,6 +597,9 @@ async fn run_exec(
 
     let mut approver = |request: &ApprovalRequest| -> bool {
         eprintln!("\napproval required: {}", request.summary);
+        if let Some(preview) = &request.preview {
+            eprintln!("{preview}");
+        }
         eprint!("allow? [y/N] ");
         let _ = std::io::stderr().flush();
         let mut line = String::new();
@@ -747,11 +958,12 @@ fn print_banner() {
         env!("CARGO_PKG_VERSION")
     );
     println!();
-    println!("status   M0 · provider");
+    println!("status   M1 · TUI");
     println!("docs     docs/index.html");
     println!("sessions {}", default_sessions_dir().display());
     println!();
     println!("auth     ni auth set deepseek");
-    println!("next     ni exec \"find and fix a small bug\"");
+    println!("next     ni tui");
+    println!("         ni exec \"find and fix a small bug\"");
     println!("         cargo xtask dashboard");
 }
