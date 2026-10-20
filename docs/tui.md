@@ -53,6 +53,7 @@ niucode ▸ exit
 - `Tab` 补全 slash 命令；多个匹配时显示带说明的候选列表。唯一前缀会显示灰色内联提示。
 - 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-R` 用当前输入做反向历史搜索，重复按继续向前找。
 - `Ctrl-N` / `Ctrl-P` 等同 `↓` / `↑`；`Ctrl-Left/Right` 或 `Alt-B/F` 按词移动；`Ctrl-L` 清屏；支持 bracketed paste。
+- `NIUCODE_TUI_INLINE=1` 可试用 ratatui inline 输入层（picker/help、input、footer）；未完成 parity 前默认仍是 linear。
 - 鼠标捕获只在 slash 菜单打开时启用；菜单关闭后终端恢复原生复制/拖拽。退出、panic 或 Ctrl-C 都会经 `TerminalGuard` 释放 raw mode / bracketed paste / mouse capture。
 - 启动时主动关闭残留的 mouse reporting / bracketed paste / alternate screen，修复上一次异常退出后“终端卡住、无法复制”的状态。
 - 非 TTY（管道/脚本）自动退化为逐行输入，不启用行编辑。

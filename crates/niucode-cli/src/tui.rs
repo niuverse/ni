@@ -28,6 +28,7 @@ use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 use crate::diff::{clean_text, render_plain};
 use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
+use crate::inline::InlineEditor;
 use crate::provider_factory::{available_model_choices, provider_choices, ProviderFactory};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
@@ -48,6 +49,54 @@ const LOGO: [&str; 6] = [
     "██║ ╚████║██║╚██████╔╝╚██████╗╚██████╔╝██████╔╝███████╗",
     "╚═╝  ╚═══╝╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝",
 ];
+
+enum PromptEditor {
+    Linear(LineEditor),
+    Inline(InlineEditor),
+}
+
+impl PromptEditor {
+    fn read_line(
+        &mut self,
+        raw_prompt: &str,
+        styled_prompt: &str,
+        footer: &str,
+        theme: Theme,
+    ) -> std::io::Result<Input> {
+        match self {
+            Self::Linear(editor) => editor.read_line(raw_prompt, styled_prompt, theme),
+            Self::Inline(editor) => editor.read_line(raw_prompt, styled_prompt, footer, theme),
+        }
+    }
+
+    fn set_models(&mut self, models: Vec<String>) {
+        match self {
+            Self::Linear(editor) => editor.set_models(models),
+            Self::Inline(editor) => editor.set_models(models),
+        }
+    }
+
+    fn set_current_model(&mut self, model: impl Into<String>) {
+        match self {
+            Self::Linear(editor) => editor.set_current_model(model),
+            Self::Inline(editor) => editor.set_current_model(model),
+        }
+    }
+
+    fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
+        match self {
+            Self::Linear(editor) => editor.set_permissions(permissions),
+            Self::Inline(editor) => editor.set_permissions(permissions),
+        }
+    }
+
+    fn clear_history(&mut self) {
+        match self {
+            Self::Linear(editor) => editor.clear_history(),
+            Self::Inline(editor) => editor.clear_history(),
+        }
+    }
+}
 
 struct ToolEcho {
     name: String,
@@ -228,7 +277,11 @@ pub async fn run(
     }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
-        let mut editor = LineEditor::new(commands.clone());
+        let mut editor = if std::env::var_os("NIUCODE_TUI_INLINE").is_some() {
+            PromptEditor::Inline(InlineEditor::new(commands.clone()))
+        } else {
+            PromptEditor::Linear(LineEditor::new(commands.clone()))
+        };
         editor.set_models(niucode_model_choices(config, provider_factory));
         editor.set_current_model(format!("{}/{}", config.provider, config.model));
         editor.set_permissions(
@@ -304,7 +357,8 @@ pub async fn run(
                 ),
                 None => format!("{} ", out.accent(format!("niucode {}", theme::PROMPT))),
             };
-            match editor.read_line(&raw_prompt, &styled_prompt, out)? {
+            let footer = editor_footer(&state, config);
+            match editor.read_line(&raw_prompt, &styled_prompt, &footer, out)? {
                 Input::Line(line) => line,
                 Input::Interrupted => continue,
                 Input::Eof => break,
@@ -1300,6 +1354,32 @@ fn reset_terminal_modes() {
         crossterm::style::ResetColor
     );
     let _ = std::io::Write::flush(&mut out);
+}
+
+fn editor_footer(state: &SessionUiState, config: &AgentConfig) -> String {
+    let provider = effective_provider(state, config);
+    let model = effective_model(state, config);
+    let permission = state
+        .permissions
+        .map(PermissionProfile::as_str)
+        .unwrap_or("startup");
+    let cwd = config
+        .working_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(".");
+    let mut footer = format!(
+        "{cwd} · {provider}/{model} · permissions {permission} · context {}",
+        config.context.budget_tokens
+    );
+    if state.plan_mode {
+        footer.push_str(" · plan on");
+    }
+    if let Some(goal) = &state.goal {
+        let goal = goal.chars().take(40).collect::<String>();
+        footer.push_str(&format!(" · goal {goal}"));
+    }
+    footer
 }
 
 fn run_init(config: &AgentConfig, out: Theme) -> Result<()> {

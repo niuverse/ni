@@ -909,6 +909,27 @@
         "workspace",
         "tui"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-003 inline ratatui 基础进入 review",
+      "detail": "ratatui 0.30/crossterm 0.28 接入；inline picker/input/footer；cursor 不可用回退 linear；默认仍 linear，待 parity。",
+      "refs": [
+        "M5-003",
+        "adr-0019",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0019 accepted：inline ratatui",
+      "detail": "只接管底部输入层，不进入 alternate screen；transcript 保留原生 scrollback/copy。",
+      "refs": [
+        "adr-0019",
+        "M5-003"
+      ]
     }
   ]
 }

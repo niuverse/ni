@@ -19,6 +19,7 @@ niucode-core = { path = "../niucode-core" }
 niucode-extension = { path = "../niucode-extension" }
 niucode-provider = { path = "../niucode-provider" }
 niucode-tools = { path = "../niucode-tools" }
+ratatui.workspace = true
 rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
