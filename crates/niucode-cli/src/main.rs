@@ -142,6 +142,12 @@ enum Command {
         /// Explicitly allow subagent profile=inherit
         #[arg(long)]
         allow_subagent_inheritance: bool,
+        /// Completion condition; run the evaluator loop until met/impossible
+        #[arg(long)]
+        goal: Option<String>,
+        /// Maximum actor rounds for --goal
+        #[arg(long, default_value_t = 6)]
+        max_goal_turns: usize,
     },
     /// Start the interactive linear TUI
     Tui {
@@ -290,8 +296,10 @@ async fn main() -> Result<()> {
             network,
             json,
             allow_subagent_inheritance,
+            goal,
+            max_goal_turns,
         }) => {
-            run_exec(
+            let code = run_exec(
                 prompt,
                 preset,
                 model,
@@ -309,8 +317,14 @@ async fn main() -> Result<()> {
                 network,
                 json,
                 allow_subagent_inheritance,
+                goal,
+                max_goal_turns,
             )
-            .await
+            .await?;
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
         }
         Some(Command::Tui {
             preset,
@@ -905,6 +919,26 @@ async fn run_tui(
 }
 
 #[allow(clippy::too_many_arguments)]
+async fn run_actor_once(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
+    observer: &mut dyn FnMut(AgentEvent),
+) -> Option<Result<niucode_agent::RunOutcome>> {
+    let run = run_with_history(
+        provider, session, config, prompt, history, approver, observer,
+    );
+    tokio::pin!(run);
+    tokio::select! {
+        result = &mut run => Some(result),
+        _ = tokio::signal::ctrl_c() => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn run_exec(
     prompt: String,
     preset: String,
@@ -923,7 +957,9 @@ async fn run_exec(
     network: String,
     json: bool,
     allow_subagent_inheritance: bool,
-) -> Result<()> {
+    goal: Option<String>,
+    max_goal_turns: usize,
+) -> Result<i32> {
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
     }
@@ -932,6 +968,9 @@ async fn run_exec(
     }
     if keep_recent_turns == 0 {
         bail!("--keep-recent-turns must be at least 1");
+    }
+    if max_goal_turns == 0 {
+        bail!("--max-goal-turns must be at least 1");
     }
 
     let mut approval_mode = parse_approval(&approval)?;
@@ -1107,6 +1146,13 @@ async fn run_exec(
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    if let Some(condition) = &goal {
+        session.append(&Event::GoalSet {
+            text: condition.clone(),
+            ts: now_ms(),
+        })?;
+        agent_config.goal = Some(condition.clone());
+    }
 
     if json {
         emit_json(json!({
@@ -1148,81 +1194,75 @@ async fn run_exec(
     };
 
     let mut line_open = false;
-    let result = {
-        let mut observer = |event: AgentEvent| {
-            if json {
-                emit_json(event_json(&event));
-                return;
+    let mut observer = |event: AgentEvent| {
+        if json {
+            emit_json(event_json(&event));
+            return;
+        }
+        match event {
+            AgentEvent::TextDelta(delta) => {
+                print!("{delta}");
+                let _ = std::io::stdout().flush();
+                line_open = !delta.ends_with('\n');
             }
-            match event {
-                AgentEvent::TextDelta(delta) => {
-                    print!("{delta}");
-                    let _ = std::io::stdout().flush();
-                    line_open = !delta.ends_with('\n');
+            AgentEvent::ReasoningDelta(_) => {}
+            AgentEvent::ToolCall { name, input } => {
+                if line_open {
+                    println!();
+                    line_open = false;
                 }
-                AgentEvent::ReasoningDelta(_) => {}
-                AgentEvent::ToolCall { name, input } => {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    eprintln!("→ {name} {}", compact_json(&input));
+                eprintln!("→ {name} {}", compact_json(&input));
+            }
+            AgentEvent::ToolResult {
+                name, ok, summary, ..
+            } => {
+                eprintln!("← {name} {} {}", if ok { "ok" } else { "error" }, summary);
+            }
+            AgentEvent::TurnEnd { usage } => {
+                if line_open {
+                    println!();
+                    line_open = false;
                 }
-                AgentEvent::ToolResult {
-                    name, ok, summary, ..
-                } => {
-                    eprintln!("← {name} {} {}", if ok { "ok" } else { "error" }, summary);
+                eprintln!(
+                    "turn usage: in={} out={} cached={} cache={}%",
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.cached_tokens,
+                    usage.cache_hit_percent()
+                );
+            }
+            AgentEvent::Compaction {
+                replaced_events,
+                before_tokens,
+                after_tokens,
+            } => {
+                if line_open {
+                    println!();
+                    line_open = false;
                 }
-                AgentEvent::TurnEnd { usage } => {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    eprintln!(
-                        "turn usage: in={} out={} cached={} cache={}%",
-                        usage.input_tokens,
-                        usage.output_tokens,
-                        usage.cached_tokens,
-                        usage.cache_hit_percent()
-                    );
-                }
-                AgentEvent::Compaction {
-                    replaced_events,
-                    before_tokens,
-                    after_tokens,
-                } => {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    eprintln!(
+                eprintln!(
                     "compacted: {replaced_events} events · ~{before_tokens} → ~{after_tokens} tokens"
                 );
-                }
-                AgentEvent::Warning(message) => {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    eprintln!("warning: {}", diff::clean_text(&message));
-                }
             }
-        };
-        let run = run_with_history(
-            provider.as_ref(),
-            &mut session,
-            &agent_config,
-            &prompt,
-            history,
-            &mut approver,
-            &mut observer,
-        );
-        tokio::pin!(run);
-        tokio::select! {
-            result = &mut run => Some(result),
-            _ = tokio::signal::ctrl_c() => None,
+            AgentEvent::Warning(message) => {
+                if line_open {
+                    println!();
+                    line_open = false;
+                }
+                eprintln!("warning: {}", diff::clean_text(&message));
+            }
         }
     };
+    let result = run_actor_once(
+        provider.as_ref(),
+        &mut session,
+        &agent_config,
+        &prompt,
+        history,
+        &mut approver,
+        &mut observer,
+    )
+    .await;
 
     if result.is_none() {
         unmount_extensions(&extension_host, &mut session).await?;
@@ -1232,7 +1272,7 @@ async fn run_exec(
         } else {
             eprintln!("\ncancelled");
         }
-        return Ok(());
+        return Ok(130);
     }
 
     let result = result.expect("checked above");
@@ -1247,18 +1287,123 @@ async fn run_exec(
             return Err(error);
         }
     };
+    let mut outcome = outcome;
+    if let Some(condition) = goal.as_deref() {
+        let mut rounds = 1_usize;
+        loop {
+            let verdict = match goal::evaluate(
+                provider.as_ref(),
+                &agent_config.model,
+                condition,
+                &outcome.final_text,
+            )
+            .await
+            {
+                Ok(verdict) => verdict,
+                Err(error) => {
+                    unmount_extensions(&extension_host, &mut session).await?;
+                    let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                    if json {
+                        emit_json(
+                            json!({"type": "error", "message": format!("goal evaluator: {error:#}")}),
+                        );
+                    }
+                    return Err(error);
+                }
+            };
+            session.append(&Event::GoalVerdict {
+                status: verdict.status.as_str().into(),
+                reason: verdict.reason.clone(),
+                ts: now_ms(),
+            })?;
+            if json {
+                emit_json(json!({
+                    "type": "goal_verdict",
+                    "status": verdict.status.as_str(),
+                    "reason": verdict.reason,
+                }));
+            } else {
+                eprintln!(
+                    "goal: {} · {}",
+                    verdict.status.as_str(),
+                    diff::clean_text(&verdict.reason)
+                );
+            }
+            match verdict.status {
+                goal::GoalStatus::Met => {
+                    session.append(&Event::GoalCleared { ts: now_ms() })?;
+                    break;
+                }
+                goal::GoalStatus::Impossible => {
+                    unmount_extensions(&extension_host, &mut session).await?;
+                    let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                    if json {
+                        emit_json(json!({"type": "goal_done", "status": "impossible"}));
+                    }
+                    return Ok(3);
+                }
+                goal::GoalStatus::NotMet => {
+                    if rounds >= max_goal_turns {
+                        unmount_extensions(&extension_host, &mut session).await?;
+                        let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                        if json {
+                            emit_json(json!({"type": "goal_done", "status": "budget"}));
+                        }
+                        return Ok(2);
+                    }
+                    rounds += 1;
+                    let loaded = niucode_core::load(session.path())?;
+                    let history = project_history(&loaded.events)?;
+                    let Some(actor) = run_actor_once(
+                        provider.as_ref(),
+                        &mut session,
+                        &agent_config,
+                        &goal::continue_prompt(condition),
+                        history,
+                        &mut approver,
+                        &mut observer,
+                    )
+                    .await
+                    else {
+                        unmount_extensions(&extension_host, &mut session).await?;
+                        let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                        if json {
+                            emit_json(json!({"type": "cancelled"}));
+                        }
+                        return Ok(130);
+                    };
+                    outcome = match actor {
+                        Ok(outcome) => outcome,
+                        Err(error) => {
+                            unmount_extensions(&extension_host, &mut session).await?;
+                            if json {
+                                emit_json(
+                                    json!({"type": "error", "message": format!("{error:#}")}),
+                                );
+                            }
+                            return Err(error);
+                        }
+                    };
+                }
+            }
+        }
+    }
     if let Some(path) = &record {
         eprintln!("fixture: {}", path.display());
     }
     unmount_extensions(&extension_host, &mut session).await?;
 
     if json {
-        emit_json(json!({
+        let mut done = json!({
             "type": "done",
             "turns": outcome.turns,
             "usage": usage_json(&outcome.usage),
             "session": session.path().display().to_string(),
-        }));
+        });
+        if goal.is_some() {
+            done["goal"] = json!("met");
+        }
+        emit_json(done);
     } else {
         if !outcome.final_text.ends_with('\n') {
             println!();
@@ -1273,7 +1418,7 @@ async fn run_exec(
             session.path().display()
         );
     }
-    Ok(())
+    Ok(0)
 }
 
 fn emit_json(value: serde_json::Value) {

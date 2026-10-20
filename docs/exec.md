@@ -23,6 +23,9 @@ niucode exec "fix the build" \
 
 # 换模型 / 限制轮数 / 上下文预算
 niucode exec "..." --model deepseek-v4-pro --max-steps 0
+
+# Headless goal loop（met=0 / budget=2 / impossible=3 / cancel=130）
+niucode exec "fix the tests" --goal "cargo test passes" --max-goal-turns 6 --json
 # sessions default to ~/.niucode/projects/<key>/sessions/
 niucode exec "..." --context-budget 128000 --keep-recent-turns 4
 

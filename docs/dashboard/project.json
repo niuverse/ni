@@ -996,6 +996,28 @@
         "adr-0022",
         "tui"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-008 完成：headless goal loop",
+      "detail": "exec --goal 复用 actor/evaluator；met=0、budget=2、impossible=3、cancel=130；JSON goal_verdict/goal_done；离线 fixture 验证。",
+      "refs": [
+        "M4-008",
+        "adr-0023",
+        "exec",
+        "loop"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0023 accepted：headless goal 退出码",
+      "detail": "actor/evaluator 循环；按 actor 轮数预算；稳定退出码与 JSON verdict。",
+      "refs": [
+        "adr-0023",
+        "M4-008"
+      ]
     }
   ]
 }
