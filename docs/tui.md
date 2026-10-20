@@ -50,7 +50,8 @@ niucode ▸ exit
 - 输入一行任务，Enter 提交；`exit` / `quit` / `/exit` / `:q` 退出。
 - 执行 turn 时 `Ctrl-C` 取消当前 turn；2 秒内再次 `Ctrl-C` 强制退出。输入行时 `Ctrl-C` 清空当前行，`Ctrl-D` 退出。
 - `Tab` 补全 slash 命令；多个匹配时显示带说明的候选列表。唯一前缀会显示灰色内联提示。
-- 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-L` 清屏；支持 bracketed paste。
+- 菜单关闭时，`↑` / `↓` 浏览当前进程内的输入历史；`Ctrl-R` 用当前输入做反向历史搜索，重复按继续向前找。
+- `Ctrl-N` / `Ctrl-P` 等同 `↓` / `↑`；`Ctrl-Left/Right` 或 `Alt-B/F` 按词移动；`Ctrl-L` 清屏；支持 bracketed paste。
 - 非 TTY（管道/脚本）自动退化为逐行输入，不启用行编辑。
 - `◆` 标记 assistant 文本，`◇` 标记折叠后的 reasoning，`»` 标记工具调用。
 - `subagent` 调用会显示任务输入，完成后显示每个子任务的摘要和独立日志路径；父上下文只收到这一条 tool_result。
@@ -66,6 +67,8 @@ TTY 下使用 readline 风格的行编辑器：
 
 - 输入 `/` 后自动显示 slash 命令和说明；输入 `/i` 直接出现 `/init` 候选，不需要先按 Tab。
 - `Tab` / `Enter` 接受当前候选；`↑` / `↓` 选择；`Esc` 关闭菜单。
+- 鼠标移动到候选行会高亮；左键点击接受；滚轮在菜单内移动选择。
+- 输入的命令名用 accent 高亮；prompt 会显示 `plan` / `goal` 徽标。
 - 命令继续输入参数（例如 `/goal all tests pass`）后菜单自动关闭。
 - `↑` / `↓` 调出当前进程内的历史输入；`Ctrl-C` 清空当前行；`Ctrl-D` 退出；`Ctrl-L` 清屏。
 - 超长输入、光标移动、退格、删除、Home/End 由行编辑器处理，不再依赖终端自身回显。
@@ -76,8 +79,8 @@ TTY 下使用 readline 风格的行编辑器：
 
 - `/plan` 只收紧权限：`effective_access = min(base_access, read-only)`，写/命令/联网被阻止或询问；它不改变当前 sandbox/approval 配置，退出后恢复。
 - `/plan` 生成的计划就是该 turn 的 assistant 输出；`/plan approve` 只退出模式，不自动执行，下一次 prompt 才进入实现。
-- `/goal` 是目标标签，不是权限；它进入 system prompt，写入 `goal_set` / `goal_cleared` 事件，compaction/resume 后仍存在。
-- `/goal run` 每轮结束调用独立 evaluator（无工具、30s timeout），verdict 写入 `goal_verdict`；met 自动清除 goal，impossible/6 轮预算耗尽停止。`/goal stop` 停止但不删 goal。headless 版本在 M4-008。
+- `/goal <condition>` 现在会**设置目标并立即启动** goal run；如果只想设置不执行，先 `/goal run` 前用 `/goal` 查看，或使用 `/plan` 只读模式。
+- 每轮结束调用独立 evaluator（无工具、30s timeout），verdict 写入 `goal_verdict`；met 自动清除 goal，impossible/6 轮预算耗尽停止。`/goal stop` 停止但不删 goal。headless 版本在 M4-008。
 - 启动时可用 `--plan` 直接进入 plan mode；profile 的 CLI/`/permissions` 随 M4-003 落地，当前仍用 `--sandbox` / `--approval`。
 
 ## Slash 命令
@@ -89,7 +92,7 @@ TTY 下使用 readline 风格的行编辑器：
 | `/init` | 在当前工作区创建 `AGENTS.md` scaffold；已存在则不覆盖，read-only 沙箱拒绝。 |
 | `/clear` | 新建 session 并清空当前上下文；旧 session 文件保留。 |
 | `/plan` | 进入只读 plan mode；`/plan off` / `/plan approve` 退出；`/plan status` 查看。 |
-| `/goal <condition>` | 设置会话目标标签；`/goal` 查看；`/goal run` 自动续跑（最多 6 轮）；`/goal stop` 停止；`/goal clear` 清除。 |
+| `/goal <condition>` | 设置目标并立即启动 goal run（最多 6 轮）；`/goal` 查看；`/goal run` 重新启动；`/goal stop` 停止；`/goal clear` 清除。 |
 | `/fork [event-id]` | 复制当前 session 的前缀到新 session 并切换过去；默认 fork 到最后一个事件。 |
 | `/status` | 显示 model、cwd、sandbox、context budget、session、事件数、turn / compaction / instruction / subagent / extension 计数和累计 cache。 |
 | `/session` | 显示当前 session 路径、事件数和 turn 数。 |

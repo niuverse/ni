@@ -6,9 +6,10 @@
 
 use std::io::{stdout, IsTerminal, Write};
 
-use crossterm::cursor::{Hide, MoveLeft, MoveRight, MoveToColumn, MoveUp, Show};
+use crossterm::cursor::{position, Hide, MoveLeft, MoveRight, MoveToColumn, MoveUp, Show};
 use crossterm::event::{
-    self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers,
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
 };
 use crossterm::execute;
 use crossterm::terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType};
@@ -60,6 +61,10 @@ impl LineEditor {
             selected: 0,
             menu_open: false,
             scroll: 0,
+            history_search: None,
+            history_query: None,
+            prompt_row: None,
+            mouse_failed: false,
             raw_prompt,
             styled_prompt,
             theme,
@@ -67,9 +72,9 @@ impl LineEditor {
 
         enable_raw_mode()?;
         let mut out = stdout();
-        execute!(out, EnableBracketedPaste, Hide)?;
+        execute!(out, EnableBracketedPaste, EnableMouseCapture, Hide)?;
         let result = state.run(&mut out);
-        let _ = execute!(out, DisableBracketedPaste, Show);
+        let _ = execute!(out, DisableMouseCapture, DisableBracketedPaste, Show);
         let _ = disable_raw_mode();
         result
     }
@@ -84,6 +89,10 @@ struct State<'a> {
     selected: usize,
     menu_open: bool,
     scroll: usize,
+    history_search: Option<usize>,
+    history_query: Option<String>,
+    prompt_row: Option<u16>,
+    mouse_failed: bool,
     raw_prompt: &'a str,
     styled_prompt: &'a str,
     theme: Theme,
@@ -112,7 +121,13 @@ impl State<'_> {
                     self.refresh_menu();
                     self.render(out)?;
                 }
+                Event::Mouse(mouse) => {
+                    if self.handle_mouse(mouse)? {
+                        self.render(out)?;
+                    }
+                }
                 Event::Resize(_, _) => {
+                    self.prompt_row = None;
                     self.render(out)?;
                 }
                 _ => {}
@@ -144,6 +159,35 @@ impl State<'_> {
                     }
                 }
                 KeyCode::Char('j') => self.enter(out),
+                KeyCode::Char('n') => {
+                    if self.menu_open {
+                        let visible = self.candidates().len().min(MAX_MENU_ROWS);
+                        self.selected = (self.selected + 1).min(visible.saturating_sub(1));
+                    } else {
+                        self.history_down();
+                    }
+                    Ok(None)
+                }
+                KeyCode::Char('p') => {
+                    if self.menu_open {
+                        self.selected = self.selected.saturating_sub(1);
+                    } else {
+                        self.history_up();
+                    }
+                    Ok(None)
+                }
+                KeyCode::Char('r') => {
+                    self.history_search_prev();
+                    Ok(None)
+                }
+                KeyCode::Left => {
+                    self.move_word_left();
+                    Ok(None)
+                }
+                KeyCode::Right => {
+                    self.move_word_right();
+                    Ok(None)
+                }
                 KeyCode::Char('a') => {
                     self.cursor = 0;
                     Ok(None)
@@ -176,12 +220,12 @@ impl State<'_> {
 
         if alt {
             return match key.code {
-                KeyCode::Char('b') => {
-                    self.cursor = self.cursor.saturating_sub(1);
+                KeyCode::Char('b') | KeyCode::Left => {
+                    self.move_word_left();
                     Ok(None)
                 }
-                KeyCode::Char('f') => {
-                    self.cursor = (self.cursor + 1).min(self.chars.len());
+                KeyCode::Char('f') | KeyCode::Right => {
+                    self.move_word_right();
                     Ok(None)
                 }
                 _ => Ok(None),
@@ -277,6 +321,8 @@ impl State<'_> {
             self.cursor += 1;
         }
         self.history_index = self.history.len();
+        self.history_search = None;
+        self.history_query = None;
     }
 
     fn delete_at_cursor(&mut self) {
@@ -326,6 +372,38 @@ impl State<'_> {
         self.history_index = self.history.len();
     }
 
+    fn move_word_left(&mut self) {
+        while self.cursor > 0 && self.chars[self.cursor - 1].is_whitespace() {
+            self.cursor -= 1;
+        }
+        while self.cursor > 0 && !self.chars[self.cursor - 1].is_whitespace() {
+            self.cursor -= 1;
+        }
+    }
+
+    fn move_word_right(&mut self) {
+        while self.cursor < self.chars.len() && self.chars[self.cursor].is_whitespace() {
+            self.cursor += 1;
+        }
+        while self.cursor < self.chars.len() && !self.chars[self.cursor].is_whitespace() {
+            self.cursor += 1;
+        }
+    }
+
+    fn history_search_prev(&mut self) {
+        let needle = self.history_query.clone().unwrap_or_else(|| self.line());
+        self.history_query = Some(needle.clone());
+        let start = self.history_search.unwrap_or(self.history.len());
+        for index in (0..start).rev() {
+            if self.history[index].contains(&needle) {
+                self.history_search = Some(index);
+                self.history_index = index;
+                self.set_line(&self.history[index].clone());
+                return;
+            }
+        }
+    }
+
     fn remember(&mut self, line: &str) {
         let line = line.trim();
         if line.is_empty() {
@@ -345,6 +423,8 @@ impl State<'_> {
             return;
         }
         self.history_index -= 1;
+        self.history_search = None;
+        self.history_query = None;
         self.set_line(&self.history[self.history_index].clone());
     }
 
@@ -353,6 +433,8 @@ impl State<'_> {
             return;
         }
         self.history_index += 1;
+        self.history_search = None;
+        self.history_query = None;
         if self.history_index == self.history.len() {
             self.set_line("");
         } else {
@@ -366,7 +448,7 @@ impl State<'_> {
     }
 
     fn render(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
+        let (cols, rows) = terminal::size().unwrap_or((80, 24));
         let cols = cols.max(20) as usize;
         let prompt_width = UnicodeWidthStr::width(self.raw_prompt);
         let available = cols.saturating_sub(prompt_width + 1).max(1);
@@ -413,7 +495,20 @@ impl State<'_> {
         if self.scroll > 0 {
             write!(out, "…")?;
         }
-        write!(out, "{visible}")?;
+        if self.chars.first() == Some(&'/') {
+            if let Some(space) = visible.find(char::is_whitespace) {
+                write!(
+                    out,
+                    "{}{}",
+                    self.theme.accent(&visible[..space]),
+                    &visible[space..]
+                )?;
+            } else {
+                write!(out, "{}", self.theme.accent(&visible))?;
+            }
+        } else {
+            write!(out, "{visible}")?;
+        }
 
         let candidates = self.candidates();
         let menu_rows = if self.menu_open {
@@ -432,7 +527,7 @@ impl State<'_> {
             let line = truncate_columns(&line, cols);
             if index == self.selected {
                 if self.theme.is_ansi() {
-                    write!(out, "\x1b[7m{line}\x1b[0m")?;
+                    write!(out, "\x1b[7m▸ {line}\x1b[0m")?;
                 } else {
                     write!(out, "> {line}")?;
                 }
@@ -442,6 +537,11 @@ impl State<'_> {
         }
 
         if menu_rows > 0 {
+            if let Some(row) = self.prompt_row {
+                let rows = rows.max(1) as usize;
+                let overflow = (row as usize + menu_rows).saturating_sub(rows - 1);
+                self.prompt_row = Some(row.saturating_sub(overflow as u16));
+            }
             execute!(out, MoveUp(menu_rows as u16))?;
             execute!(out, MoveRight((prompt_width + screen_cursor) as u16))?;
         } else {
@@ -452,6 +552,55 @@ impl State<'_> {
             }
         }
         out.flush()
+    }
+
+    fn handle_mouse(&mut self, mouse: event::MouseEvent) -> std::io::Result<bool> {
+        if !self.menu_open || self.mouse_failed {
+            return Ok(false);
+        }
+        let rows = self.candidates().len().min(MAX_MENU_ROWS);
+        if rows == 0 {
+            return Ok(false);
+        }
+        let prompt_row = match self.prompt_row {
+            Some(row) => row,
+            None => match position() {
+                Ok((_, row)) => {
+                    self.prompt_row = Some(row);
+                    row
+                }
+                Err(_) => {
+                    self.mouse_failed = true;
+                    return Ok(false);
+                }
+            },
+        };
+        let Some(index) = menu_index(mouse.row, prompt_row, rows) else {
+            return Ok(false);
+        };
+        match mouse.kind {
+            MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
+                if self.selected != index {
+                    self.selected = index;
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.selected = index;
+                self.accept_selected();
+                Ok(true)
+            }
+            MouseEventKind::ScrollDown => {
+                self.selected = (self.selected + 1).min(rows.saturating_sub(1));
+                Ok(true)
+            }
+            MouseEventKind::ScrollUp => {
+                self.selected = self.selected.saturating_sub(1);
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
     }
 
     fn clear_final(&mut self, out: &mut impl Write, keep_line: bool) -> std::io::Result<()> {
@@ -478,6 +627,13 @@ fn command_candidates<'a>(registry: &'a CommandRegistry, line: &str) -> Vec<&'a 
     registry.candidates(line)
 }
 
+fn menu_index(mouse_row: u16, prompt_row: u16, rows: usize) -> Option<usize> {
+    if mouse_row <= prompt_row || mouse_row > prompt_row + rows as u16 {
+        return None;
+    }
+    Some((mouse_row - prompt_row - 1) as usize)
+}
+
 fn truncate_columns(text: &str, columns: usize) -> String {
     let mut out = String::new();
     let mut used = 0_usize;
@@ -500,6 +656,14 @@ mod tests {
     fn truncates_menu_lines_by_display_width() {
         assert_eq!(truncate_columns("abcdef", 4), "abcd");
         assert_eq!(truncate_columns("你好世界", 4), "你好");
+    }
+
+    #[test]
+    fn maps_mouse_rows_to_menu_candidates() {
+        assert_eq!(menu_index(11, 10, 6), Some(0));
+        assert_eq!(menu_index(16, 10, 6), Some(5));
+        assert_eq!(menu_index(10, 10, 6), None);
+        assert_eq!(menu_index(17, 10, 6), None);
     }
 
     #[test]

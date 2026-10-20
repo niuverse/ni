@@ -26,6 +26,10 @@ Accepted · 2026-10-20
 7. **risk 是工具元数据**：`low/medium/high/unknown`，用于 auto-review 和 subagent 授权；用户不直接配置。高风险默认只在主 session/人工确认；unknown 按高风险处理。
 8. **auto-review 是 profile 行为**：`:review` 使用独立 reviewer，无工具权限，只能 allow/deny/escalate；不能改 access mode；高风险/unknown 升级给人。
 
+## Implementation note
+
+M4-005 调整了 `/goal` 的 TUI 交互：`/goal <condition>` 现在设置目标并**立即启动** goal run（最多 6 轮），`/goal run` 用于重新启动已有目标。目标仍然是事件日志里的标签，goal run 不改变 permission profile；headless `exec --goal` 仍在 M4-008。这里更新的是交互默认值，不是权限模型。
+
 ## 后果
 
 ### 正向

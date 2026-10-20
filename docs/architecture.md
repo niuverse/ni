@@ -106,7 +106,7 @@ user input
 
 ## Plan mode 与 Goal
 
-`/plan` 是运行时 mode，不是 profile：进入后 tool allowlist 收窄到 `read/grep/glob`，system prompt 注入只读计划指令；退出恢复原 profile。`/goal` 是目标标签，写入 `goal_set`/`goal_cleared` 事件并注入 system prompt；它不改变权限。`/goal run` evaluator loop 是 backlog。决策见 ADR-0014。
+`/plan` 是运行时 mode，不是 profile：进入后 tool allowlist 收窄到 `read/grep/glob`，system prompt 注入只读计划指令；退出恢复原 profile。`/goal <condition>` 在 TUI 中设置目标并立即启动 goal run（最多 6 轮）；`/goal run` 重新启动已有目标，`/goal stop` / `/goal clear` 停止。每轮结束用独立无工具 evaluator 写 `goal_verdict`；goal 不改变权限。headless `exec --goal` 是 M4-008。决策见 ADR-0014。
 
 ## External tools
 

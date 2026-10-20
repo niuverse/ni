@@ -133,8 +133,25 @@ pub async fn run(
             prompt
         } else if let Some(editor) = &mut editor {
             println!();
-            let raw_prompt = format!("niucode {} ", theme::PROMPT);
-            let styled_prompt = format!("{} ", out.accent(format!("niucode {}", theme::PROMPT)));
+            let mode = if state.plan_mode {
+                Some(("plan", Tone::Warning))
+            } else if state.goal_run {
+                Some(("goal", Tone::Success))
+            } else {
+                None
+            };
+            let raw_prompt = match mode {
+                Some((label, _)) => format!("niucode {} {label} ", theme::PROMPT),
+                None => format!("niucode {} ", theme::PROMPT),
+            };
+            let styled_prompt = match mode {
+                Some((label, tone)) => format!(
+                    "{} {} ",
+                    out.accent(format!("niucode {}", theme::PROMPT)),
+                    out.paint(tone, label)
+                ),
+                None => format!("{} ", out.accent(format!("niucode {}", theme::PROMPT))),
+            };
             match editor.read_line(&raw_prompt, &styled_prompt, out)? {
                 Input::Line(line) => line,
                 Input::Interrupted => continue,
@@ -619,7 +636,7 @@ fn handle_goal(
             };
             state.goal_run = true;
             state.goal_turns = 0;
-            state.pending_prompt = Some(goal::continue_prompt(&goal));
+            state.pending_prompt = Some(goal::start_prompt(&goal));
             println!(
                 "{} {}",
                 out.accent("goal run"),
@@ -648,10 +665,28 @@ fn handle_goal(
                 ts: now_ms(),
             })?;
             state.goal = Some(text.clone());
-            println!("{} {}", out.accent("goal"), out.paint(Tone::Bright, text));
             println!(
-                "{}",
-                out.dim("  persisted in the session · /goal clear to remove")
+                "{} {}",
+                out.accent("goal"),
+                out.paint(Tone::Bright, text.clone())
+            );
+            if state.plan_mode {
+                println!(
+                    "{}",
+                    out.dim("  plan mode is read-only · /plan off then /goal run")
+                );
+                return Ok(());
+            }
+            state.goal_run = true;
+            state.goal_turns = 0;
+            state.pending_prompt = Some(goal::start_prompt(&text));
+            println!(
+                "{} {}",
+                out.accent("goal run"),
+                out.paint(
+                    Tone::Bright,
+                    format!("starting · max {MAX_GOAL_TURNS} turns · /goal stop")
+                )
             );
         }
         GoalAction::Clear => {

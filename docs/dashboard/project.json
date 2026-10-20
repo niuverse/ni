@@ -141,7 +141,9 @@
         "↑/↓ 历史，Ctrl-C 清空当前行，Ctrl-D 退出，Ctrl-L 清屏；非 TTY 退化为 read_line。",
         "裸 niucode 直接进入 TUI。",
         "M4-001: readable slash auto-menu replaces the rustyline ghost hint.",
-        "/plan toggles read-only plan mode; /goal persists as an event-backed objective label."
+        "/plan toggles read-only plan mode; /goal persists as an event-backed objective label.",
+        "鼠标悬停/点击 slash 菜单；命令输入高亮；Ctrl-R/Ctrl-N/Ctrl-P 历史操作。",
+        "prompt 显示 plan/goal 徽标；/goal 设置后立即启动 goal run。"
       ]
     },
     {
@@ -742,6 +744,17 @@
         "M4-008",
         "adr-0014",
         "loop"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "TUI interaction polish + /goal auto-start",
+      "detail": "slash 菜单支持鼠标 hover/click；输入命令高亮；Ctrl-R 反向历史搜索、Ctrl-N/P、词移动；plan/goal prompt 徽标；/goal 设置即启动。",
+      "refs": [
+        "tui",
+        "M4-001",
+        "M4-005"
       ]
     }
   ]

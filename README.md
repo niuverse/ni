@@ -15,8 +15,9 @@ cache hit rates. `niucode exec` and `niucode tui` share six tools plus a read-on
 isolation, per-tool approval with full unified-diff review, cancellation, resume,
 and recorded fixtures. The TUI has a Geek-style wordmark, symbol-based tool
 lines, slash commands (`/init`, `/clear`, `/plan`, `/goal`, `/fork`, `/status`,
-`/session`), an automatic command menu with descriptions, input history, and a
-resize-aware diff pager; long tool output folds behind `:last`.
+`/session`), an automatic command menu with mouse hover and descriptions,
+reverse history search, plan/goal prompt badges, and a resize-aware diff pager;
+long tool output folds behind `:last`.
 Replay and fork are available offline with stable `e000012` event IDs; read-only
 subagents run in parallel with independent session logs; `exec --json` exposes a
 versioned JSONL protocol. M4 is active: profiles, `/plan`, `/goal`, and the

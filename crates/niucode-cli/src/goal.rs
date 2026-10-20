@@ -101,6 +101,13 @@ pub fn parse_verdict(text: &str) -> Result<GoalVerdict> {
     Ok(GoalVerdict { status, reason })
 }
 
+pub fn start_prompt(goal: &str) -> String {
+    format!(
+        "Start working toward the active goal now. Goal: {goal}\n\
+         Work directly, verify your changes, and report what remains."
+    )
+}
+
 pub fn continue_prompt(goal: &str) -> String {
     format!(
         "Continue working toward the active goal. Goal: {goal}\n\
@@ -133,7 +140,8 @@ mod tests {
     }
 
     #[test]
-    fn continue_prompt_names_the_goal() {
+    fn goal_prompts_name_the_goal() {
+        assert!(start_prompt("all tests pass").contains("all tests pass"));
         assert!(continue_prompt("all tests pass").contains("all tests pass"));
     }
 }
