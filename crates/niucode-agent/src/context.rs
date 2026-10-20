@@ -154,6 +154,8 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::GoalSet { .. }
             | Event::GoalCleared { .. }
             | Event::GoalVerdict { .. }
+            | Event::ModelChange { .. }
+            | Event::PermissionChange { .. }
             | Event::ExtensionMount { .. }
             | Event::ExtensionUnmount { .. }
             | Event::ExtensionError { .. }

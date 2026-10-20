@@ -201,6 +201,19 @@ pub enum Event {
         reason: String,
         ts: Timestamp,
     },
+    /// Runtime model selection changed without starting a new session.
+    ModelChange {
+        model: String,
+        ts: Timestamp,
+    },
+    /// Runtime permission profile changed without starting a new session.
+    PermissionChange {
+        profile: String,
+        sandbox: String,
+        approval: String,
+        network: String,
+        ts: Timestamp,
+    },
     /// A sidecar extension was mounted for this session.
     ExtensionMount {
         name: String,
@@ -251,6 +264,8 @@ impl Event {
             Self::GoalSet { .. } => "goal_set",
             Self::GoalCleared { .. } => "goal_cleared",
             Self::GoalVerdict { .. } => "goal_verdict",
+            Self::ModelChange { .. } => "model_change",
+            Self::PermissionChange { .. } => "permission_change",
             Self::ExtensionMount { .. } => "extension_mount",
             Self::ExtensionUnmount { .. } => "extension_unmount",
             Self::ExtensionError { .. } => "extension_error",
@@ -276,6 +291,8 @@ impl Event {
             | Self::GoalSet { ts, .. }
             | Self::GoalCleared { ts }
             | Self::GoalVerdict { ts, .. }
+            | Self::ModelChange { ts, .. }
+            | Self::PermissionChange { ts, .. }
             | Self::ExtensionMount { ts, .. }
             | Self::ExtensionUnmount { ts, .. }
             | Self::ExtensionError { ts, .. }
@@ -337,6 +354,22 @@ mod tests {
         };
         assert_eq!(spawn.kind(), "subagent_spawn");
         assert_eq!(spawn.ts(), 4);
+
+        let model = Event::ModelChange {
+            model: "deepseek-pro".into(),
+            ts: 5,
+        };
+        assert_eq!(model.kind(), "model_change");
+        assert_eq!(model.ts(), 5);
+        let permission = Event::PermissionChange {
+            profile: "review".into(),
+            sandbox: "workspace-write".into(),
+            approval: "on-failure".into(),
+            network: "off".into(),
+            ts: 6,
+        };
+        assert_eq!(permission.kind(), "permission_change");
+        assert_eq!(permission.ts(), 6);
         let result = Event::SubagentResult {
             id: "call_1.1".into(),
             call_id: "call_1".into(),

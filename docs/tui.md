@@ -73,6 +73,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `Tab` / `Enter` 接受当前候选；`↑` / `↓` 选择；`Esc` 关闭菜单。
 - 鼠标移动到候选行会高亮；左键点击接受；滚轮在菜单内移动选择。
 - 终端支持 cursor-position 时按绝对行号 hover；不支持时退化为相对移动 hover（第一次移动作为锚点，后续按行差改变候选），键盘操作始终可用。
+- tmux 用户需要 `tmux set -g mouse on`；TUI 启动会检测 `TMUX` 并提示。终端完全不发送 motion 事件时 hover 不可用，但 click/键盘仍可操作。
 - 输入的命令名用 accent 高亮；prompt 会显示 `plan` / `goal` 徽标。
 - 命令继续输入参数（例如 `/goal all tests pass`）后菜单自动关闭。
 - `↑` / `↓` 调出当前进程内的历史输入；`Ctrl-C` 清空当前行；`Ctrl-D` 退出；`Ctrl-L` 清屏。
@@ -99,6 +100,8 @@ TTY 下使用 readline 风格的行编辑器：
 | `/reset` | 新建对话 session，并清除 plan/goal/pending/输入历史，重新读取 AGENTS.md；旧 session 保留。 |
 | `/resume [path|id]` | 无参数列出最近 8 个 session；带参数切换并恢复其 history / plan / goal。 |
 | `/reload` | 重新读取 AGENTS.md 并显示 sources/digest；下一次 turn 生效。 |
+| `/model [name]` | 显示当前生效模型与建议；`/model <name>` 切换当前 provider 内的模型，下一次 turn 生效。 |
+| `/permissions [profile]` | 显示当前 sandbox/network/approval；切换 ask/review/full-access/ci。 |
 | `/plan` | 进入只读 plan mode；`/plan off` / `/plan approve` 退出；`/plan status` 查看。 |
 | `/goal <condition>` | 设置目标并立即启动 goal run（最多 6 轮）；`/goal` 查看；`/goal run` 重新启动；`/goal stop` 停止；`/goal clear` 清除。 |
 | `/fork [event-id]` | 复制当前 session 的前缀到新 session 并切换过去；默认 fork 到最后一个事件。 |
@@ -117,6 +120,11 @@ TTY 下使用 readline 风格的行编辑器：
 - `/reset` 是更强的重置：新 session + plan off + goal 清空 + pending/输入历史清空 + 重新读取 AGENTS.md；extension host 仍按 session 生命周期挂载，不重启进程。
 - `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；cwd/model 不一致会警告。无参数列出最近 session。
 - `/reload` 只重读 AGENTS.md 指令；扩展 manifest 在 session 启动时挂载，重新加载需要重启 TUI。
+- `/model` 是运行时模型选择：写入 `model_change` 事件，`/resume` 恢复，`/clear` 保留，`/reset` 清除。切换只允许当前 provider preset；跨 provider 需要重启。请求仍然走同一个 endpoint/auth，下一次 turn 使用新 model；切换 turn 可能失去 prompt cache。
+- 建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。
+- `/permissions` 只映射已有 policy 字段：`ask` = workspace-write/off/ask，`review` = workspace-write/off/on-failure，`full-access` = full-access/on/never，`ci` = read-only/off/never。写入 `permission_change` 事件；`/resume` 恢复，`/clear` 保留，`/reset` 清除。`/plan` 仍然是独立 mode。
+- full-access 会打印隔离关闭警告；profile 变更只在下一个 turn 生效。
+- `/status` 显示生效 model、sandbox/network/approval、permission profile 和鼠标模式；tmux 下会提示 `tmux set -g mouse on`。
 - `/fork` 调用与 `niucode fork` 相同的逻辑：只读源文件、复制前缀、追加 `fork` 溯源事件，然后重新投影 history 并切换过去。非法 event ID 会报错并保留当前 session。
 - 未知 `/foo` 显示 `unknown command`，不会发给模型；命令参数错误显示 usage。
 - 所有 slash 输出走 stdout，warning / error 走 stderr。

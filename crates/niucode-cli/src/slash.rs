@@ -18,6 +18,11 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "resume a session by path or list recent sessions",
     ),
     ("/reload", "reload AGENTS.md instructions for the next turn"),
+    ("/model", "show or switch the runtime model"),
+    (
+        "/permissions",
+        "show or switch the runtime permission profile",
+    ),
     ("/plan", "enter or leave read-only plan mode"),
     ("/goal", "set, run, stop, or clear the session goal"),
     ("/fork", "fork the current session [event-id]"),
@@ -76,6 +81,8 @@ pub enum Command {
     Reset,
     Resume(Option<String>),
     Reload,
+    Model(Option<String>),
+    Permissions(Option<String>),
     Plan(PlanAction),
     Goal(GoalAction),
     Fork(Option<String>),
@@ -151,6 +158,16 @@ pub fn parse(input: &str) -> Parsed {
         } else {
             Some(rest.to_string())
         }),
+        "model" => Command::Model(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        }),
+        "permissions" => Command::Permissions(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        }),
         "plan" => match rest {
             "" => Command::Plan(PlanAction::Enter),
             "off" | "exit" => Command::Plan(PlanAction::Exit),
@@ -172,7 +189,12 @@ pub fn parse(input: &str) -> Parsed {
     if !args.is_empty()
         && !matches!(
             command,
-            Command::Fork(_) | Command::Plan(_) | Command::Goal(_) | Command::Resume(_)
+            Command::Fork(_)
+                | Command::Plan(_)
+                | Command::Goal(_)
+                | Command::Resume(_)
+                | Command::Model(_)
+                | Command::Permissions(_)
         )
     {
         return Parsed::Usage(usage(&command));
@@ -190,6 +212,8 @@ fn usage(command: &Command) -> String {
         Command::Reset => "/reset".into(),
         Command::Resume(_) => "/resume [session-path|id]".into(),
         Command::Reload => "/reload".into(),
+        Command::Model(_) => "/model [name]".into(),
+        Command::Permissions(_) => "/permissions [ask|review|full-access|ci]".into(),
         Command::Plan(action) => match action {
             PlanAction::Enter => "/plan".into(),
             PlanAction::Exit => "/plan off".into(),
@@ -293,6 +317,15 @@ mod tests {
         assert_eq!(
             parse("/resume abc.jsonl"),
             Parsed::Command(Command::Resume(Some("abc.jsonl".into())))
+        );
+        assert_eq!(parse("/model"), Parsed::Command(Command::Model(None)));
+        assert_eq!(
+            parse("/model deepseek-pro"),
+            Parsed::Command(Command::Model(Some("deepseek-pro".into())))
+        );
+        assert_eq!(
+            parse("/permissions review"),
+            Parsed::Command(Command::Permissions(Some("review".into())))
         );
         assert_eq!(
             parse("/fork e1 e2"),

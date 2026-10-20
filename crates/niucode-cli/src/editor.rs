@@ -5,6 +5,7 @@
 //! gives us the `/i -> /init` menu without pulling a terminal UI framework in.
 
 use std::io::{stdout, IsTerminal, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crossterm::cursor::{position, Hide, MoveLeft, MoveRight, MoveToColumn, MoveUp, Show};
 use crossterm::event::{
@@ -20,6 +21,12 @@ use crate::theme::Theme;
 
 const MAX_MENU_ROWS: usize = 6;
 const MENU_NAME_WIDTH: usize = 10;
+static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
+
+/// Number of mouse events delivered to the line editor in this process.
+pub fn mouse_events_seen() -> u64 {
+    MOUSE_EVENTS.load(Ordering::Relaxed)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Input {
@@ -150,6 +157,7 @@ impl State<'_> {
                     self.render(out)?;
                 }
                 Event::Mouse(mouse) => {
+                    MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
                     let changed = self.handle_mouse(mouse)?;
                     // If cursor-position support is missing, drop capture so
                     // terminal text selection and drag keep working.
@@ -664,7 +672,7 @@ impl State<'_> {
             return Ok(false);
         };
         match mouse.kind {
-            MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
+            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
                 if self.selected != index {
                     self.selected = index;
                     return Ok(true);

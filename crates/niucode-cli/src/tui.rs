@@ -16,14 +16,15 @@ use crossterm::event::{
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType, LeaveAlternateScreen};
 use niucode_agent::{
-    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalRequest, RunOutcome,
+    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalMode, ApprovalRequest,
+    RunOutcome,
 };
 use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
 use niucode_provider::{ChatMessage, Provider};
-use niucode_tools::SandboxMode;
+use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 
 use crate::diff::{clean_text, render_plain};
-use crate::editor::{Input, LineEditor};
+use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
@@ -51,6 +52,76 @@ struct ToolEcho {
     output: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PermissionProfile {
+    Ask,
+    Review,
+    FullAccess,
+    Ci,
+}
+
+impl PermissionProfile {
+    const ALL: [Self; 4] = [Self::Ask, Self::Review, Self::FullAccess, Self::Ci];
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Review => "review",
+            Self::FullAccess => "full-access",
+            Self::Ci => "ci",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value
+            .trim()
+            .trim_start_matches(':')
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "ask" => Some(Self::Ask),
+            "review" => Some(Self::Review),
+            "full-access" | "full" => Some(Self::FullAccess),
+            "ci" => Some(Self::Ci),
+            _ => None,
+        }
+    }
+
+    fn apply(self, config: &mut AgentConfig) {
+        match self {
+            Self::Ask => {
+                config.sandbox = SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off);
+                config.approval = ApprovalMode::Ask;
+                config.allow_unsandboxed = false;
+            }
+            Self::Review => {
+                config.sandbox = SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off);
+                config.approval = ApprovalMode::OnFailure;
+                config.allow_unsandboxed = false;
+            }
+            Self::FullAccess => {
+                config.sandbox = SandboxPolicy::new(SandboxMode::FullAccess, NetworkMode::On);
+                config.approval = ApprovalMode::Never;
+                config.allow_unsandboxed = false;
+            }
+            Self::Ci => {
+                config.sandbox = SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off);
+                config.approval = ApprovalMode::Never;
+                config.allow_unsandboxed = false;
+            }
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::Ask => "workspace-write · network off · ask before risk",
+            Self::Review => "workspace-write · network off · review failures",
+            Self::FullAccess => "full-access · network on · no approval",
+            Self::Ci => "read-only · network off · no approval",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct SessionUiState {
     plan_mode: bool,
@@ -60,6 +131,10 @@ struct SessionUiState {
     pending_prompt: Option<String>,
     /// Ephemeral request from `/reset` to drop the line editor history.
     clear_history: bool,
+    /// Runtime model override; None means the startup config model.
+    model: Option<String>,
+    /// Runtime permission profile; None means the startup policy.
+    permissions: Option<PermissionProfile>,
 }
 
 impl SessionUiState {
@@ -75,11 +150,36 @@ impl SessionUiState {
                 Event::PlanMode { active, .. } => state.plan_mode = *active,
                 Event::GoalSet { text, .. } => state.goal = Some(text.clone()),
                 Event::GoalCleared { .. } => state.goal = None,
+                Event::ModelChange { model, .. } => state.model = Some(model.clone()),
+                Event::PermissionChange { profile, .. } => {
+                    state.permissions = PermissionProfile::parse(profile);
+                }
                 _ => {}
             }
         }
         state
     }
+}
+
+fn effective_model<'a>(state: &'a SessionUiState, config: &'a AgentConfig) -> &'a str {
+    state.model.as_deref().unwrap_or(&config.model)
+}
+
+fn apply_runtime_config(config: &AgentConfig, state: &SessionUiState) -> AgentConfig {
+    let mut runtime = config.clone();
+    runtime.model = effective_model(state, config).to_string();
+    if let Some(profile) = state.permissions {
+        profile.apply(&mut runtime);
+    }
+    runtime.goal = state.goal.clone();
+    if state.plan_mode {
+        runtime.allowed_tools = Some(vec![
+            "read".to_string(),
+            "grep".to_string(),
+            "glob".to_string(),
+        ]);
+    }
+    runtime
 }
 
 pub async fn run(
@@ -364,16 +464,8 @@ pub async fn run(
             }
         };
 
-        let mut run_config = config.clone();
+        let mut run_config = apply_runtime_config(config, &state);
         run_config.plan_mode = state.plan_mode;
-        run_config.goal = state.goal.clone();
-        if state.plan_mode {
-            run_config.allowed_tools = Some(vec![
-                "read".to_string(),
-                "grep".to_string(),
-                "glob".to_string(),
-            ]);
-        }
 
         let result = {
             let run = run_with_history(
@@ -430,7 +522,7 @@ pub async fn run(
                         session,
                         &mut state,
                         &outcome,
-                        &config.model,
+                        &run_config.model,
                         out,
                         err,
                     )
@@ -508,6 +600,8 @@ fn handle_command(
             let previous = session.path().to_path_buf();
             let plan = state.plan_mode;
             let goal = state.goal.clone();
+            let model = state.model.clone();
+            let permissions = state.permissions;
             let mut fresh = new_session(session, config)?;
             if plan {
                 fresh.append(&Event::PlanMode {
@@ -521,12 +615,31 @@ fn handle_command(
                     ts: now_ms(),
                 })?;
             }
+            if let Some(model) = &model {
+                fresh.append(&Event::ModelChange {
+                    model: model.clone(),
+                    ts: now_ms(),
+                })?;
+            }
+            if let Some(profile) = permissions {
+                let mut applied = config.clone();
+                profile.apply(&mut applied);
+                fresh.append(&Event::PermissionChange {
+                    profile: profile.as_str().to_string(),
+                    sandbox: applied.sandbox.mode.as_str().to_string(),
+                    approval: applied.approval.as_str().to_string(),
+                    network: applied.sandbox.network.as_str().to_string(),
+                    ts: now_ms(),
+                })?;
+            }
             *session = fresh;
             history.clear();
             *allow_session = false;
             *last_tool = None;
             state.plan_mode = plan;
             state.goal = goal;
+            state.model = model;
+            state.permissions = permissions;
             state.goal_run = false;
             state.goal_turns = 0;
             state.pending_prompt = None;
@@ -535,10 +648,15 @@ fn handle_command(
                 "{} {}",
                 out.paint(Tone::Success, theme::OK),
                 out.dim(format!(
-                    "new conversation · {} · kept plan={} goal={}",
+                    "new conversation · {} · kept plan={} goal={} model={} permissions={}",
                     session.path().display(),
                     state.plan_mode,
-                    state.goal.is_some()
+                    state.goal.is_some(),
+                    effective_model(state, config),
+                    state
+                        .permissions
+                        .map(PermissionProfile::as_str)
+                        .unwrap_or("startup")
                 ))
             );
             println!("{}", out.dim(format!("previous · {}", previous.display())));
@@ -564,6 +682,10 @@ fn handle_command(
             reload_instructions(config, out, err)?;
         }
         SlashCommand::Reload => reload_instructions(config, out, err)?,
+        SlashCommand::Model(arg) => handle_model(session, config, state, arg, out)?,
+        SlashCommand::Permissions(arg) => {
+            handle_permissions(session, config, state, arg, out, err)?
+        }
         SlashCommand::Resume(arg) => {
             resume_session(
                 session,
@@ -621,6 +743,189 @@ fn handle_command(
         SlashCommand::Exit => return Ok(CommandOutcome::Exit),
     }
     Ok(CommandOutcome::Continue)
+}
+
+fn handle_model(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    state: &mut SessionUiState,
+    arg: Option<String>,
+    out: Theme,
+) -> Result<()> {
+    let current = effective_model(state, config).to_string();
+    let Some(name) = arg else {
+        println!(
+            "{} {}",
+            out.accent("model"),
+            out.paint(Tone::Bright, &current)
+        );
+        println!(
+            "{}",
+            out.dim("  switch with /model <name> · same provider only · next turn")
+        );
+        let choices = niucode_model_choices(config);
+        if !choices.is_empty() {
+            println!("{}", out.dim("  suggestions:"));
+            for choice in choices {
+                let marker = if choice == current { "*" } else { " " };
+                println!("{}", out.dim(format!("  {marker} {choice}")));
+            }
+        }
+        return Ok(());
+    };
+    let name = name.trim();
+    if name.is_empty() || name.len() > 128 || name.chars().any(char::is_whitespace) {
+        bail!("model name must be a non-empty token (max 128 chars)");
+    }
+    if model_family(&current) != model_family(name) {
+        bail!(
+            "model switch stays on the current provider; restart with --preset/--model for {name}"
+        );
+    }
+    if name == current {
+        println!("{}", out.dim(format!("model already {current}")));
+        return Ok(());
+    }
+    state.model = Some(name.to_string());
+    session.append(&Event::ModelChange {
+        model: name.to_string(),
+        ts: now_ms(),
+    })?;
+    println!(
+        "{} {}",
+        out.accent("model"),
+        out.paint(Tone::Bright, format!("{current} → {name} · next turn"))
+    );
+    println!(
+        "{}",
+        out.dim("  switching between turns may miss the prompt cache")
+    );
+    Ok(())
+}
+
+fn model_family(model: &str) -> &str {
+    if model.starts_with("deepseek") {
+        "deepseek"
+    } else if model.starts_with("gpt") || model.starts_with('o') {
+        "openai"
+    } else {
+        "custom"
+    }
+}
+
+fn niucode_model_choices(config: &AgentConfig) -> Vec<String> {
+    let from_env = std::env::var("NIUCODE_MODEL_CHOICES")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !from_env.is_empty() {
+        return from_env;
+    }
+    match model_family(&config.model) {
+        "deepseek" => ["deepseek-flash", "deepseek-pro", "deepseek-reasoner"]
+            .iter()
+            .map(|model| (*model).to_string())
+            .collect(),
+        "openai" => ["gpt-4o-mini", "gpt-4o", "o4-mini"]
+            .iter()
+            .map(|model| (*model).to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn handle_permissions(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    state: &mut SessionUiState,
+    arg: Option<String>,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    let mut effective = config.clone();
+    if let Some(profile) = state.permissions {
+        profile.apply(&mut effective);
+    }
+    let Some(name) = arg else {
+        println!(
+            "{} {}",
+            out.accent("permissions"),
+            out.paint(
+                Tone::Bright,
+                state
+                    .permissions
+                    .map(PermissionProfile::as_str)
+                    .unwrap_or("startup/custom")
+            )
+        );
+        println!(
+            "  sandbox {} · network {} · approval {}",
+            effective.sandbox.mode.as_str(),
+            effective.sandbox.network.as_str(),
+            effective.approval.as_str()
+        );
+        println!("{}", out.dim("  switch with /permissions <profile>:"));
+        for profile in PermissionProfile::ALL {
+            let marker = if state.permissions == Some(profile) {
+                "*"
+            } else {
+                " "
+            };
+            println!(
+                "{}",
+                out.dim(format!(
+                    "  {marker} {:<12} {}",
+                    profile.as_str(),
+                    profile.description()
+                ))
+            );
+        }
+        return Ok(());
+    };
+    let Some(profile) = PermissionProfile::parse(&name) else {
+        bail!("unknown permission profile {name:?}; use ask, review, full-access, or ci");
+    };
+    let mut applied = config.clone();
+    profile.apply(&mut applied);
+    state.permissions = Some(profile);
+    session.append(&Event::PermissionChange {
+        profile: profile.as_str().to_string(),
+        sandbox: applied.sandbox.mode.as_str().to_string(),
+        approval: applied.approval.as_str().to_string(),
+        network: applied.sandbox.network.as_str().to_string(),
+        ts: now_ms(),
+    })?;
+    println!(
+        "{} {}",
+        out.accent("permissions"),
+        out.paint(
+            Tone::Bright,
+            format!(
+                "{} · sandbox {} · network {} · approval {} · next turn",
+                profile.as_str(),
+                applied.sandbox.mode.as_str(),
+                applied.sandbox.network.as_str(),
+                applied.approval.as_str()
+            )
+        )
+    );
+    if profile == PermissionProfile::FullAccess {
+        eprintln!(
+            "{}",
+            err.paint(
+                Tone::Warning,
+                "warning: full-access disables sandbox and network isolation"
+            )
+        );
+    }
+    Ok(())
 }
 
 fn handle_plan(
@@ -1071,6 +1376,21 @@ fn resume_session(
     let new_history = project_history(&loaded.events)?;
     let mut new_state = SessionUiState::from_events(&loaded.events);
     new_state.clear_history = false;
+    if let Some(model) = &new_state.model {
+        if model_family(model) != model_family(&config.model) {
+            eprintln!(
+                "{}",
+                err.paint(
+                    Tone::Warning,
+                    format!(
+                        "warning: session model {model} is on another provider; using {} instead",
+                        config.model
+                    )
+                )
+            );
+            new_state.model = None;
+        }
+    }
     let new_session = SessionLog::open(&path)?;
     *session = new_session;
     *history = new_history;
@@ -1187,15 +1507,26 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
         }
     }
 
+    let ui = SessionUiState::from_events(&loaded.events);
+    let mut effective = config.clone();
+    if let Some(profile) = ui.permissions {
+        profile.apply(&mut effective);
+    }
     println!("{}", out.accent("status"));
-    println!("  model      {}", config.model);
+    println!(
+        "  model      {}",
+        ui.model.as_deref().unwrap_or(&config.model)
+    );
     println!("  cwd        {}", config.working_dir.display());
     println!(
-        "  sandbox    {} · network {} · approval {} · backend {}",
-        config.sandbox.mode.as_str(),
-        config.sandbox.network.as_str(),
-        config.approval.as_str(),
-        config.sandbox.backend()
+        "  sandbox    {} · network {} · approval {} · backend {} · permissions {}",
+        effective.sandbox.mode.as_str(),
+        effective.sandbox.network.as_str(),
+        effective.approval.as_str(),
+        effective.sandbox.backend(),
+        ui.permissions
+            .map(PermissionProfile::as_str)
+            .unwrap_or("startup")
     );
     println!(
         "  context    budget {} · trigger {}% · keep {} turns",
@@ -1203,7 +1534,6 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
         config.context.compact_at_percent,
         config.context.keep_recent_turns
     );
-    let ui = SessionUiState::from_events(&loaded.events);
     println!("  session    {}", session.path().display());
     println!(
         "  plan       {}",
@@ -1214,6 +1544,17 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
         }
     );
     println!("  goal       {}", ui.goal.as_deref().unwrap_or("none"));
+    if std::env::var_os("TMUX").is_some() {
+        println!(
+            "  mouse      menu-scoped · events {} · tmux detected · run `tmux set -g mouse on` if 0",
+            mouse_events_seen()
+        );
+    } else {
+        println!(
+            "  mouse      menu-scoped · events {} · absolute + relative hover",
+            mouse_events_seen()
+        );
+    }
     println!(
         "  events     {} decoded · {} warnings",
         loaded.events.len(),
@@ -1243,6 +1584,17 @@ fn print_session(session: &SessionLog, out: Theme) -> Result<()> {
         .count();
     println!("{}", out.accent("session"));
     println!("  path       {}", session.path().display());
+    if std::env::var_os("TMUX").is_some() {
+        println!(
+            "  mouse      menu-scoped · events {} · tmux detected · run `tmux set -g mouse on` if 0",
+            mouse_events_seen()
+        );
+    } else {
+        println!(
+            "  mouse      menu-scoped · events {} · absolute + relative hover",
+            mouse_events_seen()
+        );
+    }
     println!(
         "  events     {} decoded · {} warnings",
         loaded.events.len(),
@@ -1617,5 +1969,53 @@ mod tests {
         let wide = banner_lines(100);
         assert!(wide.len() > compact.len());
         assert!(wide[0].contains("███"));
+    }
+
+    #[test]
+    fn permission_profiles_map_to_policy() {
+        let mut config = AgentConfig::new("test", ".");
+        PermissionProfile::Ask.apply(&mut config);
+        assert_eq!(config.sandbox.mode, SandboxMode::WorkspaceWrite);
+        assert_eq!(config.sandbox.network, NetworkMode::Off);
+        assert_eq!(config.approval, ApprovalMode::Ask);
+
+        PermissionProfile::Review.apply(&mut config);
+        assert_eq!(config.approval, ApprovalMode::OnFailure);
+
+        PermissionProfile::FullAccess.apply(&mut config);
+        assert_eq!(config.sandbox.mode, SandboxMode::FullAccess);
+        assert_eq!(config.sandbox.network, NetworkMode::On);
+        assert_eq!(config.approval, ApprovalMode::Never);
+
+        PermissionProfile::Ci.apply(&mut config);
+        assert_eq!(config.sandbox.mode, SandboxMode::ReadOnly);
+        assert_eq!(config.sandbox.network, NetworkMode::Off);
+        assert_eq!(config.approval, ApprovalMode::Never);
+    }
+
+    #[test]
+    fn parses_permission_aliases() {
+        assert_eq!(
+            PermissionProfile::parse(":ask"),
+            Some(PermissionProfile::Ask)
+        );
+        assert_eq!(
+            PermissionProfile::parse("full-access"),
+            Some(PermissionProfile::FullAccess)
+        );
+        assert_eq!(
+            PermissionProfile::parse("full"),
+            Some(PermissionProfile::FullAccess)
+        );
+        assert_eq!(PermissionProfile::parse("nope"), None);
+    }
+
+    #[test]
+    fn model_family_keeps_provider_boundaries() {
+        assert_eq!(model_family("deepseek-flash"), "deepseek");
+        assert_eq!(model_family("deepseek-pro"), "deepseek");
+        assert_eq!(model_family("gpt-4o"), "openai");
+        assert_eq!(model_family("o4-mini"), "openai");
+        assert_eq!(model_family("local-model"), "custom");
     }
 }

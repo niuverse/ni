@@ -147,7 +147,9 @@
         "鼠标捕获只在 slash 菜单打开时启用；TerminalGuard 统一恢复终端状态。",
         "--max-steps 默认 24；max-steps 错误给提升提示并保留已写文件。",
         "/reload 重读 AGENTS.md；/clear 保留 plan/goal；/reset 全量重置；/resume 切换 session。",
-        "鼠标 hover 支持绝对行号与相对移动 fallback。"
+        "鼠标 hover 支持绝对行号与相对移动 fallback。",
+        "/model 切换当前 provider 内模型；/permissions 映射 ask/review/full-access/ci。",
+        "model_change / permission_change 事件随 resume 恢复；clear 保留、reset 清除。"
       ]
     },
     {
@@ -780,6 +782,29 @@
       "refs": [
         "M4-010",
         "M4-009",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-011 完成：/model 与 /permissions",
+      "detail": "运行时模型/权限选择事件化；同 provider 模型切换；四档 profile 映射既有 policy；clear/reset/resume 语义与 PTY 验证。",
+      "refs": [
+        "M4-011",
+        "M4-010",
+        "adr-0015",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0015 accepted：运行时 model/permission",
+      "detail": "模型选择限定当前 provider 并事件化；permissions 四档映射既有 policy；/clear 保留、/reset 清除、/resume 恢复。",
+      "refs": [
+        "adr-0015",
+        "M4-011",
         "tui"
       ]
     }

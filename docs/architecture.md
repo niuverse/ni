@@ -57,6 +57,8 @@ user input
 | `plan_mode` | plan mode 开关 | active |
 | `goal_set` / `goal_cleared` | 会话目标 | text / 清除 |
 | `goal_verdict` | `/goal run` evaluator 结论 | status、reason |
+| `model_change` | 运行时模型选择 | model |
+| `permission_change` | 运行时权限 profile | profile、sandbox、approval、network |
 | `extension_mount` / `extension_unmount` | sidecar 挂载/卸载 | name、version、tools |
 | `extension_error` | sidecar 挂载/调用失败 | name、message |
 | `compaction` | 上下文压缩 | summary、upto、before/after tokens |
