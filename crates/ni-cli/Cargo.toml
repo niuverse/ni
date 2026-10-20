@@ -12,8 +12,10 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 futures-util.workspace = true
+ni-agent = { path = "../ni-agent" }
 ni-auth = { path = "../ni-auth" }
 ni-core = { path = "../ni-core" }
 ni-provider = { path = "../ni-provider" }
 rpassword.workspace = true
+serde_json.workspace = true
 tokio.workspace = true

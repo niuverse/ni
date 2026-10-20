@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
+use ni_agent::{run as run_agent, AgentConfig, AgentEvent};
 use ni_auth::AuthStore;
 use ni_core::{now_ms, Event, SessionLog};
 use ni_provider::{
@@ -34,6 +35,29 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+    /// Run one coding task through the agent loop
+    Exec {
+        /// Task for the agent
+        prompt: String,
+        /// Provider preset: deepseek or openai
+        #[arg(long, default_value = "deepseek")]
+        preset: String,
+        /// Override the preset model
+        #[arg(long)]
+        model: Option<String>,
+        /// Maximum model turns
+        #[arg(long, default_value_t = 12)]
+        max_steps: usize,
+        /// Disable DeepSeek thinking mode
+        #[arg(long)]
+        no_thinking: bool,
+        /// Working directory (defaults to cwd)
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        /// Directory for the session JSONL (defaults to ~/.ni/sessions)
+        #[arg(long)]
+        session_dir: Option<PathBuf>,
     },
 }
 
@@ -105,6 +129,26 @@ async fn main() -> Result<()> {
         Some(Command::Session { command }) => run_session(command),
         Some(Command::Provider { command }) => run_provider(command).await,
         Some(Command::Auth { command }) => run_auth(command),
+        Some(Command::Exec {
+            prompt,
+            preset,
+            model,
+            max_steps,
+            no_thinking,
+            cwd,
+            session_dir,
+        }) => {
+            run_exec(
+                prompt,
+                preset,
+                model,
+                max_steps,
+                no_thinking,
+                cwd,
+                session_dir,
+            )
+            .await
+        }
         None => {
             print_banner();
             Ok(())
@@ -147,6 +191,127 @@ fn run_session(command: SessionCommand) -> Result<()> {
             Ok(())
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_exec(
+    prompt: String,
+    preset: String,
+    model: Option<String>,
+    max_steps: usize,
+    no_thinking: bool,
+    cwd: Option<PathBuf>,
+    session_dir: Option<PathBuf>,
+) -> Result<()> {
+    let preset = parse_provider(&preset)?;
+    let store = AuthStore::new()?;
+    let credential = match store.resolve(preset.as_str())? {
+        Some(credential) => credential,
+        None => bail!(
+            "no credential for {}; run `ni auth set {}` or set {}",
+            preset.as_str(),
+            preset.as_str(),
+            preset.api_key_env()
+        ),
+    };
+
+    let mut config = OpenAiConfig::preset_config(preset)?;
+    config.api_key = credential.key.expose().to_string();
+    if let Some(model) = model {
+        config.model = model;
+    }
+    if no_thinking && preset == Preset::DeepSeek {
+        config.thinking = Some(ThinkingMode::Disabled);
+    }
+    let model = config.model.clone();
+    let provider = OpenAiProvider::for_preset(preset, config)?;
+
+    let working_dir = match cwd {
+        Some(path) => path
+            .canonicalize()
+            .with_context(|| format!("resolve --cwd {}", path.display()))?,
+        None => std::env::current_dir()?.canonicalize()?,
+    };
+
+    let session_dir = session_dir.unwrap_or_else(default_sessions_dir);
+    let mut session = SessionLog::create(&session_dir)?;
+    session.append(&Event::SessionStart {
+        id: session.id().to_string(),
+        cwd: working_dir.display().to_string(),
+        model: model.clone(),
+        ts: now_ms(),
+    })?;
+
+    eprintln!(
+        "ni exec · {} · model={model} · auth={} · cwd={}",
+        provider.name(),
+        credential.source,
+        working_dir.display()
+    );
+    eprintln!("session: {}", session.path().display());
+
+    let mut agent_config = AgentConfig::new(model, working_dir);
+    agent_config.max_steps = max_steps;
+
+    let mut line_open = false;
+    let result = run_agent(
+        &provider,
+        &mut session,
+        &agent_config,
+        &prompt,
+        &mut |event| match event {
+            AgentEvent::TextDelta(delta) => {
+                print!("{delta}");
+                let _ = std::io::stdout().flush();
+                line_open = !delta.ends_with('\n');
+            }
+            AgentEvent::ReasoningDelta(_) => {}
+            AgentEvent::ToolCall { name, input } => {
+                if line_open {
+                    println!();
+                    line_open = false;
+                }
+                eprintln!("→ {name} {}", compact_json(&input));
+            }
+            AgentEvent::ToolResult { name, ok, summary } => {
+                eprintln!("← {name} {} {}", if ok { "ok" } else { "error" }, summary);
+            }
+            AgentEvent::TurnEnd { usage } => {
+                if line_open {
+                    println!();
+                    line_open = false;
+                }
+                eprintln!(
+                    "turn usage: in={} out={} cached={}",
+                    usage.input_tokens, usage.output_tokens, usage.cached_tokens
+                );
+            }
+        },
+    )
+    .await;
+
+    if result.is_err() {
+        eprintln!("session: {}", session.path().display());
+    }
+
+    let outcome = result?;
+    if !outcome.final_text.ends_with('\n') {
+        println!();
+    }
+    eprintln!(
+        "done: {} turns, input={} output={} cached={} · {}",
+        outcome.turns,
+        outcome.usage.input_tokens,
+        outcome.usage.output_tokens,
+        outcome.usage.cached_tokens,
+        session.path().display()
+    );
+    Ok(())
+}
+
+fn compact_json(value: &serde_json::Value) -> String {
+    let rendered = serde_json::to_string(value).unwrap_or_default();
+    rendered.chars().take(200).collect()
 }
 
 async fn run_provider(command: ProviderCommand) -> Result<()> {
@@ -395,6 +560,6 @@ fn print_banner() {
     println!("sessions {}", default_sessions_dir().display());
     println!();
     println!("auth     ni auth set deepseek");
-    println!("next     ni provider test --preset deepseek");
+    println!("next     ni exec \"find and fix a small bug\"");
     println!("         cargo xtask dashboard");
 }

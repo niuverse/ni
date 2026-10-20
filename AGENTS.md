@@ -79,6 +79,8 @@ A task is not done until:
 
 ## Current focus
 
-M0: the six tools and the headless turn loop. Provider streaming and the DeepSeek
-preset are in place. The next card is `M0-006` (file tools). Do not start TUI,
-MCP, subagents, or a plugin system before M0's exit criteria are met.
+M0: the minimal `ni exec` loop is closed. Provider streaming, auth, four tools, and
+session events work. The next step is hardening: `grep`/`glob` (M0-006), bash
+process-group kill (M0-007), cancellation and full loop tests (M0-008), then
+resume/fixtures (M0-009). Do not start TUI, MCP, subagents, or a plugin system
+before M0's exit criteria are met.

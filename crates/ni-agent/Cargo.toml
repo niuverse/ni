@@ -1,0 +1,16 @@
+[package]
+name = "ni-agent"
+description = "Minimal turn loop for the ni coding agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+ni-core = { path = "../ni-core" }
+ni-provider = { path = "../ni-provider" }
+ni-tools = { path = "../ni-tools" }
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

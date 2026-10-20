@@ -9,7 +9,7 @@ summary = "ni 的边界、数据流、事件生命周期与明确不做的事。
 
 ## 一句话
 
-ni 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、六个工具、三条安全轴。其余都是外围。
+ni 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、工具面、三条安全轴。当前最小闭环是四个工具；完整目标仍是六个。
 
 ## 设计约束
 

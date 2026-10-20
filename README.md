@@ -9,9 +9,9 @@ replay, and resume.
 
 ## Status
 
-M0 · Provider. The workspace, session log, CLI, offline dashboard,
-OpenAI-compatible provider (with a DeepSeek preset), and `ni auth` credential
-storage exist. The tools and turn loop are next.
+M0 · Minimal exec. `ni exec` runs a real coding turn end-to-end: provider,
+four tools, session log, and auth. The next step is hardening the tools and loop
+(sandbox, approvals, resume, compaction).
 
 ## Quick start
 
@@ -25,6 +25,8 @@ cargo run -p ni -- auth set deepseek
 cargo run -p ni -- auth status
 cargo run -p ni -- provider list
 cargo run -p ni -- provider test --preset deepseek
+
+cargo run -p ni -- exec "read a.txt and summarize it" --no-thinking
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -42,6 +44,8 @@ crates/
   ni-core/    event model and append-only JSONL session log
   ni-auth/    env → OS keyring → 0600 file credential resolution
   ni-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
+  ni-tools/   read / write / edit / bash with workspace policy
+  ni-agent/   turn loop, tool dispatch, session events
   ni-cli/     argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
 docs/
@@ -59,7 +63,7 @@ docs/
 4. Keep the provider layer thin; normalize only what the loop needs.
 5. Be honest about sandbox boundaries. In-process path checks are not isolation.
 
-More detail: [architecture](docs/architecture.md) · [provider](docs/provider.md) · [auth](docs/auth.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
+More detail: [architecture](docs/architecture.md) · [exec](docs/exec.md) · [provider](docs/provider.md) · [auth](docs/auth.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
 
 ## Dashboard
 

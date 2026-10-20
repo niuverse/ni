@@ -39,7 +39,7 @@ summary = "从 M0 到可用 coding harness：组件地图、自研/用库边界�
 ## 顺序
 
 ```text
-M0   CLI 骨架 / 事件日志 / auth / dashboard
+M0   CLI 骨架 / 事件日志 / auth / dashboard / minimal exec
      └─ M0-005 provider（scripted + OpenAI-compatible SSE）
      └─ M0-006 文件工具
      └─ M0-007 bash（超时、进程组、输出预算）

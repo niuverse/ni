@@ -1,0 +1,14 @@
+[package]
+name = "ni-tools"
+description = "Workspace tools for the ni coding agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+ni-provider = { path = "../ni-provider" }
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

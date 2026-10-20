@@ -48,6 +48,7 @@ docs/
     0005-auth.md
   architecture.md
   auth.md
+  exec.md
   provider.md
   roadmap.md
   README.md

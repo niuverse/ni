@@ -88,7 +88,7 @@
       "title": "CLI",
       "layer": "interface",
       "status": "active",
-      "summary": "解析参数、组装 session 与 loop，提供 headless 入口。",
+      "summary": "参数解析、session/auth/provider 命令，以及 ni exec headless 入口。",
       "contract": "ni exec <prompt> 启动一次运行；ni session 管理日志。不持有对话状态。",
       "paths": [
         "crates/ni-cli/src/main.rs"
@@ -117,15 +117,16 @@
       "id": "loop",
       "title": "Agent Loop",
       "layer": "engine",
-      "status": "planned",
-      "summary": "唯一的 turn 引擎：project → stream → dispatch → append。",
-      "contract": "run(session, input, signal) -> Result<Outcome>；不关心 provider wire format。",
+      "status": "active",
+      "summary": "最小 turn loop：流式文本、tool call 聚合、工具派发、事件落盘。",
+      "contract": "run(provider, session, config, prompt, observer)；不解析 wire format，不实现工具。",
       "paths": [
-        "crates/ni-core/src/loop.rs"
+        "crates/ni-agent/src/lib.rs"
       ],
       "notes": [
-        "只读工具可并发，写操作串行。",
-        "重试只能在 turn 边界，工具执行后不重放。"
+        "只读工具可并发/写操作串行是后续优化；当前顺序执行工具。",
+        "assistant 消息先落盘，再落 tool_result。",
+        "max steps 到达时停止并报错，不静默退出。"
       ]
     },
     {
@@ -168,15 +169,16 @@
       "id": "tools",
       "title": "Tools",
       "layer": "adapters",
-      "status": "planned",
-      "summary": "read / write / edit / grep / glob / bash 六个工具与注册表。",
-      "contract": "JSON Schema 输入；输出截断并给出续读指针；写操作串行。",
+      "status": "active",
+      "summary": "最小四工具：read / write / edit / bash；路径限制、read-before-write、输出截断。",
+      "contract": "Toolbox::execute(name, input) -> ToolResult；已有文件必须先 read；bash 默认 120s 超时。",
       "paths": [
         "crates/ni-tools/src/lib.rs"
       ],
       "notes": [
-        "edit 用精确字符串替换，要求唯一匹配。",
-        "read-before-write 是策略，不是提示词。"
+        "grep / glob 还没实现；可以先用 bash。",
+        "bash 是逃生舱，不经过文件路径策略。",
+        "输出截断保留尾部，避免撑爆上下文。"
       ]
     },
     {
@@ -364,6 +366,16 @@
         "M0-011",
         "auth",
         "adr-0005"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "最小 ni exec 闭环打通",
+      "detail": "真实 DeepSeek 文本与 read tool call 验证通过；本地 mock 覆盖 text/tool 两条路径。",
+      "refs": [
+        "M0-012",
+        "exec"
       ]
     }
   ]
