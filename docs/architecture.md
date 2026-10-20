@@ -50,6 +50,7 @@ user input
 | `assistant_message` | 一次模型响应结束 | text、reasoning、tool_calls |
 | `tool_result` | 每个工具执行完 | call_id、ok、output |
 | `turn_end` | 一个 turn 结束 | usage（含 cached / reasoning） |
+| `init_proposal` | `/init` 生成完整提案 | content、path |
 | `instructions` | 每次 run 发现 AGENTS.md | sources、digest |
 | `fork` | fork 出新 session | parent、parent_event |
 | `subagent_spawn` | 父 session 启动只读子任务 | id、call_id、task、session、预算 |

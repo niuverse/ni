@@ -23,7 +23,8 @@ use niucode_agent::{
 };
 use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
 use niucode_provider::{ChatMessage, ModelSelection, Provider};
-use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
+use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
+use similar::TextDiff;
 
 use crate::diff::{clean_text, render_plain};
 use crate::editor::{mouse_events_seen, Input, LineEditor};
@@ -36,6 +37,7 @@ use crate::slash::{
     self, Command as SlashCommand, CommandRegistry, GoalAction, Parsed as SlashParsed, PlanAction,
 };
 use crate::theme::{self, Theme, Tone};
+use crate::workspace::Workspace;
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
@@ -188,6 +190,8 @@ struct SessionUiState {
     goal_run: bool,
     goal_turns: usize,
     pending_prompt: Option<String>,
+    /// Last `/init` proposal; applying is explicit.
+    init_proposal: Option<String>,
     /// Ephemeral request from `/reset` to drop the line editor history.
     clear_history: bool,
     /// Runtime provider/model override; None means the startup config values.
@@ -223,6 +227,9 @@ impl SessionUiState {
                 }
                 Event::PermissionChange { profile, .. } => {
                     state.permissions = PermissionProfile::parse(profile);
+                }
+                Event::InitProposal { content, .. } => {
+                    state.init_proposal = Some(content.clone());
                 }
                 _ => {}
             }
@@ -398,7 +405,9 @@ pub async fn run(
                 provider_factory,
                 out,
                 err,
-            ) {
+            )
+            .await
+            {
                 Ok(CommandOutcome::Exit) => break,
                 Ok(CommandOutcome::Continue) => {
                     if let Some(editor) = &mut editor {
@@ -702,7 +711,7 @@ enum CommandOutcome {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn handle_command(
+async fn handle_command(
     command: SlashCommand,
     session: &mut SessionLog,
     config: &AgentConfig,
@@ -719,11 +728,12 @@ fn handle_command(
     match command {
         SlashCommand::Help => print_help(out, commands),
         SlashCommand::Last => print_last(out, last_tool.as_ref()),
-        SlashCommand::Init => {
-            if state.plan_mode {
-                bail!("plan mode is read-only; use /plan off before /init");
+        SlashCommand::Init { apply } => {
+            if apply {
+                run_init_apply(session, config, state, out, err).await?;
+            } else {
+                run_init_generate(provider.as_ref(), session, config, state, out, err).await?;
             }
-            run_init(config, out)?
         }
         SlashCommand::Plan(action) => handle_plan(session, state, action, out)?,
         SlashCommand::Goal(action) => handle_goal(session, state, action, out)?,
@@ -1390,33 +1400,211 @@ fn editor_footer(state: &SessionUiState, config: &AgentConfig) -> String {
     footer
 }
 
-fn run_init(config: &AgentConfig, out: Theme) -> Result<()> {
-    if config.sandbox.mode == SandboxMode::ReadOnly {
-        bail!("sandbox is read-only; cannot write AGENTS.md");
-    }
-    let path = config.working_dir.join("AGENTS.md");
-    if let Ok(metadata) = std::fs::symlink_metadata(&path) {
-        if metadata.is_file() || metadata.file_type().is_symlink() {
-            println!(
+async fn run_init_generate(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    state: &mut SessionUiState,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    let workspace = Workspace::discover(&config.working_dir)?;
+    let isolated_dir = workspace.proposals.join("init");
+    std::fs::create_dir_all(&isolated_dir)
+        .with_context(|| format!("create {}", isolated_dir.display()))?;
+    let mut isolated_session = SessionLog::create(&isolated_dir)?;
+    isolated_session.append(&Event::SessionStart {
+        id: isolated_session.id().to_string(),
+        cwd: config.working_dir.display().to_string(),
+        model: config.model.clone(),
+        provider: config.provider.clone(),
+        ts: now_ms(),
+    })?;
+    isolated_session.append(&Event::Policy {
+        sandbox: "read-only".into(),
+        approval: "never".into(),
+        network: "off".into(),
+        backend: "none".into(),
+        ts: now_ms(),
+    })?;
+    let scan = crate::init::scan(&config.working_dir);
+    let prompt = crate::init::prompt(&config.working_dir, &scan);
+    let mut isolated = AgentConfig::new(config.model.clone(), config.working_dir.clone());
+    isolated.provider = config.provider.clone();
+    isolated.max_steps = 8;
+    isolated.sandbox = SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off);
+    isolated.approval = ApprovalMode::Never;
+    isolated.allow_unsandboxed = false;
+    isolated.allowed_tools = Some(vec!["read".into(), "grep".into(), "glob".into()]);
+    isolated.context.budget_tokens = 32_000;
+    isolated.context_budget_auto = false;
+    isolated.plan_mode = true;
+    isolated.system_prompt =
+        "You generate a project-specific AGENTS.md. Inspect only; never modify files.".into();
+    println!(
+        "{} {}",
+        out.accent("init"),
+        out.dim(format!(
+            "isolated read-only session {}",
+            isolated_session.path().display()
+        ))
+    );
+    let mut approver = |_request: &ApprovalRequest| false;
+    let mut observer = |event: AgentEvent| {
+        if let AgentEvent::Warning(warning) = event {
+            eprintln!(
                 "{} {}",
-                out.paint(Tone::Warning, theme::WARN),
-                out.dim(format!(
-                    "{} already exists · not overwriting",
-                    path.display()
-                ))
+                err.paint(Tone::Warning, theme::WARN),
+                err.dim(warning)
             );
-            return Ok(());
         }
-        bail!("refusing to overwrite non-file path {}", path.display());
+    };
+    let run = tokio::time::timeout(
+        Duration::from_secs(120),
+        niucode_agent::run(
+            provider,
+            &mut isolated_session,
+            &isolated,
+            &prompt,
+            &mut approver,
+            &mut observer,
+        ),
+    )
+    .await;
+    let _ = isolated_session.append(&Event::SessionEnd { ts: now_ms() });
+    let generation = match run {
+        Ok(Ok(outcome)) => Some(outcome.final_text),
+        Ok(Err(error)) => {
+            eprintln!(
+                "{} {}",
+                err.paint(Tone::Warning, theme::WARN),
+                err.dim(format!("init model failed: {error:#}; using scan fallback"))
+            );
+            None
+        }
+        Err(_) => {
+            eprintln!(
+                "{} {}",
+                err.paint(Tone::Warning, theme::WARN),
+                err.dim("init timed out after 120s; using scan fallback")
+            );
+            None
+        }
+    };
+    let proposal = generation
+        .as_deref()
+        .and_then(crate::init::normalize)
+        .unwrap_or_else(|| {
+            if generation.is_some() {
+                eprintln!(
+                    "{} {}",
+                    err.paint(Tone::Warning, theme::WARN),
+                    err.dim("model output missed required sections; using scan fallback")
+                );
+            }
+            crate::init::fallback(&config.working_dir, &scan)
+        });
+    let old = crate::init::existing(&config.working_dir);
+    println!(
+        "{} {}",
+        out.accent("proposal"),
+        out.dim(format!(
+            "{} lines · {} bytes · /init apply to write",
+            proposal.lines().count(),
+            proposal.len()
+        ))
+    );
+    if old.trim().is_empty() {
+        println!("{}", out.dim("new file: AGENTS.md"));
+        for line in proposal.lines() {
+            println!("{}", out.paint(Tone::Bright, format!("+ {line}")));
+        }
+    } else {
+        let diff = TextDiff::from_lines(&old, &proposal);
+        for line in diff
+            .unified_diff()
+            .header("a/AGENTS.md", "b/AGENTS.md")
+            .to_string()
+            .lines()
+        {
+            let tone = if line.starts_with('+') {
+                Tone::Success
+            } else if line.starts_with('-') {
+                Tone::Danger
+            } else {
+                Tone::Muted
+            };
+            println!("{}", out.paint(tone, line));
+        }
     }
+    if let Some(warning) = crate::init::size_warning(&proposal) {
+        eprintln!(
+            "{} {}",
+            err.paint(Tone::Warning, theme::WARN),
+            err.dim(warning)
+        );
+    }
+    state.init_proposal = Some(proposal.clone());
+    session.append(&Event::InitProposal {
+        content: proposal,
+        path: "AGENTS.md".into(),
+        ts: now_ms(),
+    })?;
+    Ok(())
+}
 
-    let template = slash::init_template(&config.working_dir);
-    std::fs::write(&path, template).with_context(|| format!("write {}", path.display()))?;
+async fn run_init_apply(
+    _session: &mut SessionLog,
+    config: &AgentConfig,
+    state: &mut SessionUiState,
+    out: Theme,
+    err: Theme,
+) -> Result<()> {
+    if state.plan_mode {
+        bail!("plan mode is read-only; use /plan off before /init apply");
+    }
+    if config.sandbox.mode == SandboxMode::ReadOnly {
+        bail!("sandbox is read-only; cannot apply /init proposal");
+    }
+    let Some(proposal) = state.init_proposal.clone() else {
+        bail!("no /init proposal in this session; run /init first");
+    };
+    let path = config.working_dir.join("AGENTS.md");
+    let existing = crate::init::existing(&config.working_dir);
+    let backup = if !existing.trim().is_empty() {
+        let workspace = Workspace::discover(&config.working_dir)?;
+        std::fs::create_dir_all(&workspace.backups)?;
+        let backup = workspace.backups.join(format!("AGENTS-{}.md", now_ms()));
+        std::fs::copy(&path, &backup).with_context(|| format!("backup {}", path.display()))?;
+        Some(backup)
+    } else {
+        None
+    };
+    let toolbox = Toolbox::with_policy(&config.working_dir, config.sandbox)?;
+    if path.is_file() {
+        let _ = toolbox
+            .execute("read", &serde_json::json!({"path": "AGENTS.md"}))
+            .await;
+    }
+    let result = toolbox
+        .execute(
+            "write",
+            &serde_json::json!({"path": "AGENTS.md", "content": proposal}),
+        )
+        .await;
+    if !result.ok {
+        bail!("apply AGENTS.md failed: {}", result.output);
+    }
     println!(
         "{} {}",
         out.paint(Tone::Success, theme::OK),
-        out.dim(format!("wrote {} · next turn will load it", path.display()))
+        out.dim(match &backup {
+            Some(backup) => format!("wrote {} · backup {}", path.display(), backup.display()),
+            None => format!("wrote {}", path.display()),
+        })
     );
+    let _ = err;
+    reload_instructions(config, out, err)?;
     Ok(())
 }
 

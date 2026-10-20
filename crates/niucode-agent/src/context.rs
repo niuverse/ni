@@ -161,6 +161,7 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::ExtensionError { .. }
             | Event::Instructions { .. }
             | Event::Compaction { .. }
+            | Event::InitProposal { .. }
             | Event::SessionEnd { .. } => {}
             Event::UserMessage { text, .. } => {
                 flush_pending_tools(&mut messages, &mut pending_tools);

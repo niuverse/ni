@@ -24,6 +24,7 @@ use crate::theme::{Theme, Tone};
 mod diff;
 mod editor;
 mod goal;
+mod init;
 mod inline;
 mod provider_factory;
 mod review;

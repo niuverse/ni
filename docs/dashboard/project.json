@@ -941,6 +941,18 @@
         "adr-0019",
         "tui"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-004 完成：/init 隔离提案与 apply",
+      "detail": "独立只读 run（read/grep/glob, 8 turns/120s）；固定章节；init_proposal 事件；unified diff；/init apply 经 Toolbox、备份旧文件；plan mode 只生成。",
+      "refs": [
+        "M5-004",
+        "adr-0020",
+        "tui",
+        "architecture"
+      ]
     }
   ]
 }

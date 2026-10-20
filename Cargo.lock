@@ -1468,6 +1468,7 @@ dependencies = [
  "rpassword",
  "serde",
  "serde_json",
+ "similar",
  "tokio",
  "toml",
  "unicode-width",

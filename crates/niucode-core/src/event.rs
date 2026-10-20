@@ -236,6 +236,12 @@ pub enum Event {
         message: String,
         ts: Timestamp,
     },
+    /// Full `/init` proposal content; applying it is an explicit follow-up.
+    InitProposal {
+        content: String,
+        path: String,
+        ts: Timestamp,
+    },
     /// Layered AGENTS.md files loaded for this run.
     Instructions {
         #[serde(default)]
@@ -273,6 +279,7 @@ impl Event {
             Self::ExtensionMount { .. } => "extension_mount",
             Self::ExtensionUnmount { .. } => "extension_unmount",
             Self::ExtensionError { .. } => "extension_error",
+            Self::InitProposal { .. } => "init_proposal",
             Self::Instructions { .. } => "instructions",
             Self::SessionEnd { .. } => "session_end",
         }
@@ -301,6 +308,7 @@ impl Event {
             | Self::ExtensionUnmount { ts, .. }
             | Self::ExtensionError { ts, .. }
             | Self::Instructions { ts, .. }
+            | Self::InitProposal { ts, .. }
             | Self::SessionEnd { ts } => *ts,
         }
     }
