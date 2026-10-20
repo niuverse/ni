@@ -83,6 +83,10 @@ M0–M3 are done; M4 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
 M4-004/M4-005/M4-009/M4-010/M4-011/M4-012 are done; M4-006/007/008 are backlog.
+M5-001 provider seam is in review: catalog, canonical provider/model, lazy
+ProviderFactory, model_change and auto context budget are implemented; model
+picker availability filtering, exec cross-provider wiring, and SessionStart
+provider remain.
 `/goal run` is TUI-only; headless `exec --goal` is M4-008. TUI mouse capture
 is menu-scoped, terminal state is restored by `TerminalGuard`, session
 lifecycle is `/clear` vs `/reset` vs `/resume`, and runtime selection is

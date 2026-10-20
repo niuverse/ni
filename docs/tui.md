@@ -121,7 +121,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `/reset` 是更强的重置：新 session + plan off + goal 清空 + pending/输入历史清空 + 重新读取 AGENTS.md；extension host 仍按 session 生命周期挂载，不重启进程。
 - `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；cwd/model 不一致会警告。无参数列出最近 session。
 - `/reload` 只重读 AGENTS.md 指令；扩展 manifest 在 session 启动时挂载，重新加载需要重启 TUI。
-- `/model` 是运行时模型选择：写入 `model_change` 事件，`/resume` 恢复，`/clear` 保留，`/reset` 清除。切换只允许当前 provider preset；跨 provider 需要重启。请求仍然走同一个 endpoint/auth，下一次 turn 使用新 model；切换 turn 可能失去 prompt cache。
+- `/model` 是运行时模型选择：canonical `provider/model`；写入 `model_change { provider, model }`，`/resume` 恢复，`/clear` 保留，`/reset` 清除。provider 由 `ProviderFactory` 惰性解析凭据并构造；切换发生在 turn 边界。请求仍然走同一个 endpoint/auth，下一次 turn 使用新 model；切换 turn 可能失去 prompt cache。
 - `/model` 和 `/permissions` 直接打开参数下拉：输入命令后→↑↓/鼠标选择（或 Tab 选第一项）→Enter 填入→再 Enter 执行；直接 Enter 显示当前值，不误改配置。建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。
 - `/permissions` 只映射已有 policy 字段：`ask` = workspace-write/off/ask，`review` = workspace-write/off/on-failure，`full-access` = full-access/on/never，`ci` = read-only/off/never。写入 `permission_change` 事件；`/resume` 恢复，`/clear` 保留，`/reset` 清除。`/plan` 仍然是独立 mode。
 - full-access 会打印隔离关闭警告；profile 变更只在下一个 turn 生效。

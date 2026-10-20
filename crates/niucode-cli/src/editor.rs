@@ -394,9 +394,10 @@ impl State<'_> {
             return Ok(Some(Input::Line(line)));
         }
         let candidates = self.candidates();
-        let exact = candidates
-            .get(self.selected)
-            .is_some_and(|item| item.insert.trim_end() == line);
+        // If the typed line exactly matches any candidate (not just the
+        // highlighted one), submit it instead of replacing it with the first
+        // prefix match. This matters for /model openai/gpt-4o vs -mini.
+        let exact = candidates.iter().any(|item| item.insert.trim_end() == line);
         if self.menu_open && !exact {
             self.accept_selected();
             Ok(None)

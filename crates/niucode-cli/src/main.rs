@@ -12,10 +12,11 @@ use niucode_auth::AuthStore;
 use niucode_core::{now_ms, Event, SessionLog};
 use niucode_extension::{discover, ExtensionHost};
 use niucode_provider::{
-    ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider,
-    RecordingProvider, ReplayProvider, StreamEvent, ThinkingMode,
+    ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider, ReplayProvider,
+    StreamEvent, ThinkingMode,
 };
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
+use provider_factory::ProviderFactory;
 use serde_json::json;
 
 use crate::theme::{Theme, Tone};
@@ -23,6 +24,7 @@ use crate::theme::{Theme, Tone};
 mod diff;
 mod editor;
 mod goal;
+mod provider_factory;
 mod review;
 mod session_ops;
 mod slash;
@@ -86,8 +88,8 @@ enum Command {
         /// Maximum model turns per user request (0 = no hard cap)
         #[arg(long, default_value_t = 0)]
         max_steps: usize,
-        /// Approximate context budget in tokens before compaction
-        #[arg(long, default_value_t = 64_000)]
+        /// Approximate context budget in tokens before compaction (0 = auto)
+        #[arg(long, default_value_t = 0)]
         context_budget: usize,
         /// Recent user turns kept verbatim when compacting
         #[arg(long, default_value_t = 3)]
@@ -134,8 +136,8 @@ enum Command {
         /// Override the preset model
         #[arg(long)]
         model: Option<String>,
-        /// Approximate context budget in tokens before compaction
-        #[arg(long, default_value_t = 64_000)]
+        /// Approximate context budget in tokens before compaction (0 = auto)
+        #[arg(long, default_value_t = 0)]
         context_budget: usize,
         /// Maximum model turns per user request (0 = no hard cap)
         #[arg(long, default_value_t = 0)]
@@ -526,8 +528,8 @@ async fn run_tui(
     plan: bool,
     allow_subagent_inheritance: bool,
 ) -> Result<()> {
-    if context_budget < 100 {
-        bail!("--context-budget must be at least 100 tokens");
+    if context_budget != 0 && context_budget < 100 {
+        bail!("--context-budget must be 0 (auto) or at least 100 tokens");
     }
     if keep_recent_turns == 0 {
         bail!("--keep-recent-turns must be at least 1");
@@ -560,35 +562,38 @@ async fn run_tui(
     }
 
     let preset = parse_provider(&preset)?;
-    let (provider, model, auth_source): (Arc<dyn Provider>, String, String) =
-        if let Some(path) = &replay {
-            let provider = ReplayProvider::load(path)?;
-            let model = model.unwrap_or_else(|| "replay".into());
-            (Arc::new(provider), model, "replay".into())
-        } else {
-            let store = AuthStore::new()?;
-            let credential = match store.resolve(preset.as_str())? {
-                Some(credential) => credential,
-                None => bail!(
-                    "no credential for {}; run `niucode auth set {}` or set {}",
-                    preset.as_str(),
-                    preset.as_str(),
-                    preset.api_key_env()
-                ),
-            };
+    let (provider, model, auth_source, provider_factory) = if let Some(path) = &replay {
+        let provider = ReplayProvider::load(path)?;
+        let model = model.unwrap_or_else(|| "replay".into());
+        (
+            Arc::new(provider) as Arc<dyn Provider>,
+            model,
+            "replay".into(),
+            None,
+        )
+    } else {
+        let factory = ProviderFactory::new(no_thinking, None)?;
+        let mut provider_id = preset.as_str().to_string();
+        let mut model = model.unwrap_or_else(|| {
+            ProviderFactory::default_model(&provider_id).unwrap_or_else(|_| "deepseek-flash".into())
+        });
+        if let Ok(selection) = niucode_provider::ModelSelection::parse(&model, &provider_id) {
+            provider_id = selection.provider;
+            model = selection.model;
+        }
+        let provider = factory.build(&provider_id, &model)?;
+        let auth_source = factory
+            .auth_source(&provider_id)?
+            .unwrap_or_else(|| "unknown".into());
+        (provider, model, auth_source, Some(factory))
+    };
 
-            let mut config = OpenAiConfig::preset_config(preset)?;
-            config.api_key = credential.key.expose().to_string();
-            if let Some(model) = model {
-                config.model = model;
-            }
-            if no_thinking && preset == Preset::DeepSeek {
-                config.thinking = Some(ThinkingMode::Disabled);
-            }
-            let model = config.model.clone();
-            let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::for_preset(preset, config)?);
-            (provider, model, credential.source.to_string())
-        };
+    let context_budget_auto = context_budget == 0;
+    let context_budget = if context_budget_auto {
+        niucode_provider::derived_context_budget(provider.name(), &model)
+    } else {
+        context_budget
+    };
 
     let resumed = match &resume {
         Some(path) => {
@@ -647,11 +652,13 @@ async fn run_tui(
     }
 
     let mut agent_config = AgentConfig::new(model.clone(), working_dir.clone());
+    agent_config.provider = provider.name().to_string();
     agent_config.max_steps = max_steps;
     agent_config.sandbox = policy;
     agent_config.approval = approval_mode;
     agent_config.allow_unsandboxed = allow_unsandboxed;
     agent_config.context.budget_tokens = context_budget;
+    agent_config.context_budget_auto = context_budget_auto;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
@@ -692,7 +699,14 @@ async fn run_tui(
         theme.paint(Tone::Bright, session.path().display())
     );
 
-    let result = tui::run(provider.as_ref(), &mut session, &agent_config, history).await;
+    let result = tui::run(
+        provider,
+        provider_factory.as_ref(),
+        &mut session,
+        &agent_config,
+        history,
+    )
+    .await;
     unmount_extensions(&extension_host, &mut session).await?;
     result
 }
@@ -720,8 +734,8 @@ async fn run_exec(
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
     }
-    if context_budget < 100 {
-        bail!("--context-budget must be at least 100 tokens");
+    if context_budget != 0 && context_budget < 100 {
+        bail!("--context-budget must be 0 (auto) or at least 100 tokens");
     }
     if keep_recent_turns == 0 {
         bail!("--keep-recent-turns must be at least 1");
@@ -759,43 +773,48 @@ async fn run_exec(
     }
 
     let preset = parse_provider(&preset)?;
-    let (provider, model, auth_source): (Arc<dyn Provider>, String, String) =
-        if let Some(path) = &replay {
-            let provider = ReplayProvider::load(path)?;
-            let model = model.unwrap_or_else(|| "replay".into());
-            (Arc::new(provider), model, "replay".into())
-        } else {
-            let store = AuthStore::new()?;
-            let credential = match store.resolve(preset.as_str())? {
-                Some(credential) => credential,
-                None => bail!(
-                    "no credential for {}; run `niucode auth set {}` or set {}",
-                    preset.as_str(),
-                    preset.as_str(),
-                    preset.api_key_env()
-                ),
-            };
+    let (provider, model, auth_source, _provider_factory) = if let Some(path) = &replay {
+        let provider = ReplayProvider::load(path)?;
+        let model = model.unwrap_or_else(|| "replay".into());
+        (
+            Arc::new(provider) as Arc<dyn Provider>,
+            model,
+            "replay".into(),
+            None,
+        )
+    } else {
+        let factory = ProviderFactory::new(no_thinking, record.clone())?;
+        let mut provider_id = preset.as_str().to_string();
+        let mut model = model.unwrap_or_else(|| {
+            ProviderFactory::default_model(&provider_id).unwrap_or_else(|_| "deepseek-flash".into())
+        });
+        if let Ok(selection) = niucode_provider::ModelSelection::parse(&model, &provider_id) {
+            provider_id = selection.provider;
+            model = selection.model;
+        }
+        if let Some(path) = &record {
+            eprintln!("recording fixture: {}", path.display());
+        }
+        let provider = factory.build(&provider_id, &model)?;
+        let auth_source = factory
+            .auth_source(&provider_id)?
+            .unwrap_or_else(|| "unknown".into());
+        (provider, model, auth_source, Some(factory))
+    };
 
-            let mut config = OpenAiConfig::preset_config(preset)?;
-            config.api_key = credential.key.expose().to_string();
-            if let Some(model) = model {
-                config.model = model;
-            }
-            if no_thinking && preset == Preset::DeepSeek {
-                config.thinking = Some(ThinkingMode::Disabled);
-            }
-            let model = config.model.clone();
-            let inner: Arc<dyn Provider> = Arc::new(OpenAiProvider::for_preset(preset, config)?);
-            let provider: Arc<dyn Provider> = if let Some(path) = &record {
-                eprintln!("recording fixture: {}", path.display());
-                Arc::new(RecordingProvider::new(inner, path.clone()))
-            } else {
-                inner
-            };
+    let context_budget_auto = context_budget == 0;
+    let context_budget = if context_budget_auto {
+        niucode_provider::derived_context_budget(provider.name(), &model)
+    } else {
+        context_budget
+    };
 
-            (provider, model, credential.source.to_string())
-        };
-
+    let context_budget_auto = context_budget == 0;
+    let context_budget = if context_budget_auto {
+        niucode_provider::derived_context_budget(provider.name(), &model)
+    } else {
+        context_budget
+    };
     let resumed = match &resume {
         Some(path) => {
             let loaded = niucode_core::load(path)?;
@@ -869,11 +888,13 @@ async fn run_exec(
     }
 
     let mut agent_config = AgentConfig::new(model, working_dir);
+    agent_config.provider = provider.name().to_string();
     agent_config.max_steps = max_steps;
     agent_config.sandbox = policy;
     agent_config.approval = approval_mode;
     agent_config.allow_unsandboxed = allow_unsandboxed;
     agent_config.context.budget_tokens = context_budget;
+    agent_config.context_budget_auto = context_budget_auto;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;

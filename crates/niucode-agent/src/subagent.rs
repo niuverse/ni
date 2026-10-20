@@ -272,6 +272,7 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
 
 fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
     let mut config = AgentConfig::new(parent.model.clone(), parent.working_dir.clone());
+    config.provider = parent.provider.clone();
     config.max_steps = task.max_steps.clamp(1, MAX_STEPS);
     config.context.budget_tokens = parent
         .context

@@ -5,6 +5,7 @@
 
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
@@ -20,12 +21,13 @@ use niucode_agent::{
     ApprovalMode, ApprovalRequest, RunOutcome,
 };
 use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
-use niucode_provider::{ChatMessage, Provider};
+use niucode_provider::{ChatMessage, ModelSelection, Provider};
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 
 use crate::diff::{clean_text, render_plain};
 use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
+use crate::provider_factory::{provider_choices, ProviderFactory};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
 use crate::slash::{
@@ -131,7 +133,8 @@ struct SessionUiState {
     pending_prompt: Option<String>,
     /// Ephemeral request from `/reset` to drop the line editor history.
     clear_history: bool,
-    /// Runtime model override; None means the startup config model.
+    /// Runtime provider/model override; None means the startup config values.
+    provider: Option<String>,
     model: Option<String>,
     /// Runtime permission profile; None means the startup policy.
     permissions: Option<PermissionProfile>,
@@ -150,7 +153,14 @@ impl SessionUiState {
                 Event::PlanMode { active, .. } => state.plan_mode = *active,
                 Event::GoalSet { text, .. } => state.goal = Some(text.clone()),
                 Event::GoalCleared { .. } => state.goal = None,
-                Event::ModelChange { model, .. } => state.model = Some(model.clone()),
+                Event::ModelChange {
+                    provider, model, ..
+                } => {
+                    if !provider.is_empty() {
+                        state.provider = Some(provider.clone());
+                    }
+                    state.model = Some(model.clone());
+                }
                 Event::PermissionChange { profile, .. } => {
                     state.permissions = PermissionProfile::parse(profile);
                 }
@@ -165,9 +175,26 @@ fn effective_model<'a>(state: &'a SessionUiState, config: &'a AgentConfig) -> &'
     state.model.as_deref().unwrap_or(&config.model)
 }
 
+fn effective_provider<'a>(state: &'a SessionUiState, config: &'a AgentConfig) -> &'a str {
+    state.provider.as_deref().unwrap_or(&config.provider)
+}
+
+fn current_selection(state: &SessionUiState, config: &AgentConfig) -> String {
+    format!(
+        "{}/{}",
+        effective_provider(state, config),
+        effective_model(state, config)
+    )
+}
+
 fn apply_runtime_config(config: &AgentConfig, state: &SessionUiState) -> AgentConfig {
     let mut runtime = config.clone();
+    runtime.provider = effective_provider(state, config).to_string();
     runtime.model = effective_model(state, config).to_string();
+    if runtime.context_budget_auto {
+        runtime.context.budget_tokens =
+            niucode_provider::derived_context_budget(&runtime.provider, &runtime.model);
+    }
     if let Some(profile) = state.permissions {
         profile.apply(&mut runtime);
     }
@@ -183,7 +210,8 @@ fn apply_runtime_config(config: &AgentConfig, state: &SessionUiState) -> AgentCo
 }
 
 pub async fn run(
-    provider: &dyn Provider,
+    mut provider: Arc<dyn Provider>,
+    provider_factory: Option<&ProviderFactory>,
     session: &mut SessionLog,
     config: &AgentConfig,
     history: Vec<ChatMessage>,
@@ -198,7 +226,7 @@ pub async fn run(
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         let mut editor = LineEditor::new(commands.clone());
         editor.set_models(niucode_model_choices(config));
-        editor.set_current_model(config.model.clone());
+        editor.set_current_model(format!("{}/{}", config.provider, config.model));
         editor.set_permissions(
             PermissionProfile::ALL
                 .iter()
@@ -300,6 +328,8 @@ pub async fn run(
                 &mut last_tool,
                 &mut state,
                 &commands,
+                &mut provider,
+                provider_factory,
                 out,
                 err,
             ) {
@@ -309,7 +339,7 @@ pub async fn run(
                         if state.clear_history {
                             editor.clear_history();
                         }
-                        editor.set_current_model(effective_model(&state, config).to_string());
+                        editor.set_current_model(current_selection(&state, config));
                         editor.set_models(niucode_model_choices(config));
                     }
                     state.clear_history = false;
@@ -480,12 +510,25 @@ pub async fn run(
             }
         };
 
+        if let Some(factory) = provider_factory {
+            let selected = effective_provider(&state, config);
+            if provider.name() != selected {
+                provider = factory
+                    .build(selected, effective_model(&state, config))
+                    .with_context(|| format!("switch provider to {selected}"))?;
+                eprintln!(
+                    "{} provider {} · auth resolved",
+                    out.accent("switch"),
+                    out.paint(Tone::Bright, selected)
+                );
+            }
+        }
         let mut run_config = apply_runtime_config(config, &state);
         run_config.plan_mode = state.plan_mode;
 
         let result = {
             let run = run_with_history(
-                provider,
+                provider.as_ref(),
                 session,
                 &run_config,
                 prompt,
@@ -534,7 +577,7 @@ pub async fn run(
                 history = project_history(&load(session.path())?.events)?;
                 if state.goal_run {
                     if let Err(error) = goal_after_turn(
-                        provider,
+                        provider.as_ref(),
                         session,
                         &mut state,
                         &outcome,
@@ -602,6 +645,8 @@ fn handle_command(
     last_tool: &mut Option<ToolEcho>,
     state: &mut SessionUiState,
     commands: &CommandRegistry,
+    provider: &mut Arc<dyn Provider>,
+    provider_factory: Option<&ProviderFactory>,
     out: Theme,
     err: Theme,
 ) -> Result<CommandOutcome> {
@@ -621,6 +666,7 @@ fn handle_command(
             let plan = state.plan_mode;
             let goal = state.goal.clone();
             let model = state.model.clone();
+            let provider = state.provider.clone();
             let permissions = state.permissions;
             let mut fresh = new_session(session, config)?;
             if plan {
@@ -637,6 +683,7 @@ fn handle_command(
             }
             if let Some(model) = &model {
                 fresh.append(&Event::ModelChange {
+                    provider: provider.clone().unwrap_or_else(|| config.provider.clone()),
                     model: model.clone(),
                     ts: now_ms(),
                 })?;
@@ -659,6 +706,7 @@ fn handle_command(
             state.plan_mode = plan;
             state.goal = goal;
             state.model = model;
+            state.provider = provider;
             state.permissions = permissions;
             state.goal_run = false;
             state.goal_turns = 0;
@@ -702,7 +750,9 @@ fn handle_command(
             reload_instructions(config, out, err)?;
         }
         SlashCommand::Reload => reload_instructions(config, out, err)?,
-        SlashCommand::Model(arg) => handle_model(session, config, state, arg, out)?,
+        SlashCommand::Model(arg) => {
+            handle_model(session, config, state, arg, provider, provider_factory, out)?
+        }
         SlashCommand::Permissions(arg) => {
             handle_permissions(session, config, state, arg, out, err)?
         }
@@ -814,75 +864,7 @@ fn compact_now(
     Ok(())
 }
 
-fn handle_model(
-    session: &mut SessionLog,
-    config: &AgentConfig,
-    state: &mut SessionUiState,
-    arg: Option<String>,
-    out: Theme,
-) -> Result<()> {
-    let current = effective_model(state, config).to_string();
-    let Some(name) = arg else {
-        println!(
-            "{} {}",
-            out.accent("model"),
-            out.paint(Tone::Bright, &current)
-        );
-        println!(
-            "{}",
-            out.dim("  switch with /model <name> · same provider only · next turn")
-        );
-        let choices = niucode_model_choices(config);
-        if !choices.is_empty() {
-            println!("{}", out.dim("  suggestions:"));
-            for choice in choices {
-                let marker = if choice == current { "*" } else { " " };
-                println!("{}", out.dim(format!("  {marker} {choice}")));
-            }
-        }
-        return Ok(());
-    };
-    let name = name.trim();
-    if name.is_empty() || name.len() > 128 || name.chars().any(char::is_whitespace) {
-        bail!("model name must be a non-empty token (max 128 chars)");
-    }
-    if model_family(&current) != model_family(name) {
-        bail!(
-            "model switch stays on the current provider; restart with --preset/--model for {name}"
-        );
-    }
-    if name == current {
-        println!("{}", out.dim(format!("model already {current}")));
-        return Ok(());
-    }
-    state.model = Some(name.to_string());
-    session.append(&Event::ModelChange {
-        model: name.to_string(),
-        ts: now_ms(),
-    })?;
-    println!(
-        "{} {}",
-        out.accent("model"),
-        out.paint(Tone::Bright, format!("{current} → {name} · next turn"))
-    );
-    println!(
-        "{}",
-        out.dim("  switching between turns may miss the prompt cache")
-    );
-    Ok(())
-}
-
-fn model_family(model: &str) -> &str {
-    if model.starts_with("deepseek") {
-        "deepseek"
-    } else if model.starts_with("gpt") || model.starts_with('o') {
-        "openai"
-    } else {
-        "custom"
-    }
-}
-
-fn niucode_model_choices(config: &AgentConfig) -> Vec<String> {
+fn niucode_model_choices(_config: &AgentConfig) -> Vec<String> {
     let from_env = std::env::var("NIUCODE_MODEL_CHOICES")
         .ok()
         .map(|value| {
@@ -894,20 +876,83 @@ fn niucode_model_choices(config: &AgentConfig) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    if !from_env.is_empty() {
-        return from_env;
+    if from_env.is_empty() {
+        provider_choices()
+    } else {
+        from_env
     }
-    match model_family(&config.model) {
-        "deepseek" => ["deepseek-flash", "deepseek-pro", "deepseek-reasoner"]
-            .iter()
-            .map(|model| (*model).to_string())
-            .collect(),
-        "openai" => ["gpt-4o-mini", "gpt-4o", "o4-mini"]
-            .iter()
-            .map(|model| (*model).to_string())
-            .collect(),
-        _ => Vec::new(),
+}
+
+fn handle_model(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    state: &mut SessionUiState,
+    arg: Option<String>,
+    provider: &mut Arc<dyn Provider>,
+    factory: Option<&ProviderFactory>,
+    out: Theme,
+) -> Result<()> {
+    let current_provider = effective_provider(state, config).to_string();
+    let current_model = effective_model(state, config).to_string();
+    let current = format!("{current_provider}/{current_model}");
+    let Some(name) = arg else {
+        println!(
+            "{} {}",
+            out.accent("model"),
+            out.paint(Tone::Bright, &current)
+        );
+        println!(
+            "{}",
+            out.dim("  switch with /model <provider/model> · next turn")
+        );
+        let choices = provider_choices();
+        if !choices.is_empty() {
+            println!("{}", out.dim("  suggestions:"));
+            for choice in choices {
+                let marker = if choice == current { "*" } else { " " };
+                println!("{}", out.dim(format!("  {marker} {choice}")));
+            }
+        }
+        return Ok(());
+    };
+    let selection =
+        ModelSelection::parse(name.trim(), &current_provider).map_err(anyhow::Error::msg)?;
+    if selection.provider != current_provider {
+        let Some(factory) = factory else {
+            bail!("cross-provider model switching is unavailable in replay mode");
+        };
+        if !factory.available(&selection.provider)? {
+            bail!(
+                "no credential for {}; run `niucode auth set {}`",
+                selection.provider,
+                selection.provider
+            );
+        }
+        *provider = factory
+            .build(&selection.provider, &selection.model)
+            .with_context(|| format!("switch provider to {}", selection.provider))?;
     }
+    if selection.provider == current_provider && selection.model == current_model {
+        println!("{}", out.dim(format!("model already {current}")));
+        return Ok(());
+    }
+    state.provider = Some(selection.provider.clone());
+    state.model = Some(selection.model.clone());
+    session.append(&Event::ModelChange {
+        provider: selection.provider.clone(),
+        model: selection.model.clone(),
+        ts: now_ms(),
+    })?;
+    println!(
+        "{} {}",
+        out.accent("model"),
+        out.paint(Tone::Bright, format!("{current} → {selection} · next turn"))
+    );
+    println!(
+        "{}",
+        out.dim("  switching between turns may miss the prompt cache")
+    );
+    Ok(())
 }
 
 fn handle_permissions(
@@ -1445,21 +1490,6 @@ fn resume_session(
     let new_history = project_history(&loaded.events)?;
     let mut new_state = SessionUiState::from_events(&loaded.events);
     new_state.clear_history = false;
-    if let Some(model) = &new_state.model {
-        if model_family(model) != model_family(&config.model) {
-            eprintln!(
-                "{}",
-                err.paint(
-                    Tone::Warning,
-                    format!(
-                        "warning: session model {model} is on another provider; using {} instead",
-                        config.model
-                    )
-                )
-            );
-            new_state.model = None;
-        }
-    }
     let new_session = SessionLog::open(&path)?;
     *session = new_session;
     *history = new_history;
@@ -1581,9 +1611,16 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
     if let Some(profile) = ui.permissions {
         profile.apply(&mut effective);
     }
+    if effective.context_budget_auto {
+        effective.context.budget_tokens = niucode_provider::derived_context_budget(
+            ui.provider.as_deref().unwrap_or(&config.provider),
+            ui.model.as_deref().unwrap_or(&config.model),
+        );
+    }
     println!("{}", out.accent("status"));
     println!(
-        "  model      {}",
+        "  model      {}/{}",
+        ui.provider.as_deref().unwrap_or(&config.provider),
         ui.model.as_deref().unwrap_or(&config.model)
     );
     println!("  cwd        {}", config.working_dir.display());
@@ -1599,7 +1636,7 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
     );
     println!(
         "  context    budget {} · trigger {}% · keep {} turns",
-        config.context.budget_tokens,
+        effective.context.budget_tokens,
         config.context.compact_at_percent,
         config.context.keep_recent_turns
     );
@@ -2077,14 +2114,5 @@ mod tests {
             Some(PermissionProfile::FullAccess)
         );
         assert_eq!(PermissionProfile::parse("nope"), None);
-    }
-
-    #[test]
-    fn model_family_keeps_provider_boundaries() {
-        assert_eq!(model_family("deepseek-flash"), "deepseek");
-        assert_eq!(model_family("deepseek-pro"), "deepseek");
-        assert_eq!(model_family("gpt-4o"), "openai");
-        assert_eq!(model_family("o4-mini"), "openai");
-        assert_eq!(model_family("local-model"), "custom");
     }
 }

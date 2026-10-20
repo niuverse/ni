@@ -65,6 +65,17 @@
         "external tools 走 session 级 extension host",
         "subagent 有 Explore/Worker capability profile"
       ]
+    },
+    {
+      "id": "M5",
+      "title": "Kernel seams",
+      "status": "planned",
+      "goal": "把 provider、tool、loop 的边界做成可测试、可扩展的 seam，而不破坏事件日志。",
+      "exit": [
+        "provider catalog and cross-provider selection",
+        "tool risk metadata",
+        "loop phases"
+      ]
     }
   ],
   "layers": [
@@ -842,6 +853,28 @@
         "M4-012",
         "adr-0016",
         "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M5-001 provider seam 进入 review",
+      "detail": "静态 catalog、canonical provider/model、惰性 ProviderFactory、跨 provider TUI /model、model_change provider、auto context budget 已落地；availability 过滤/exec wiring/SessionStart 仍待收口。",
+      "refs": [
+        "M5-001",
+        "adr-0017",
+        "provider",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0017 accepted：provider catalog 与原子选择",
+      "detail": "canonical provider/model；静态 catalog；惰性凭据；model_change 原子记录；context budget 从窗口派生。",
+      "refs": [
+        "adr-0017",
+        "M5-001"
       ]
     }
   ]

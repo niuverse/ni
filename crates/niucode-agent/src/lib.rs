@@ -59,6 +59,7 @@ pub struct ApprovalRequest {
 
 #[derive(Clone)]
 pub struct AgentConfig {
+    pub provider: String,
     pub model: String,
     pub max_steps: usize,
     pub system_prompt: String,
@@ -67,6 +68,8 @@ pub struct AgentConfig {
     pub approval: ApprovalMode,
     pub allow_unsandboxed: bool,
     pub context: ContextConfig,
+    /// Recompute the context budget from the selected model catalog on each turn.
+    pub context_budget_auto: bool,
     /// When set, only these tool names are advertised and executable.
     pub allowed_tools: Option<Vec<String>>,
     /// Read-only planning mode. The loop still runs, but the prompt tells the
@@ -102,6 +105,7 @@ impl AgentConfig {
         );
 
         Self {
+            provider: "deepseek".into(),
             model: model.into(),
             // 0 means no user-facing hard cap. The loop still has a high
             // safety ceiling; normal termination is the model's final answer.
@@ -112,6 +116,7 @@ impl AgentConfig {
             approval: ApprovalMode::OnFailure,
             allow_unsandboxed: false,
             context: ContextConfig::default(),
+            context_budget_auto: false,
             allowed_tools: None,
             plan_mode: false,
             goal: None,

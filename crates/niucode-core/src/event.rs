@@ -203,6 +203,8 @@ pub enum Event {
     },
     /// Runtime model selection changed without starting a new session.
     ModelChange {
+        #[serde(default)]
+        provider: String,
         model: String,
         ts: Timestamp,
     },
@@ -356,6 +358,7 @@ mod tests {
         assert_eq!(spawn.ts(), 4);
 
         let model = Event::ModelChange {
+            provider: "deepseek".into(),
             model: "deepseek-pro".into(),
             ts: 5,
         };

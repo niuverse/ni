@@ -4,6 +4,7 @@
 //! normalized [`StreamEvent`]s. Wire formats stay in this crate; `niucode-core`
 //! never sees SSE, HTTP, or provider-specific JSON.
 
+mod catalog;
 mod error;
 mod fixture;
 mod message;
@@ -11,6 +12,10 @@ mod openai;
 mod scripted;
 mod sse;
 
+pub use catalog::{
+    context_window, derived_context_budget, find_model, find_provider, providers, ModelDescriptor,
+    ModelSelection, ProviderDescriptor, DEFAULT_CONTEXT_WINDOW,
+};
 pub use error::ProviderError;
 pub use fixture::{RecordedEvent, RecordedFixture, RecordingProvider, ReplayProvider};
 pub use message::{
