@@ -60,6 +60,7 @@ async fn plan_mode_narrows_tools_and_injects_goal_and_directive() {
             id: session.id().to_string(),
             cwd: directory.display().to_string(),
             model: "capture".into(),
+            provider: "deepseek".into(),
             ts: now_ms(),
         })
         .expect("start");
@@ -155,6 +156,7 @@ async fn plan_mode_blocks_a_write_call_even_if_the_model_asks_for_it() {
             id: session.id().to_string(),
             cwd: directory.display().to_string(),
             model: "plan-write".into(),
+            provider: "deepseek".into(),
             ts: now_ms(),
         })
         .expect("start");

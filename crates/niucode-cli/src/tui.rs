@@ -27,7 +27,7 @@ use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 use crate::diff::{clean_text, render_plain};
 use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
-use crate::provider_factory::{provider_choices, ProviderFactory};
+use crate::provider_factory::{available_model_choices, provider_choices, ProviderFactory};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
 use crate::slash::{
@@ -150,6 +150,9 @@ impl SessionUiState {
         let mut state = Self::default();
         for event in events {
             match event {
+                Event::SessionStart { provider, .. } if !provider.is_empty() => {
+                    state.provider = Some(provider.clone());
+                }
                 Event::PlanMode { active, .. } => state.plan_mode = *active,
                 Event::GoalSet { text, .. } => state.goal = Some(text.clone()),
                 Event::GoalCleared { .. } => state.goal = None,
@@ -225,7 +228,7 @@ pub async fn run(
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         let mut editor = LineEditor::new(commands.clone());
-        editor.set_models(niucode_model_choices(config));
+        editor.set_models(niucode_model_choices(config, provider_factory));
         editor.set_current_model(format!("{}/{}", config.provider, config.model));
         editor.set_permissions(
             PermissionProfile::ALL
@@ -340,7 +343,7 @@ pub async fn run(
                             editor.clear_history();
                         }
                         editor.set_current_model(current_selection(&state, config));
-                        editor.set_models(niucode_model_choices(config));
+                        editor.set_models(niucode_model_choices(config, provider_factory));
                     }
                     state.clear_history = false;
                     continue;
@@ -864,7 +867,7 @@ fn compact_now(
     Ok(())
 }
 
-fn niucode_model_choices(_config: &AgentConfig) -> Vec<String> {
+fn niucode_model_choices(_config: &AgentConfig, factory: Option<&ProviderFactory>) -> Vec<String> {
     let from_env = std::env::var("NIUCODE_MODEL_CHOICES")
         .ok()
         .map(|value| {
@@ -876,11 +879,13 @@ fn niucode_model_choices(_config: &AgentConfig) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    if from_env.is_empty() {
-        provider_choices()
-    } else {
-        from_env
+    if !from_env.is_empty() {
+        return from_env;
     }
+    factory
+        .map(available_model_choices)
+        .filter(|choices| !choices.is_empty())
+        .unwrap_or_else(provider_choices)
 }
 
 fn handle_model(
@@ -1550,6 +1555,7 @@ fn new_session(session: &SessionLog, config: &AgentConfig) -> Result<SessionLog>
         id: new_session.id().to_string(),
         cwd: config.working_dir.display().to_string(),
         model: config.model.clone(),
+        provider: config.provider.clone(),
         ts: now_ms(),
     })?;
     new_session.append(&Event::Policy {

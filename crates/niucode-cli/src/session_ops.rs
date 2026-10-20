@@ -202,6 +202,7 @@ mod tests {
             id: id.into(),
             cwd: "/tmp".into(),
             model: "test".into(),
+            provider: "deepseek".into(),
             ts: 1,
         }
     }

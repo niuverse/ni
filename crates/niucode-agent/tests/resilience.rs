@@ -38,6 +38,7 @@ fn start_session(directory: &Path) -> SessionLog {
             id: session.id().to_string(),
             cwd: directory.display().to_string(),
             model: "test-model".into(),
+            provider: "deepseek".into(),
             ts: 1,
         })
         .expect("session start");

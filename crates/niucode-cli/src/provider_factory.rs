@@ -83,6 +83,21 @@ impl ProviderFactory {
     }
 }
 
+pub fn available_model_choices(factory: &ProviderFactory) -> Vec<String> {
+    let mut choices = Vec::new();
+    for provider in niucode_provider::providers() {
+        if factory.available(provider.id).unwrap_or(false) {
+            choices.extend(
+                provider
+                    .models
+                    .iter()
+                    .map(|model| format!("{}/{}", provider.id, model.id)),
+            );
+        }
+    }
+    choices
+}
+
 pub fn provider_choices() -> Vec<String> {
     niucode_provider::providers()
         .iter()

@@ -121,6 +121,7 @@ for line in sys.stdin:
             id: session.id().to_string(),
             cwd: dir.display().to_string(),
             model: "external".into(),
+            provider: "deepseek".into(),
             ts: now_ms(),
         })
         .expect("start");

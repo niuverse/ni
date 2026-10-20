@@ -108,6 +108,7 @@ async fn run_tasks(
             id: id.clone(),
             cwd: parent_config.working_dir.display().to_string(),
             model: parent_config.model.clone(),
+            provider: parent_config.provider.clone(),
             ts: now_ms(),
         })?;
         session.append(&Event::Policy {

@@ -50,6 +50,7 @@ async fn agents_md_changes_apply_to_the_next_turn() {
             id: session.id().to_string(),
             cwd: child.display().to_string(),
             model: "test-model".into(),
+            provider: "deepseek".into(),
             ts: 1,
         })
         .expect("session start");

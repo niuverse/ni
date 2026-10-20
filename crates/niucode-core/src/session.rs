@@ -157,6 +157,7 @@ mod tests {
                 id: log.id().to_string(),
                 cwd: "/tmp/project".into(),
                 model: "test-model".into(),
+                provider: "deepseek".into(),
                 ts,
             },
             Event::UserMessage {

@@ -125,7 +125,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `/model` 和 `/permissions` 直接打开参数下拉：输入命令后→↑↓/鼠标选择（或 Tab 选第一项）→Enter 填入→再 Enter 执行；直接 Enter 显示当前值，不误改配置。建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。
 - `/permissions` 只映射已有 policy 字段：`ask` = workspace-write/off/ask，`review` = workspace-write/off/on-failure，`full-access` = full-access/on/never，`ci` = read-only/off/never。写入 `permission_change` 事件；`/resume` 恢复，`/clear` 保留，`/reset` 清除。`/plan` 仍然是独立 mode。
 - full-access 会打印隔离关闭警告；profile 变更只在下一个 turn 生效。
-- `/status` 显示生效 model、sandbox/network/approval、permission profile 和鼠标模式；tmux 下会提示 `tmux set -g mouse on`。
+- `/status` 显示生效 provider/model、sandbox/network/approval、permission profile、auto context budget 和鼠标模式；tmux 下会提示 `tmux set -g mouse on`。
 - `/fork` 调用与 `niucode fork` 相同的逻辑：只读源文件、复制前缀、追加 `fork` 溯源事件，然后重新投影 history 并切换过去。非法 event ID 会报错并保留当前 session。
 - 未知 `/foo` 显示 `unknown command`，不会发给模型；命令参数错误显示 usage。
 - 所有 slash 输出走 stdout，warning / error 走 stderr。

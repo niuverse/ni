@@ -557,6 +557,7 @@ mod tests {
                 id: "s".into(),
                 cwd: "/tmp".into(),
                 model: "m".into(),
+                provider: "deepseek".into(),
                 ts: 0,
             },
             user("old request"),

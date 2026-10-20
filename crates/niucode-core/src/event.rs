@@ -95,6 +95,8 @@ pub enum Event {
         id: String,
         cwd: String,
         model: String,
+        #[serde(default)]
+        provider: String,
         ts: Timestamp,
     },
     UserMessage {

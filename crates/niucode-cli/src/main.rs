@@ -413,6 +413,7 @@ fn run_session(command: SessionCommand) -> Result<()> {
                 id: log.id().to_string(),
                 cwd: std::env::current_dir()?.display().to_string(),
                 model: "unset".into(),
+                provider: "deepseek".into(),
                 ts: now_ms(),
             })?;
             println!("{}", log.path().display());
@@ -632,6 +633,7 @@ async fn run_tui(
             id: session.id().to_string(),
             cwd: working_dir.display().to_string(),
             model: model.clone(),
+            provider: provider.name().to_string(),
             ts: now_ms(),
         })?;
         (session, Vec::new())
@@ -852,6 +854,7 @@ async fn run_exec(
             id: session.id().to_string(),
             cwd: working_dir.display().to_string(),
             model: model.clone(),
+            provider: provider.name().to_string(),
             ts: now_ms(),
         })?;
         (session, Vec::new())
