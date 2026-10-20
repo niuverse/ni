@@ -223,6 +223,12 @@ pub enum Event {
         name: String,
         version: String,
         tools: Vec<String>,
+        #[serde(default)]
+        capabilities: Vec<String>,
+        #[serde(default)]
+        digest: String,
+        #[serde(default)]
+        workers: u64,
         ts: Timestamp,
     },
     /// A sidecar extension was unmounted.

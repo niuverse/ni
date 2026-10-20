@@ -57,7 +57,7 @@
     {
       "id": "M4",
       "title": "Extensible",
-      "status": "active",
+      "status": "done",
       "goal": "在不破坏事件日志、replay 和安全边界的前提下，让 niucode 具备 capability 级扩展与更顺手的交互。",
       "exit": [
         "command registry 驱动 TUI 补全与帮助",
@@ -69,7 +69,7 @@
     {
       "id": "M5",
       "title": "Kernel seams",
-      "status": "planned",
+      "status": "active",
       "goal": "把 provider、tool、loop 的边界做成可测试、可扩展的 seam，而不破坏事件日志。",
       "exit": [
         "provider catalog and cross-provider selection",
@@ -1028,6 +1028,60 @@
         "M5-007",
         "adr-0024",
         "skills",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-007 完成：extension capability sandbox",
+      "detail": "bwrap 默认断网/只读；fs_write/network 显式 capability；workers 1-8; mount 记录 capabilities/digest；sidecar 测试覆盖。",
+      "refs": [
+        "M4-007",
+        "adr-0025",
+        "extensions"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0025 accepted：extension bwrap + worker pool",
+      "detail": "sidecar bwrap 隔离；capability 显式授权；worker pool 1-8。",
+      "refs": [
+        "adr-0025",
+        "M4-007"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-006 完成：Worker worktree 隔离",
+      "detail": "worktree=true 建 detached worktree；独立 patch；主 workspace 不变；niucode worktree apply；非 git 回退 W1。",
+      "refs": [
+        "M4-006",
+        "adr-0026",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "ADR-0026 accepted：Worker worktrees",
+      "detail": "可选 git worktree + patch review/apply；非 git fallback。",
+      "refs": [
+        "adr-0026",
+        "M4-006"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "Tool metadata / LoopPhase 与 resume picker 完成",
+      "detail": "内置工具 risk/effect；/tools；LoopPhase observer；/resume alternate-screen picker。",
+      "refs": [
+        "M5-008",
+        "M5-009",
+        "adr-0027",
         "tui"
       ]
     }

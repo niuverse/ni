@@ -219,3 +219,180 @@ for line in sys.stdin:
     report.host.shutdown().await;
     fs::remove_dir_all(dir).expect("cleanup");
 }
+
+#[tokio::test]
+async fn extension_network_is_off_by_default() {
+    let dir = temp_dir("network");
+    fs::write(
+        dir.join(".niucode/extensions/net.toml"),
+        r#"
+name = "net"
+command = "python3"
+args = ["sidecar.py"]
+timeout_secs = 10
+"#,
+    )
+    .expect("manifest");
+    fs::write(
+        dir.join("sidecar.py"),
+        r#"import json, socket, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request.get("method")
+    if method == "initialize":
+        result = {"name": "net", "version": "0.1.0", "tools": [{
+            "name": "net_probe", "description": "Probe network",
+            "input_schema": {"type": "object", "properties": {}}
+        }]}
+    elif method == "tools/call":
+        try:
+            socket.create_connection(("1.1.1.1", 80), timeout=1).close()
+            result = {"ok": True, "output": "network available"}
+        except OSError as error:
+            result = {"ok": False, "output": "network blocked: " + type(error).__name__}
+    elif method == "shutdown":
+        sys.exit(0)
+    else:
+        result = {"ok": False, "output": "unexpected"}
+    print(json.dumps({"jsonrpc": "2.0", "id": request.get("id"), "result": result}), flush=True)
+"#,
+    )
+    .expect("sidecar");
+    let report = discover(&dir, &[]).await;
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(report.host.mounts()[0].read_only);
+    assert!(report.host.mounts()[0].capabilities.is_empty());
+    let result = report.host.execute("net_probe", &json!({})).await;
+    assert!(
+        !result.ok,
+        "network unexpectedly available: {}",
+        result.output
+    );
+    assert!(
+        result.output.contains("network blocked"),
+        "{}",
+        result.output
+    );
+    report.host.shutdown().await;
+    fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[tokio::test]
+async fn worker_pool_uses_more_than_one_sidecar() {
+    let dir = temp_dir("pool");
+    fs::write(
+        dir.join(".niucode/extensions/pool.toml"),
+        r#"
+name = "pool"
+command = "python3"
+args = ["sidecar.py"]
+timeout_secs = 10
+workers = 2
+"#,
+    )
+    .expect("manifest");
+    fs::write(
+        dir.join("sidecar.py"),
+        r#"import json, os, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request.get("method")
+    if method == "initialize":
+        result = {"name": "pool", "version": "0.1.0", "tools": [{
+            "name": "pool_pid", "description": "Return worker pid",
+            "input_schema": {"type": "object", "properties": {}}
+        }]}
+    elif method == "tools/call":
+        result = {"ok": True, "output": os.environ.get("NIUCODE_EXTENSION_WORKER", "?")}
+    elif method == "shutdown":
+        sys.exit(0)
+    else:
+        result = {"ok": False, "output": "unexpected"}
+    print(json.dumps({"jsonrpc": "2.0", "id": request.get("id"), "result": result}), flush=True)
+"#,
+    )
+    .expect("sidecar");
+    let report = discover(&dir, &[]).await;
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert_eq!(report.host.mounts()[0].workers, 2);
+    let args = json!({});
+    let (left, right) = tokio::join!(
+        report.host.execute("pool_pid", &args),
+        report.host.execute("pool_pid", &args)
+    );
+    assert!(left.ok && right.ok, "{} / {}", left.output, right.output);
+    assert_ne!(left.output, right.output, "worker pool reused one process");
+    report.host.shutdown().await;
+    fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[tokio::test]
+async fn fs_write_requires_the_capability() {
+    let dir = temp_dir("fswrite");
+    let sidecar = r#"import json, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request.get("method")
+    if method == "initialize":
+        result = {"name": "write", "version": "0.1.0", "tools": [{
+            "name": "write_probe", "description": "Write probe",
+            "input_schema": {"type": "object", "properties": {}}
+        }]}
+    elif method == "tools/call":
+        try:
+            with open("probe.txt", "w") as handle:
+                handle.write("ok")
+            result = {"ok": True, "output": "wrote"}
+        except OSError as error:
+            result = {"ok": False, "output": "write blocked: " + type(error).__name__}
+    elif method == "shutdown":
+        sys.exit(0)
+    else:
+        result = {"ok": False, "output": "unexpected"}
+    print(json.dumps({"jsonrpc": "2.0", "id": request.get("id"), "result": result}), flush=True)
+"#;
+    fs::write(dir.join("sidecar.py"), sidecar).expect("sidecar");
+    let read_only_manifest = r#"
+name = "write"
+command = "python3"
+args = ["sidecar.py"]
+timeout_secs = 10
+"#;
+    fs::write(
+        dir.join(".niucode/extensions/write.toml"),
+        read_only_manifest,
+    )
+    .expect("manifest");
+    let report = discover(&dir, &[]).await;
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    let blocked = report.host.execute("write_probe", &json!({})).await;
+    assert!(
+        !blocked.ok,
+        "read-only extension wrote a file: {}",
+        blocked.output
+    );
+    report.host.shutdown().await;
+
+    fs::write(
+        dir.join(".niucode/extensions/write.toml"),
+        r#"
+name = "write"
+command = "python3"
+args = ["sidecar.py"]
+timeout_secs = 10
+capabilities = ["fs_write"]
+"#,
+    )
+    .expect("manifest");
+    let report = discover(&dir, &[]).await;
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert_eq!(report.host.mounts()[0].capabilities, ["fs_write"]);
+    let allowed = report.host.execute("write_probe", &json!({})).await;
+    assert!(
+        allowed.ok,
+        "fs_write capability was not applied: {}",
+        allowed.output
+    );
+    report.host.shutdown().await;
+    fs::remove_dir_all(dir).expect("cleanup");
+}

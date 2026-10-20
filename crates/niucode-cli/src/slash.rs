@@ -83,6 +83,7 @@ pub enum Command {
     Model(Option<String>),
     Permissions(Option<String>),
     Skills(Option<String>),
+    Tools,
     Compact,
     Plan(PlanAction),
     Goal(GoalAction),
@@ -193,6 +194,7 @@ pub fn parse(input: &str) -> Parsed {
             _ => return Parsed::Usage(usage_plan()),
         },
         "fork" => Command::Fork(args.first().map(|arg| (*arg).to_string())),
+        "tools" => Command::Tools,
         "status" => Command::Status,
         "session" => Command::Session,
         "exit" | "quit" | "q" => Command::Exit,
@@ -232,6 +234,7 @@ fn usage(command: &Command) -> String {
         Command::Model(_) => "/model [name]".into(),
         Command::Permissions(_) => "/permissions [ask|review|full-access|ci]".into(),
         Command::Skills(_) => "/skills [trust|untrust <name>]".into(),
+        Command::Tools => "/tools".into(),
         Command::Compact => "/compact".into(),
         Command::Plan(action) => match action {
             PlanAction::Enter => "/plan".into(),

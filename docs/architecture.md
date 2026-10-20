@@ -60,7 +60,7 @@ user input
 | `goal_verdict` | `/goal run` evaluator 结论 | status、reason |
 | `model_change` | 运行时模型选择 | provider、model |
 | `permission_change` | 运行时权限 profile | profile、sandbox、approval、network |
-| `extension_mount` / `extension_unmount` | sidecar 挂载/卸载 | name、version、tools |
+| `extension_mount` / `extension_unmount` | sidecar 挂载/卸载 | name、version、tools、capabilities、digest、workers |
 | `extension_error` | sidecar 挂载/调用失败 | name、message |
 | `compaction` | 上下文压缩 | summary、upto、before/after tokens |
 | `session_end` | 正常退出 | ts |

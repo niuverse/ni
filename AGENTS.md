@@ -79,15 +79,15 @@ A task is not done until:
 
 ## Current focus
 
-M0–M3 are done; M4 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
+M0–M4 are done; M5 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
-M4-004/M4-005/M4-009/M4-010/M4-011/M4-012 are done; M4-006/007/008 are backlog.
+M4-004/M4-005/M4-006/M4-007/M4-008/M4-009/M4-010/M4-011/M4-012 are done.
 M5-001/M5-002/M5-004/M5-005 are done; M5-003 inline is review. Ghostty
 currently defaults to the stable linear editor because inline still overlaps
 there (M5-006); non-Ghostty terminals use inline. There is no project-local
-`.niucode`; state lives in `~/.niucode/projects/<key>/`. skills discovery/trust is in review (M5-007); M4-007 security gate and
-M4-006 worktree remain.
+`.niucode`; state lives in `~/.niucode/projects/<key>/`. skills discovery/trust is done (M5-007); tool metadata/LoopPhase and the
+interactive `/resume` picker are done.
 `/goal run` is available in TUI and headless via `exec --goal`. TUI mouse capture
 is menu-scoped, terminal state is restored by `TerminalGuard`, session
 lifecycle is `/clear` vs `/reset` vs `/resume`, and runtime selection is

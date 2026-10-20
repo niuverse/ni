@@ -120,7 +120,7 @@ TTY 下使用 readline 风格的行编辑器：
 - `/goal` 不改变权限；active goal 进入 system prompt，并写入 `goal_set` / `goal_cleared` 事件。
 - session 默认写入 `~/.niucode/projects/<key>/sessions/`；项目根不创建 `.niucode`。`/clear` 继承当前 model、cwd 和 sandbox 配置，写入新的 `session_start` / `policy` 事件；保留 plan mode 与 goal（重新写入事件），停止 goal run，保留输入历史。
 - `/reset` 是更强的重置：新 session + plan off + goal 清空 + pending/输入历史清空 + 重新读取 AGENTS.md；extension host 仍按 session 生命周期挂载，不重启进程。
-- `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；无参数列出当前项目最近 10 个 session（标题取首条 user message），`/resume --all` 跨项目；cwd/model 不一致会警告。
+- `/resume` 切换 append-only session：重新投影 history 和 UI 状态，停止当前 goal run；无参数进入上下选择 picker（标题取首条 user message），`/resume --all` 跨项目；非 TTY 回退文本列表；cwd/model 不一致会警告。
 - `/reload` 只重读 AGENTS.md 指令；扩展 manifest 在 session 启动时挂载，重新加载需要重启 TUI。
 - `/model` 是运行时模型选择：canonical `provider/model`；写入 `model_change { provider, model }`，`/resume` 恢复，`/clear` 保留，`/reset` 清除。provider 由 `ProviderFactory` 惰性解析凭据并构造；切换发生在 turn 边界。请求仍然走同一个 endpoint/auth，下一次 turn 使用新 model；切换 turn 可能失去 prompt cache。
 - `/model` 和 `/permissions` 直接打开参数下拉：输入命令后→↑↓/鼠标选择（或 Tab 选第一项）→Enter 填入→再 Enter 执行；直接 Enter 显示当前值，不误改配置。建议列表来自 `NIUCODE_MODEL_CHOICES`（逗号分隔）或内置的 deepseek/openai 小列表；这是 Pi 式“选择 vs 实际请求模型”的简化版，不含 virtual model/router。

@@ -47,6 +47,19 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+enum WorktreeCommand {
+    /// Apply a patch produced by a Worker worktree
+    Apply {
+        /// Patch path printed in the Worker summary
+        #[arg(long)]
+        patch: PathBuf,
+        /// Only check whether the patch applies
+        #[arg(long)]
+        check: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     /// Inspect and create append-only session logs
     Session {
@@ -68,6 +81,11 @@ enum Command {
         /// Directory for the new session file (defaults to the source directory)
         #[arg(long)]
         session_dir: Option<PathBuf>,
+    },
+    /// Apply a Worker worktree patch
+    Worktree {
+        #[command(subcommand)]
+        command: WorktreeCommand,
     },
     /// Inspect and test model providers
     Provider {
@@ -272,6 +290,7 @@ async fn main() -> Result<()> {
             at,
             session_dir,
         }) => run_fork(path, at, session_dir),
+        Some(Command::Worktree { command }) => run_worktree(command),
         Some(Command::Provider { command }) => run_provider(command).await,
         Some(Command::Gc {
             apply,
@@ -382,6 +401,39 @@ async fn main() -> Result<()> {
                 false,
             )
             .await
+        }
+    }
+}
+
+fn run_worktree(command: WorktreeCommand) -> Result<()> {
+    match command {
+        WorktreeCommand::Apply { patch, check } => {
+            let cwd = std::env::current_dir()?;
+            let mut command = std::process::Command::new("git");
+            command
+                .arg("-C")
+                .arg(&cwd)
+                .args(["apply", "--check"])
+                .arg(&patch);
+            let status = command.status()?;
+            if !status.success() {
+                bail!("patch does not apply cleanly: {}", patch.display());
+            }
+            if check {
+                println!("patch applies cleanly: {}", patch.display());
+                return Ok(());
+            }
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&cwd)
+                .args(["apply"])
+                .arg(&patch)
+                .status()?;
+            if !status.success() {
+                bail!("git apply failed: {}", patch.display());
+            }
+            println!("applied {}", patch.display());
+            Ok(())
         }
     }
 }
@@ -553,10 +605,22 @@ async fn mount_extensions(
             mount.version,
             mount.tools.len()
         );
+        if !mount.capabilities.is_empty() {
+            eprintln!(
+                "extension: {} capabilities={} workers={} digest={}",
+                mount.name,
+                mount.capabilities.join(","),
+                mount.workers,
+                mount.digest
+            );
+        }
         session.append(&Event::ExtensionMount {
             name: mount.name.clone(),
             version: mount.version.clone(),
             tools: mount.tools.clone(),
+            capabilities: mount.capabilities.clone(),
+            digest: mount.digest.clone(),
+            workers: mount.workers as u64,
             ts: now_ms(),
         })?;
     }
@@ -857,6 +921,7 @@ async fn run_tui(
     agent_config.context_budget_auto = context_budget_auto;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+    agent_config.worktree_root = Some(workspace.worktrees.clone());
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
@@ -1144,6 +1209,7 @@ async fn run_exec(
     agent_config.context_budget_auto = context_budget_auto;
     agent_config.context.keep_recent_turns = keep_recent_turns;
     agent_config.write_lock = Some(Arc::new(tokio::sync::Mutex::new(())));
+    agent_config.worktree_root = Some(workspace.worktrees.clone());
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
@@ -1208,6 +1274,7 @@ async fn run_exec(
             return;
         }
         match event {
+            AgentEvent::Phase(_) => {}
             AgentEvent::TextDelta(delta) => {
                 print!("{delta}");
                 let _ = std::io::stdout().flush();
@@ -1451,6 +1518,7 @@ fn usage_json(usage: &niucode_core::Usage) -> serde_json::Value {
 
 fn event_json(event: &AgentEvent) -> serde_json::Value {
     match event {
+        AgentEvent::Phase(phase) => json!({"type": "phase", "phase": phase.as_str()}),
         AgentEvent::TextDelta(text) => json!({"type": "text_delta", "text": text}),
         AgentEvent::ReasoningDelta(text) => json!({"type": "reasoning_delta", "text": text}),
         AgentEvent::ToolCall { name, input } => {

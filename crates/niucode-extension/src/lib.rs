@@ -7,6 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,6 +32,9 @@ pub struct MountInfo {
     pub manifest: PathBuf,
     /// Read-only plugins may be exposed to subagent Explore/Worker profiles.
     pub read_only: bool,
+    pub capabilities: Vec<String>,
+    pub digest: String,
+    pub workers: usize,
 }
 
 pub struct MountReport {
@@ -76,7 +80,7 @@ pub async fn discover_in(directory: &Path, workspace: &Path, reserved: &[String]
 
     for path in manifests {
         match mount_one(&path, workspace).await {
-            Ok((plugin, info)) => {
+            Ok((pool, info)) => {
                 let mut collision = None;
                 for tool in &info.tools {
                     if !reserved.insert(tool.clone()) {
@@ -91,7 +95,7 @@ pub async fn discover_in(directory: &Path, workspace: &Path, reserved: &[String]
                     ));
                     continue;
                 }
-                host.register(plugin, info);
+                host.register(pool, info);
             }
             Err(error) => errors.push(format!("{}: {error:#}", path.display())),
         }
@@ -100,7 +104,33 @@ pub async fn discover_in(directory: &Path, workspace: &Path, reserved: &[String]
     MountReport { host, errors }
 }
 
-async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)> {
+struct Capabilities {
+    fs_write: bool,
+    network: bool,
+    subprocess: bool,
+}
+
+impl Capabilities {
+    fn parse(values: &[String]) -> Result<Self> {
+        let mut capabilities = Self {
+            fs_write: false,
+            network: false,
+            subprocess: false,
+        };
+        for value in values {
+            match value.as_str() {
+                "fs_read" => {}
+                "fs_write" => capabilities.fs_write = true,
+                "network" => capabilities.network = true,
+                "subprocess" => capabilities.subprocess = true,
+                other => bail!("unknown extension capability {other:?}"),
+            }
+        }
+        Ok(capabilities)
+    }
+}
+
+async fn mount_one(path: &Path, workspace: &Path) -> Result<(Pool, MountInfo)> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let manifest: Manifest =
         toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
@@ -114,37 +144,124 @@ async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)>
             manifest.protocol
         );
     }
+    let capabilities = Capabilities::parse(&manifest.capabilities)?;
+    let workers = manifest.workers.clamp(1, 8);
+    let read_only = manifest.read_only && !capabilities.fs_write;
+    let digest = digest(&format!(
+        "{}:{}:{}:{}:{}",
+        manifest.name,
+        manifest.command,
+        manifest.args.join("\u{1f}"),
+        manifest.capabilities.join(","),
+        manifest.workers
+    ));
 
-    let mut command = Command::new(&manifest.command);
+    let mut plugins = Vec::new();
+    let mut first: Option<(String, Vec<ToolSpec>, Vec<String>)> = None;
+    for worker in 0..workers {
+        let mut plugin = spawn_plugin(&manifest, workspace, &capabilities, worker)?;
+        let initialized = initialize_plugin(&mut plugin).await?;
+        if let Some((version, specs, _names)) = &first {
+            if specs.len() != initialized.1.len()
+                || specs
+                    .iter()
+                    .zip(&initialized.1)
+                    .any(|(left, right)| left.function.name != right.function.name)
+            {
+                bail!(
+                    "extension {} declared inconsistent tools across workers",
+                    manifest.name
+                );
+            }
+            if version != &initialized.0 {
+                bail!("extension {} reported inconsistent versions", manifest.name);
+            }
+        } else {
+            first = Some(initialized.clone());
+        }
+        plugins.push(plugin);
+    }
+    let (version, specs, names) = first.context("extension worker pool is empty")?;
+    Ok((
+        Pool::new(plugins, specs.clone()),
+        MountInfo {
+            name: manifest.name,
+            version,
+            tools: names,
+            manifest: path.to_path_buf(),
+            read_only,
+            capabilities: manifest.capabilities,
+            digest,
+            workers,
+        },
+    ))
+}
+
+fn spawn_plugin(
+    manifest: &Manifest,
+    workspace: &Path,
+    capabilities: &Capabilities,
+    worker: usize,
+) -> Result<Plugin> {
+    let mut command = Command::new("bwrap");
     command
+        .arg("--die-with-parent")
+        .arg("--new-session")
+        .arg("--unshare-pid")
+        .arg("--unshare-ipc")
+        .arg("--unshare-uts");
+    if !capabilities.network {
+        command.arg("--unshare-net");
+    }
+    for directory in ["/usr", "/bin", "/lib", "/lib64", "/etc"] {
+        command.arg("--ro-bind-try").arg(directory).arg(directory);
+    }
+    command.arg("--tmpfs").arg("/tmp");
+    command.arg("--dev").arg("/dev");
+    command.arg("--proc").arg("/proc");
+    if capabilities.fs_write {
+        command.arg("--bind").arg(workspace).arg(workspace);
+    } else {
+        command.arg("--ro-bind").arg(workspace).arg(workspace);
+    }
+    command
+        .arg("--chdir")
+        .arg(workspace)
+        .arg("--clearenv")
+        .arg("--setenv")
+        .arg("PATH")
+        .arg(std::env::var_os("PATH").unwrap_or_else(|| "/usr/bin:/bin".into()))
+        .arg("--setenv")
+        .arg("HOME")
+        .arg(workspace)
+        .arg("--setenv")
+        .arg("NIUCODE_EXTENSION")
+        .arg("1")
+        .arg("--setenv")
+        .arg("PYTHONDONTWRITEBYTECODE")
+        .arg("1")
+        .arg("--setenv")
+        .arg("NIUCODE_EXTENSION_WORKER")
+        .arg(worker.to_string())
+        .arg("--")
+        .arg(&manifest.command)
         .args(&manifest.args)
-        .current_dir(workspace)
         .env_clear()
-        .env("NIUCODE_EXTENSION", "1")
-        // Keep only the environment needed to start an interpreter. Never
-        // inherit API keys or other credentials from the harness process.
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("HOME", workspace)
-        .env("PYTHONDONTWRITEBYTECODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .kill_on_drop(true);
-    for key in ["PATHEXT", "SystemRoot", "COMSPEC"] {
-        if let Some(value) = std::env::var_os(key) {
-            command.env(key, value);
-        }
-    }
+
     let mut child = command
         .spawn()
-        .with_context(|| format!("spawn extension {}", manifest.name))?;
+        .with_context(|| format!("spawn extension {} under bwrap", manifest.name))?;
     let stdin = child.stdin.take().context("extension stdin unavailable")?;
     let stdout = child
         .stdout
         .take()
         .context("extension stdout unavailable")?;
-
-    let mut plugin = Plugin {
+    Ok(Plugin {
         name: manifest.name.clone(),
         child,
         stdin: BufWriter::new(stdin),
@@ -152,20 +269,20 @@ async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)>
         next_id: 1,
         timeout: Duration::from_secs(manifest.timeout_secs.max(1)),
         tools: Vec::new(),
-    };
+    })
+}
 
+async fn initialize_plugin(plugin: &mut Plugin) -> Result<(String, Vec<ToolSpec>, Vec<String>)> {
     let init = plugin
         .request(
             "initialize",
             json!({
                 "protocol": PROTOCOL_VERSION,
                 "client": "niucode",
-                "cwd": workspace.display().to_string(),
             }),
         )
         .await
-        .with_context(|| format!("initialize extension {}", manifest.name))?;
-
+        .with_context(|| format!("initialize extension {}", plugin.name))?;
     let version = init
         .get("version")
         .and_then(Value::as_str)
@@ -175,7 +292,6 @@ async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)>
         .get("tools")
         .and_then(Value::as_array)
         .context("initialize result has no tools array")?;
-
     let mut specs = Vec::new();
     let mut names = Vec::new();
     for tool in tools {
@@ -196,20 +312,10 @@ async fn mount_one(path: &Path, workspace: &Path) -> Result<(Plugin, MountInfo)>
         specs.push(ToolSpec::function(name, description, schema));
     }
     if specs.is_empty() {
-        bail!("extension {} registered no tools", manifest.name);
+        bail!("extension {} registered no tools", plugin.name);
     }
-    plugin.tools = specs;
-
-    Ok((
-        plugin,
-        MountInfo {
-            name: manifest.name,
-            version,
-            tools: names,
-            manifest: path.to_path_buf(),
-            read_only: manifest.read_only,
-        },
-    ))
+    plugin.tools = specs.clone();
+    Ok((version, specs, names))
 }
 
 struct Plugin {
@@ -287,9 +393,54 @@ impl Plugin {
     }
 }
 
+struct Pool {
+    workers: Vec<Arc<Mutex<Plugin>>>,
+    next: AtomicUsize,
+    tools: Vec<ToolSpec>,
+}
+
+impl Pool {
+    fn new(plugins: Vec<Plugin>, tools: Vec<ToolSpec>) -> Self {
+        Self {
+            workers: plugins
+                .into_iter()
+                .map(|plugin| Arc::new(Mutex::new(plugin)))
+                .collect(),
+            next: AtomicUsize::new(0),
+            tools,
+        }
+    }
+
+    async fn execute(&self, name: &str, input: &Value) -> ToolResult {
+        if self.workers.is_empty() {
+            return ToolResult {
+                ok: false,
+                output: "extension worker pool is empty".into(),
+            };
+        }
+        let index = self.next.fetch_add(1, Ordering::Relaxed) % self.workers.len();
+        let worker = &self.workers[index];
+        match worker.lock().await.call_tool(name, input).await {
+            Ok(result) => result,
+            Err(error) => ToolResult {
+                ok: false,
+                output: format!("extension error: {error:#}"),
+            },
+        }
+    }
+
+    async fn shutdown(&self) {
+        for worker in &self.workers {
+            let mut worker = worker.lock().await;
+            let _ = worker.request("shutdown", json!({})).await;
+            let _ = worker.child.kill().await;
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ExtensionHost {
-    plugins: HashMap<String, Arc<Mutex<Plugin>>>,
+    plugins: HashMap<String, Arc<Pool>>,
     routes: HashMap<String, String>,
     mounts: Vec<MountInfo>,
     specs: Vec<ToolSpec>,
@@ -308,7 +459,6 @@ impl ExtensionHost {
         &self.mounts
     }
 
-    /// External tool names that are safe to expose to read-only subagents.
     pub fn read_only_tools(&self) -> Vec<String> {
         let mut names = Vec::new();
         for mount in &self.mounts {
@@ -323,15 +473,14 @@ impl ExtensionHost {
         self.plugins.is_empty()
     }
 
-    fn register(&mut self, plugin: Plugin, info: MountInfo) {
+    fn register(&mut self, pool: Pool, info: MountInfo) {
         let name = info.name.clone();
-        let tools = plugin.tools.clone();
         for tool in &info.tools {
             self.routes.insert(tool.clone(), name.clone());
         }
-        self.specs.extend(tools);
+        self.specs.extend(pool.tools.clone());
         self.mounts.push(info);
-        self.plugins.insert(name, Arc::new(Mutex::new(plugin)));
+        self.plugins.insert(name, Arc::new(pool));
     }
 
     pub async fn execute(&self, name: &str, input: &Value) -> ToolResult {
@@ -341,28 +490,29 @@ impl ExtensionHost {
                 output: format!("unknown extension tool {name:?}"),
             };
         };
-        let Some(plugin) = self.plugins.get(plugin_name) else {
+        let Some(pool) = self.plugins.get(plugin_name) else {
             return ToolResult {
                 ok: false,
                 output: format!("extension {plugin_name:?} is not mounted"),
             };
         };
-        match plugin.lock().await.call_tool(name, input).await {
-            Ok(result) => result,
-            Err(error) => ToolResult {
-                ok: false,
-                output: format!("extension error: {error:#}"),
-            },
-        }
+        pool.execute(name, input).await
     }
 
     pub async fn shutdown(&self) {
-        for plugin in self.plugins.values() {
-            let mut plugin = plugin.lock().await;
-            let _ = plugin.request("shutdown", json!({})).await;
-            let _ = plugin.child.kill().await;
+        for pool in self.plugins.values() {
+            pool.shutdown().await;
         }
     }
+}
+
+fn digest(text: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 #[derive(Debug, Deserialize)]
@@ -379,6 +529,12 @@ struct Manifest {
     /// capability views. Set false only for explicitly trusted mutating tools.
     #[serde(default = "default_read_only")]
     read_only: bool,
+    /// Explicit capabilities: fs_read, fs_write, network, subprocess.
+    #[serde(default)]
+    capabilities: Vec<String>,
+    /// Number of sidecar workers for this plugin (1-8).
+    #[serde(default = "default_workers")]
+    workers: usize,
 }
 
 fn default_timeout() -> u64 {
@@ -391,6 +547,10 @@ fn default_protocol() -> u64 {
 
 fn default_read_only() -> bool {
     true
+}
+
+fn default_workers() -> usize {
+    1
 }
 
 fn validate_name(name: &str) -> Result<()> {

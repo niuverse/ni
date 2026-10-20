@@ -261,6 +261,7 @@ impl Toolbox {
                                 "properties": {
                                     "prompt": {"type": "string", "description": "Task for the subagent"},
                                     "profile": {"type": "string", "enum": ["explore", "worker", "inherit"], "default": "explore", "description": "explore = read-only; worker = workspace writes; inherit = parent surface (explicit opt-in; no nested subagents)"},
+                                    "worktree": {"type": "boolean", "default": false, "description": "Run a Worker in an isolated git worktree; returns a patch path. Falls back to the shared workspace outside git."},
                                     "write_scope": {
                                         "type": "array",
                                         "items": {"type": "string"},
@@ -1132,5 +1133,95 @@ mod tests {
         assert!(result.output.contains("# Skill"));
         let _ = std::fs::remove_dir_all(workspace);
         let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolRisk {
+    Low,
+    Medium,
+    High,
+    Unknown,
+}
+
+impl ToolRisk {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolEffect {
+    Read,
+    Write,
+    Execute,
+    Network,
+    Delegate,
+}
+
+impl ToolEffect {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+            Self::Execute => "execute",
+            Self::Network => "network",
+            Self::Delegate => "delegate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolMetadata {
+    pub name: &'static str,
+    pub risk: ToolRisk,
+    pub effect: ToolEffect,
+    pub read_only: bool,
+}
+
+/// Static metadata for built-in tools. Unknown/external tools are treated as
+/// high-risk, non-read-only by callers unless the extension declares otherwise.
+pub fn metadata(name: &str) -> Option<ToolMetadata> {
+    let (risk, effect, read_only) = match name {
+        "read" | "grep" | "glob" => (ToolRisk::Low, ToolEffect::Read, true),
+        "write" | "edit" => (ToolRisk::Medium, ToolEffect::Write, false),
+        "bash" => (ToolRisk::High, ToolEffect::Execute, false),
+        "subagent" => (ToolRisk::High, ToolEffect::Delegate, false),
+        _ => return None,
+    };
+    Some(ToolMetadata {
+        name: match name {
+            "read" => "read",
+            "grep" => "grep",
+            "glob" => "glob",
+            "write" => "write",
+            "edit" => "edit",
+            "bash" => "bash",
+            "subagent" => "subagent",
+            _ => "unknown",
+        },
+        risk,
+        effect,
+        read_only,
+    })
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    fn builtin_metadata_classifies_effects() {
+        assert_eq!(metadata("read").unwrap().risk, ToolRisk::Low);
+        assert!(metadata("grep").unwrap().read_only);
+        assert_eq!(metadata("write").unwrap().effect, ToolEffect::Write);
+        assert_eq!(metadata("bash").unwrap().risk, ToolRisk::High);
+        assert_eq!(metadata("subagent").unwrap().effect, ToolEffect::Delegate);
+        assert!(metadata("external").is_none());
     }
 }

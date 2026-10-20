@@ -118,10 +118,10 @@ impl LineEditor {
     }
 }
 
-struct TerminalGuard;
+pub(crate) struct TerminalGuard;
 
 impl TerminalGuard {
-    fn enter() -> std::io::Result<Self> {
+    pub(crate) fn enter() -> std::io::Result<Self> {
         enable_raw_mode()?;
         let mut out = stdout();
         if let Err(error) = execute!(out, EnableBracketedPaste, Hide) {

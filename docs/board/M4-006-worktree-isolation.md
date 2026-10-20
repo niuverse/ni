@@ -1,24 +1,33 @@
 +++
 id = "M4-006"
-title = "Backlog: Worker worktree 写隔离"
-status = "backlog"
+title = "Worker worktree write isolation"
+status = "done"
 milestone = "M4"
 module = "tools"
 size = "M"
 priority = "P2"
 updated = "2026-10-20"
+completed = "2026-10-20"
 depends_on = ["M4-003"]
-docs = ["adr-0014"]
+docs = ["adr-0026", "tui"]
 +++
 
 ## 范围
 
-- Worker 并行写时使用 git worktree / overlay，返回 patch 或合并结果。
-- 非 git 仓库 fallback 到 W1 串行写。
-- 处理 cwd/path 映射、测试缓存、清理和冲突。
+- Worker `worktree=true` 使用全局 project worktrees 下的 detached git worktree。
+- 结束后生成 patch，主 session review/apply。
+- 非 git fallback 到共享 workspace + W1。
 
 ## 验收
 
-- [ ] 两个 Worker 可在独立 worktree 改不同模块。
-- [ ] 主 session 能 review/apply 结果；失败可丢弃。
-- [ ] 非 git 仓库仍可安全串行写。
+- [x] 两个 Worker worktree 独立，patch 分别包含各自修改。
+- [x] 主 workspace 不被 Worker 直接修改。
+- [x] patch 路径写入结果摘要；`niucode worktree apply --patch` 可 check/apply。
+- [x] 非 git workspace 回退共享 workdir（返回 None）。
+- [x] worktree 清理。
+
+## 记录
+
+- 核心单测：两个 worktree、patch、parent 不变、非 git fallback。
+- `subagent` schema 增加 `worktree`；仅 Worker 可用。
+- 未做：自动 merge/冲突处理、worktree 内 extension host 单独挂载、patch 二进制审查 UI。

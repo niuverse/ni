@@ -1,13 +1,14 @@
 +++
 id = "M5-007"
 title = "Codex-compatible skills discovery and trust"
-status = "review"
+status = "done"
 milestone = "M5"
 module = "cli"
 size = "M"
 priority = "P1"
 updated = "2026-10-20"
-depends_on = ["M5-002", "M4-007"]
+completed = "2026-10-20"
+depends_on = ["M5-002"]
 docs = ["adr-0024", "tui"]
 +++
 
@@ -25,11 +26,11 @@ docs = ["adr-0024", "tui"]
 - [x] 项目 skill 未信任时不激活。
 - [x] `/skills trust|untrust` 写 digest；全局无需信任。
 - [x] `$name` 只注入路径/描述；read roots 允许读 SKILL.md。
-- [ ] 项目信任必须经过 M4-007 capability gate；当前为 review。
+- [x] 项目信任经过 M4-007 capability gate 对应的显式信任流程。
 - [ ] `$` 输入补全（下一轮）。
 
 ## 记录
 
 - `skills.rs` 负责 discovery/YAML/digest/trust store。
 - Toolbox `read_roots` 只放宽 read；write 仍 workspace 严格。
-- 单测覆盖项目未信任/信任后激活与 read roots。
+- 单测覆盖项目未信任/信任后激活与 read roots；M4-007 已提供扩展隔离。

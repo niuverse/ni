@@ -1,6 +1,7 @@
 //! Read-only parallel subagents with independent session logs.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -42,6 +43,7 @@ struct TaskSpec {
     prompt: String,
     profile: SubagentProfile,
     write_scope: Option<Vec<String>>,
+    worktree: bool,
     max_steps: usize,
     timeout_secs: u64,
 }
@@ -102,7 +104,24 @@ async fn run_tasks(
     let mut jobs = Vec::with_capacity(tasks.len());
     for (index, task) in tasks.into_iter().enumerate() {
         let id = format!("{}.{}", call.id, index + 1);
-        let config = subagent_config(parent_config, &task);
+        let mut config = subagent_config(parent_config, &task);
+        let worktree = if task.worktree {
+            match Worktree::create(parent_config, &id) {
+                Some(worktree) => {
+                    config.working_dir = worktree.path.clone();
+                    config.write_lock = None;
+                    Some(worktree)
+                }
+                None => {
+                    eprintln!(
+                        "warning: worktree unavailable; worker {id} uses the shared workspace"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let mut session = SessionLog::create(&directory)?;
         session.append(&Event::SessionStart {
             id: id.clone(),
@@ -130,51 +149,59 @@ async fn run_tasks(
             context_budget: config.context.budget_tokens as u64,
             ts: now_ms(),
         })?;
-        jobs.push((id, task, session, session_path, config));
+        jobs.push((id, task, session, session_path, config, worktree));
     }
 
-    let futures =
-        jobs.into_iter()
-            .map(|(id, task, mut session, session_path, config)| async move {
-                let timeout_secs = task.timeout_secs;
-                let result = tokio::time::timeout(
-                    Duration::from_secs(timeout_secs),
-                    run(
-                        provider,
-                        &mut session,
-                        &config,
-                        &task.prompt,
-                        &mut |_| false,
-                        &mut |_| {},
-                    ),
-                )
-                .await;
+    let futures = jobs.into_iter().map(
+        |(id, task, mut session, session_path, config, worktree)| async move {
+            let timeout_secs = task.timeout_secs;
+            let result = tokio::time::timeout(
+                Duration::from_secs(timeout_secs),
+                run(
+                    provider,
+                    &mut session,
+                    &config,
+                    &task.prompt,
+                    &mut |_| false,
+                    &mut |_| {},
+                ),
+            )
+            .await;
 
-                let (ok, summary, turns, usage) = match result {
-                    Ok(Ok(outcome)) => (
-                        true,
-                        outcome.final_text,
-                        outcome.turns as u64,
-                        outcome.usage,
-                    ),
-                    Ok(Err(error)) => {
-                        let _ = session.append(&Event::SessionEnd { ts: now_ms() });
-                        (false, format!("error: {error:#}"), 0, Usage::default())
-                    }
-                    Err(_) => {
-                        let _ = session.append(&Event::SessionEnd { ts: now_ms() });
-                        (
-                            false,
-                            format!("timeout after {timeout_secs}s"),
-                            0,
-                            Usage::default(),
-                        )
-                    }
-                };
+            let (ok, summary, turns, usage) = match result {
+                Ok(Ok(outcome)) => (
+                    true,
+                    outcome.final_text,
+                    outcome.turns as u64,
+                    outcome.usage,
+                ),
+                Ok(Err(error)) => {
+                    let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                    (false, format!("error: {error:#}"), 0, Usage::default())
+                }
+                Err(_) => {
+                    let _ = session.append(&Event::SessionEnd { ts: now_ms() });
+                    (
+                        false,
+                        format!("timeout after {timeout_secs}s"),
+                        0,
+                        Usage::default(),
+                    )
+                }
+            };
 
-                let summary = summarize(&summary);
-                (id, task.prompt, session_path, ok, summary, turns, usage)
-            });
+            let patch = worktree.and_then(Worktree::finish);
+            let summary = match patch {
+                Some(patch) => format!(
+                    "worktree patch: {}\n\n{}",
+                    patch.display(),
+                    summarize(&summary)
+                ),
+                None => summarize(&summary),
+            };
+            (id, task.prompt, session_path, ok, summary, turns, usage)
+        },
+    );
 
     let results = join_all(futures).await;
     let mut outcomes = Vec::with_capacity(results.len());
@@ -196,6 +223,75 @@ async fn run_tasks(
         });
     }
     Ok(outcomes)
+}
+
+struct Worktree {
+    path: PathBuf,
+    repo: PathBuf,
+    patch: PathBuf,
+}
+
+impl Worktree {
+    fn create(parent: &AgentConfig, id: &str) -> Option<Self> {
+        let root = parent.worktree_root.as_ref()?;
+        std::fs::create_dir_all(root).ok()?;
+        let repo = git_output(&parent.working_dir, &["rev-parse", "--show-toplevel"])?;
+        let repo = PathBuf::from(repo.trim());
+        let path = root.join(format!("{}-{}", id.replace('/', "_"), std::process::id()));
+        let patch = root.join(format!("{}.patch", id.replace('/', "_")));
+        let _ = std::fs::remove_dir_all(&path);
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["worktree", "add", "--detach"])
+            .arg(&path)
+            .arg("HEAD")
+            .status()
+            .ok()?;
+        if !status.success() {
+            return None;
+        }
+        Some(Self { path, repo, patch })
+    }
+
+    fn finish(self) -> Option<PathBuf> {
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(&self.path)
+            .args(["add", "-N", "."])
+            .status();
+        let diff = Command::new("git")
+            .arg("-C")
+            .arg(&self.path)
+            .args(["diff", "--binary", "--no-color"])
+            .output()
+            .ok()?;
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(&self.repo)
+            .args(["worktree", "remove", "--force"])
+            .arg(&self.path)
+            .status();
+        let _ = std::fs::remove_dir_all(&self.path);
+        if !diff.status.success() || diff.stdout.is_empty() {
+            return None;
+        }
+        std::fs::write(&self.patch, diff.stdout).ok()?;
+        Some(self.patch)
+    }
+}
+
+fn git_output(directory: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
 }
 
 fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
@@ -252,6 +348,16 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
                     index + 1
                 );
             }
+            let worktree = task
+                .get("worktree")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if worktree && profile != SubagentProfile::Worker {
+                bail!(
+                    "task {}: worktree is only supported for worker profile",
+                    index + 1
+                );
+            }
             let max_steps = task
                 .get("max_steps")
                 .and_then(Value::as_u64)
@@ -264,6 +370,7 @@ fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
                 prompt: prompt.to_string(),
                 profile,
                 write_scope,
+                worktree,
                 max_steps,
                 timeout_secs,
             })
@@ -283,6 +390,7 @@ fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
     config.context.keep_recent_turns = 1;
     config.extension_host = parent.extension_host.clone();
     config.write_lock = parent.write_lock.clone();
+    config.read_roots = parent.read_roots.clone();
 
     let mut allowed = match task.profile {
         SubagentProfile::Explore => SUBAGENT_TOOLS
@@ -434,5 +542,81 @@ mod tests {
         assert_eq!(summary.chars().count(), MAX_SUMMARY_CHARS + 1);
         assert!(summary.ends_with('…'));
         assert_eq!(summarize("  "), "(no final summary)");
+    }
+}
+
+#[cfg(test)]
+mod worktree_tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("niucode-worktree-{tag}-{stamp}"));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("temp");
+        path
+    }
+
+    fn git(directory: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(directory)
+            .args(args)
+            .status()
+            .expect("git");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    fn repo(tag: &str) -> (PathBuf, AgentConfig) {
+        let directory = temp_dir(tag);
+        git(&directory, &["init", "-q"]);
+        git(
+            &directory,
+            &["config", "user.email", "test@example.invalid"],
+        );
+        git(&directory, &["config", "user.name", "test"]);
+        std::fs::write(directory.join("file.txt"), "base\n").expect("base");
+        git(&directory, &["add", "."]);
+        git(&directory, &["commit", "-qm", "base"]);
+        let root = directory.join("worktrees");
+        let mut config = AgentConfig::new("test", directory.clone());
+        config.worktree_root = Some(root);
+        (directory, config)
+    }
+
+    #[test]
+    fn two_workers_get_independent_worktrees_and_patches() {
+        let (directory, config) = repo("two");
+        let first = Worktree::create(&config, "worker-a").expect("first worktree");
+        let second = Worktree::create(&config, "worker-b").expect("second worktree");
+        assert_ne!(first.path, second.path);
+        std::fs::write(first.path.join("file.txt"), "first\n").expect("first write");
+        std::fs::write(second.path.join("file.txt"), "second\n").expect("second write");
+        let first_patch = first.finish().expect("first patch");
+        let second_patch = second.finish().expect("second patch");
+        assert!(std::fs::read_to_string(first_patch)
+            .expect("first patch text")
+            .contains("first"));
+        assert!(std::fs::read_to_string(second_patch)
+            .expect("second patch text")
+            .contains("second"));
+        assert_eq!(
+            std::fs::read_to_string(directory.join("file.txt")).expect("parent file"),
+            "base\n",
+            "worker worktree leaked into parent"
+        );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn non_git_workspace_falls_back_to_shared_workdir() {
+        let directory = temp_dir("non-git");
+        let mut config = AgentConfig::new("test", directory.clone());
+        config.worktree_root = Some(directory.join("worktrees"));
+        assert!(Worktree::create(&config, "fallback").is_none());
+        std::fs::remove_dir_all(directory).expect("cleanup");
     }
 }

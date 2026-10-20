@@ -4,7 +4,7 @@ title = "ADR-0021：默认紧凑 inline 区，reasoning 可见"
 kind = "adr"
 status = "accepted"
 order = 48
-summary = "无 picker 时底部只占 4 行；打开 picker 才扩到 7 行；reasoning 流以 dim 文本实时显示，不再只显示 thinking 标签。"
+summary = "无 picker 时底部占 3 行；打开 picker 才扩到 6 行；reasoning 流以 dim 文本实时显示，不再只显示 thinking 标签。"
 +++
 
 ## 状态

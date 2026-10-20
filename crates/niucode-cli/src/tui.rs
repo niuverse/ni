@@ -16,7 +16,7 @@ use crossterm::event::{
     KeyModifiers,
 };
 use crossterm::execute;
-use crossterm::terminal::{self, Clear, ClearType, LeaveAlternateScreen};
+use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use niucode_agent::{
     build_handoff, estimate_context, project_history, run_with_history, AgentConfig, AgentEvent,
     ApprovalMode, ApprovalRequest, RunOutcome,
@@ -507,6 +507,7 @@ pub async fn run(
         };
 
         let mut observer = |event: AgentEvent| match event {
+            AgentEvent::Phase(_) => {}
             AgentEvent::TextDelta(delta) => {
                 if delta.is_empty() {
                     return;
@@ -664,7 +665,7 @@ pub async fn run(
         run_config.plan_mode = state.plan_mode;
         if let Ok(workspace) = Workspace::discover(&config.working_dir) {
             if let Ok(registry) = skills::Registry::discover(&workspace) {
-                let (block, roots) = registry.activate(&prompt);
+                let (block, roots) = registry.activate(prompt);
                 if !block.is_empty() {
                     run_config.system_prompt.push_str(&block);
                     run_config.read_roots.extend(roots);
@@ -807,6 +808,7 @@ async fn handle_command(
             }
         }
         SlashCommand::Skills(arg) => handle_skills(config, state, arg, out)?,
+        SlashCommand::Tools => handle_tools(config, out),
         SlashCommand::Plan(action) => handle_plan(session, state, action, out)?,
         SlashCommand::Goal(action) => handle_goal(session, state, action, out)?,
         SlashCommand::Clear => {
@@ -1103,6 +1105,36 @@ fn handle_model(
         out.dim("  switching between turns may miss the prompt cache")
     );
     Ok(())
+}
+
+fn handle_tools(config: &AgentConfig, out: Theme) {
+    println!(
+        "{} {}",
+        out.accent("tools"),
+        out.dim("built-in risk/effect metadata")
+    );
+    for spec in niucode_tools::Toolbox::specs() {
+        let name = spec.function.name;
+        match niucode_tools::metadata(&name) {
+            Some(meta) => println!(
+                "  {:<10} {:<7} {:<9} {}",
+                name,
+                meta.risk.as_str(),
+                meta.effect.as_str(),
+                if meta.read_only {
+                    "read-only"
+                } else {
+                    "mutating"
+                }
+            ),
+            None => println!("  {name:<10} unknown unknown unknown"),
+        }
+    }
+    if let Some(host) = &config.extension_host {
+        for spec in host.specs() {
+            println!("  {:<10} unknown external  extension", spec.function.name);
+        }
+    }
 }
 
 fn handle_skills(
@@ -1972,6 +2004,131 @@ fn recent_sessions(directory: &Path, all: bool) -> Vec<RecentSession> {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn print_resume_list(sessions: &[RecentSession], list_all: bool, out: Theme) {
+    println!(
+        "{} {}",
+        out.accent("resume"),
+        out.dim(if list_all {
+            "all projects · /resume <path|id>"
+        } else {
+            "current project · /resume --all for all projects"
+        })
+    );
+    for session in sessions {
+        println!(
+            "{} {}",
+            out.paint(Tone::Bright, format!("  {}", session.title)),
+            out.dim(format!(
+                "  {}/{} · {}",
+                if session.provider.is_empty() {
+                    "?"
+                } else {
+                    &session.provider
+                },
+                if session.model.is_empty() {
+                    "?"
+                } else {
+                    &session.model
+                },
+                format_age(session.modified)
+            ))
+        );
+    }
+}
+
+fn pick_session(sessions: &[RecentSession], list_all: bool, out: Theme) -> Result<Option<PathBuf>> {
+    struct Guard {
+        active: bool,
+    }
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            if self.active {
+                let _ = execute!(std::io::stdout(), LeaveAlternateScreen, Show);
+                let _ = terminal::disable_raw_mode();
+            }
+        }
+    }
+    terminal::enable_raw_mode()?;
+    execute!(std::io::stdout(), EnterAlternateScreen, Show)?;
+    let guard = Guard { active: true };
+    let mut selected = 0_usize;
+    let draw = |selected: usize| -> std::io::Result<()> {
+        let mut screen = String::from("\x1b[2J\x1b[H");
+        screen.push_str(&format!(
+            "{} {}\r\n",
+            out.accent("resume"),
+            out.dim(if list_all {
+                "all projects · ↑↓/j/k · enter resume · esc cancel"
+            } else {
+                "current project · ↑↓/j/k · enter resume · esc cancel · --all for all projects"
+            })
+        ));
+        for (index, session) in sessions.iter().enumerate() {
+            let marker = if index == selected { "▸" } else { " " };
+            let title = session.title.chars().take(60).collect::<String>();
+            let line = format!(
+                "{marker} {title}  ·  {}/{} · {}",
+                if session.provider.is_empty() {
+                    "?"
+                } else {
+                    &session.provider
+                },
+                if session.model.is_empty() {
+                    "?"
+                } else {
+                    &session.model
+                },
+                format_age(session.modified)
+            );
+            if index == selected {
+                screen.push_str(&out.paint(Tone::Bright, line));
+            } else {
+                screen.push_str(&line);
+            }
+            screen.push_str("\r\n");
+        }
+        screen.push_str("\r\n  enter resume · esc cancel · ↑↓ select\r\n");
+        print!("{screen}");
+        std::io::stdout().flush()?;
+        Ok(())
+    };
+    draw(selected)?;
+    loop {
+        let event = event::read()?;
+        let TerminalEvent::Key(key) = event else {
+            continue;
+        };
+        if key.kind != crossterm::event::KeyEventKind::Press {
+            continue;
+        }
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                selected = selected.saturating_sub(1);
+                draw(selected)?;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                selected = (selected + 1).min(sessions.len().saturating_sub(1));
+                draw(selected)?;
+            }
+            KeyCode::Enter => {
+                let path = sessions[selected].path.clone();
+                drop(guard);
+                return Ok(Some(path));
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                drop(guard);
+                return Ok(None);
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                drop(guard);
+                return Ok(None);
+            }
+            _ => {}
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn resume_session(
     session: &mut SessionLog,
     config: &AgentConfig,
@@ -1991,45 +2148,23 @@ fn resume_session(
         .to_path_buf();
 
     let list_all = matches!(arg, Some("--all") | Some("all"));
-    let Some(arg) = arg.filter(|value| !matches!(*value, "--all" | "all")) else {
+    let path = if let Some(arg) = arg.filter(|value| !matches!(*value, "--all" | "all")) {
+        resolve_session_path(&directory, arg)?
+    } else {
         let sessions = recent_sessions(&directory, list_all);
         if sessions.is_empty() {
             println!("{}", out.dim("no sessions found in this directory"));
             return Ok(());
         }
-        println!(
-            "{} {}",
-            out.accent("resume"),
-            out.dim(if list_all {
-                "all projects · /resume <path|id>"
-            } else {
-                "current project · /resume --all for all projects"
-            })
-        );
-        for session in sessions {
-            println!(
-                "{} {}",
-                out.paint(Tone::Bright, format!("  {}", session.title)),
-                out.dim(format!(
-                    "  {}/{} · {}",
-                    if session.provider.is_empty() {
-                        "?"
-                    } else {
-                        &session.provider
-                    },
-                    if session.model.is_empty() {
-                        "?"
-                    } else {
-                        &session.model
-                    },
-                    format_age(session.modified)
-                ))
-            );
+        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+            print_resume_list(&sessions, list_all, out);
+            return Ok(());
         }
-        return Ok(());
+        let Some(path) = pick_session(&sessions, list_all, out)? else {
+            return Ok(());
+        };
+        path
     };
-
-    let path = resolve_session_path(&directory, arg)?;
     if path == session.path() {
         println!("{}", out.dim("already on this session"));
         return Ok(());
@@ -2281,8 +2416,7 @@ fn reset_screen(theme: Theme) {
         );
         eprintln!(
             "{}",
-            theme
-                .dim("inline input · native scrollback · :help commands · Ctrl-C cancels the turn")
+            theme.dim("native scrollback · :help commands · Ctrl-C cancels the turn")
         );
     }
 }
@@ -2503,9 +2637,7 @@ fn banner_lines(width: usize) -> Vec<String> {
             env!("CARGO_PKG_VERSION")
         ));
     }
-    lines.push(
-        "inline input · native scrollback · :help commands · Ctrl-C cancels the turn".to_string(),
-    );
+    lines.push("native scrollback · :help commands · Ctrl-C cancels the turn".to_string());
     lines
 }
 

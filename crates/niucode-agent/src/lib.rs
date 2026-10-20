@@ -92,6 +92,8 @@ pub struct AgentConfig {
     pub write_scope: Option<Vec<String>>,
     /// Extra read-only roots (trusted skill bodies).
     pub read_roots: Vec<PathBuf>,
+    /// Global workspace worktree root for isolated Worker subagents.
+    pub worktree_root: Option<PathBuf>,
     /// Explicit opt-in for subagent `profile = "inherit"`. Off by default;
     /// inherit still strips the nested `subagent` tool.
     pub allow_subagent_inheritance: bool,
@@ -129,13 +131,38 @@ impl AgentConfig {
             write_lock: None,
             write_scope: None,
             read_roots: Vec::new(),
+            worktree_root: None,
             allow_subagent_inheritance: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopPhase {
+    Project,
+    Request,
+    Stream,
+    Tool,
+    Turn,
+    Done,
+}
+
+impl LoopPhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Request => "request",
+            Self::Stream => "stream",
+            Self::Tool => "tool",
+            Self::Turn => "turn",
+            Self::Done => "done",
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
+    Phase(LoopPhase),
     TextDelta(String),
     ReasoningDelta(String),
     ToolCall {
@@ -235,6 +262,7 @@ pub async fn run_with_history(
         );
     }
 
+    observer(AgentEvent::Phase(LoopPhase::Project));
     let mut messages = Vec::with_capacity(history.len() + 2);
     messages.push(ChatMessage::system(system_prompt.clone()));
     messages.extend(history);
@@ -446,6 +474,7 @@ pub async fn run_with_history(
             } else {
                 None
             };
+            observer(AgentEvent::Phase(LoopPhase::Tool));
             let scope_allowed = write_in_scope(config, &call);
             let mut result = if !available {
                 niucode_tools::ToolResult {
