@@ -4,21 +4,31 @@ Minimal, observable coding agent.
 
 `niucode` is a small agent harness built around an append-only event log, a thin
 provider layer, and a sharp tool surface. It is intentionally smaller than a
-general agent framework: one loop, six tools, and a session file you can read,
+general agent framework: one loop, six tools plus a read-only subagent, and a session file you can read,
 replay, and resume.
 
 ## Status
 
-M1 · TUI landed. `niucode exec` and `niucode tui` share six tools, bwrap isolation,
-per-tool approval, cancellation, resume, and recorded fixtures. The next card is
-full diff rendering.
+M0–M3 complete; M4 in progress. M2 closed with layered `AGENTS.md` discovery, a
+deterministic 75%-budget compaction handoff, instruction digests, and per-turn
+cache hit rates. `niucode exec` and `niucode tui` share six tools plus a read-only subagent, bwrap
+isolation, per-tool approval with full unified-diff review, cancellation, resume,
+and recorded fixtures. The TUI has a Geek-style wordmark, symbol-based tool
+lines, slash commands (`/init`, `/clear`, `/plan`, `/goal`, `/fork`, `/status`,
+`/session`), an automatic command menu with descriptions, input history, and a
+resize-aware diff pager; long tool output folds behind `:last`.
+Replay and fork are available offline with stable `e000012` event IDs; read-only
+subagents run in parallel with independent session logs; `exec --json` exposes a
+versioned JSONL protocol. M4 is active: profiles, `/plan`, `/goal`, and the
+sidecar extension host are landing incrementally; M4-002 loads local
+`.niucode/extensions/*.toml` tools through JSON-RPC.
 
 ## Quick start
 
 Requires Rust 1.85+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
-cargo run -p niucode                 # banner and current status
+cargo run -p niucode                 # start the TUI (no subcommand needed)
 cargo run -p niucode -- session new  # create a session, print its path
 cargo run -p niucode -- session show <path>
 cargo run -p niucode -- auth set deepseek
@@ -33,6 +43,8 @@ cargo run -p niucode -- tui
 cargo run -p niucode -- exec "review only" --sandbox read-only
 cargo run -p niucode -- exec "fix it" --sandbox workspace-write --network off --approval ask
 cargo run -p niucode -- exec "trusted" --sandbox full-access --network on --approval never
+cargo run -p niucode -- exec "long task" --context-budget 128000 --keep-recent-turns 4
+cargo run -p niucode -- exec "read a.txt" --json            # JSONL event protocol
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -51,7 +63,7 @@ crates/
   niucode-auth/     env → OS keyring → 0600 file credential resolution
   niucode-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
   niucode-tools/    six tools, path policy, bwrap sandbox, approval policy
-  niucode-agent/    turn loop, tool dispatch, session events
+  niucode-agent/    turn loop, tool dispatch, context, subagents, session events
   niucode-cli/      argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
 docs/

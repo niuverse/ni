@@ -6,13 +6,25 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use futures_util::StreamExt;
 use niucode_core::{now_ms, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::{ChatMessage, CompletionRequest, Provider, StreamEvent};
-use niucode_tools::{SandboxPolicy, Toolbox};
+use niucode_tools::{ChangePreview, SandboxPolicy, Toolbox};
 use serde_json::{json, Value};
+
+mod context;
+mod instructions;
+mod subagent;
+
+use context::non_empty;
+pub use context::{
+    build_handoff, estimate_context, project_history, ContextConfig, Handoff,
+    DEFAULT_COMPACT_AT_PERCENT, DEFAULT_CONTEXT_BUDGET, DEFAULT_KEEP_RECENT_TURNS,
+};
+pub use instructions::{compose_system_prompt, Instructions};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalMode {
@@ -35,9 +47,11 @@ impl ApprovalMode {
 pub struct ApprovalRequest {
     pub tool: String,
     pub summary: String,
-    pub preview: Option<String>,
+    /// Full structured preview for file-changing tools.
+    pub preview: Option<ChangePreview>,
 }
 
+#[derive(Clone)]
 pub struct AgentConfig {
     pub model: String,
     pub max_steps: usize,
@@ -46,6 +60,18 @@ pub struct AgentConfig {
     pub sandbox: SandboxPolicy,
     pub approval: ApprovalMode,
     pub allow_unsandboxed: bool,
+    pub context: ContextConfig,
+    /// When set, only these tool names are advertised and executable.
+    pub allowed_tools: Option<Vec<String>>,
+    /// Read-only planning mode. The loop still runs, but the prompt tells the
+    /// model not to modify files; the TUI also narrows `allowed_tools`.
+    pub plan_mode: bool,
+    /// Active session goal / completion condition, injected into the system
+    /// prompt and preserved across compaction/resume.
+    pub goal: Option<String>,
+    /// Optional session-scoped sidecar host. External tools are merged into the
+    /// advertised tool list and dispatched after the built-ins.
+    pub extension_host: Option<Arc<niucode_extension::ExtensionHost>>,
 }
 
 impl AgentConfig {
@@ -68,6 +94,11 @@ impl AgentConfig {
             sandbox: SandboxPolicy::default(),
             approval: ApprovalMode::OnFailure,
             allow_unsandboxed: false,
+            context: ContextConfig::default(),
+            allowed_tools: None,
+            plan_mode: false,
+            goal: None,
+            extension_host: None,
         }
     }
 }
@@ -84,10 +115,17 @@ pub enum AgentEvent {
         name: String,
         ok: bool,
         summary: String,
+        output: String,
     },
     TurnEnd {
         usage: Usage,
     },
+    Compaction {
+        replaced_events: usize,
+        before_tokens: usize,
+        after_tokens: usize,
+    },
+    Warning(String),
 }
 
 #[derive(Debug, Clone)]
@@ -136,20 +174,73 @@ pub async fn run_with_history(
         config.sandbox,
         config.allow_unsandboxed,
     )?;
-    let tools = Toolbox::specs();
+    let mut tools = Toolbox::specs();
+    if let Some(host) = &config.extension_host {
+        tools.extend(host.specs());
+    }
+    let tools = match &config.allowed_tools {
+        Some(allowed) => tools
+            .into_iter()
+            .filter(|tool| allowed.iter().any(|name| name == &tool.function.name))
+            .collect(),
+        None => tools,
+    };
+    let loaded_instructions = instructions::load(&config.working_dir);
+    for warning in &loaded_instructions.warnings {
+        observer(AgentEvent::Warning(warning.clone()));
+    }
+    let mut system_prompt = compose_system_prompt(&config.system_prompt, &loaded_instructions.text);
+    if let Some(goal) = &config.goal {
+        system_prompt.push_str("\n\n## Active goal\n");
+        system_prompt.push_str(goal);
+        system_prompt.push_str(
+            "\n\nKeep working toward this goal. It does not change your permissions; \
+             use only the tools currently available.",
+        );
+    }
+    if config.plan_mode {
+        system_prompt.push_str(
+            "\n\n## Plan mode\nYou are in read-only plan mode. Do not modify files, \
+             run mutating commands, or change external state. Investigate the task and \
+             return a concrete plan with steps, files, risks, and verification. The user \
+             will approve the plan before execution.",
+        );
+    }
+
     let mut messages = Vec::with_capacity(history.len() + 2);
-    messages.push(ChatMessage::system(config.system_prompt.clone()));
+    messages.push(ChatMessage::system(system_prompt.clone()));
     messages.extend(history);
     messages.push(ChatMessage::user(prompt));
 
+    if !loaded_instructions.sources.is_empty() {
+        session.append(&Event::Instructions {
+            sources: loaded_instructions.sources,
+            digest: loaded_instructions.digest,
+            ts: now_ms(),
+        })?;
+    }
     session.append(&Event::UserMessage {
         text: prompt.to_string(),
         ts: now_ms(),
     })?;
 
     let mut total_usage = Usage::default();
+    let mut compaction_warned = false;
 
     for turns in 1..=config.max_steps {
+        match maybe_compact(session, config, &system_prompt, &mut messages, &tools)? {
+            Some(AgentEvent::Warning(message)) if !compaction_warned => {
+                compaction_warned = true;
+                observer(AgentEvent::Warning(message));
+            }
+            Some(AgentEvent::Warning(_)) => {}
+            Some(event) => {
+                compaction_warned = false;
+                observer(event);
+            }
+            None => {}
+        }
+
         let mut request = CompletionRequest::new(config.model.clone());
         request.messages = messages.clone();
         request.tools = tools.clone();
@@ -223,11 +314,32 @@ pub async fn run_with_history(
                 input: call.input.clone(),
             });
 
-            let result = if requires_approval(&call.name) && config.approval == ApprovalMode::Ask {
+            let available = config
+                .allowed_tools
+                .as_ref()
+                .is_none_or(|allowed| allowed.iter().any(|name| name == &call.name));
+            let result = if !available {
+                niucode_tools::ToolResult {
+                    ok: false,
+                    output: format!("tool {} is not available to this agent", call.name),
+                }
+            } else if call.name == "subagent" {
+                subagent::run_tool(provider, session, config, &call).await
+            } else if let Some(host) = config
+                .extension_host
+                .as_ref()
+                .filter(|host| host.has_tool(&call.name))
+            {
+                // M4-002 external tools are local, read-only sidecars. Risk
+                // metadata and per-call approval arrive with the capability
+                // profile work.
+                host.execute(&call.name, &call.input).await
+            } else if requires_approval(&call.name) && config.approval == ApprovalMode::Ask {
                 let request = ApprovalRequest {
                     tool: call.name.clone(),
                     summary: approval_summary(&call),
-                    preview: approval_preview(&call),
+                    preview: matches!(call.name.as_str(), "write" | "edit")
+                        .then(|| toolbox.preview(&call.name, &call.input)),
                 };
                 let allowed = approver(&request);
                 session.append(&Event::Approval {
@@ -258,6 +370,7 @@ pub async fn run_with_history(
                 name: call.name.clone(),
                 ok: result.ok,
                 summary: summary(&result.output),
+                output: result.output.clone(),
             });
 
             messages.push(ChatMessage::tool(call.id, result.output));
@@ -274,33 +387,6 @@ fn requires_approval(tool: &str) -> bool {
     matches!(tool, "write" | "edit" | "bash")
 }
 
-fn approval_preview(call: &ToolCall) -> Option<String> {
-    let preview = match call.name.as_str() {
-        "write" => {
-            let content = call.input.get("content").and_then(Value::as_str)?;
-            let mut rendered = String::new();
-            for line in content.lines().take(40) {
-                rendered.push('+');
-                rendered.push_str(line);
-                rendered.push('\n');
-            }
-            rendered
-        }
-        "edit" => {
-            let old = call.input.get("old").and_then(Value::as_str)?;
-            let new = call.input.get("new").and_then(Value::as_str)?;
-            format!("-{old}\n+{new}\n")
-        }
-        _ => return None,
-    };
-
-    let mut truncated: String = preview.chars().take(1_600).collect();
-    if preview.chars().count() > 1_600 {
-        truncated.push_str("\n... (preview truncated)");
-    }
-    Some(truncated)
-}
-
 fn approval_summary(call: &ToolCall) -> String {
     let detail = match call.name.as_str() {
         "bash" => call.input.get("command").and_then(Value::as_str),
@@ -311,65 +397,80 @@ fn approval_summary(call: &ToolCall) -> String {
     format!("{} {}", call.name, detail).trim().to_string()
 }
 
-/// Rebuild provider messages from durable session events.
-///
-/// `SessionStart`, `TurnEnd`, and `SessionEnd` carry no conversation content.
-/// A `Compaction` event becomes a system message so resumed turns retain its
-/// handoff text.
-pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
-    let mut messages = Vec::new();
-    let mut pending_tools: Vec<String> = Vec::new();
+fn maybe_compact(
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    system_prompt: &str,
+    messages: &mut Vec<ChatMessage>,
+    tools: &[niucode_provider::ToolSpec],
+) -> Result<Option<AgentEvent>> {
+    let before = estimate_context(messages, tools);
+    if !config.context.should_compact(before) {
+        return Ok(None);
+    }
 
-    for event in events {
-        match event {
-            Event::SessionStart { .. }
-            | Event::TurnEnd { .. }
-            | Event::Policy { .. }
-            | Event::Approval { .. }
-            | Event::SessionEnd { .. } => {}
-            Event::UserMessage { text, .. } => {
-                flush_pending_tools(&mut messages, &mut pending_tools);
-                messages.push(ChatMessage::user(text.clone()));
-            }
-            Event::AssistantMessage {
-                text,
-                reasoning,
-                tool_calls,
-                ..
-            } => {
-                messages.push(ChatMessage::assistant(
-                    non_empty(text.clone()),
-                    reasoning.clone().filter(|value| !value.is_empty()),
-                    tool_calls.clone(),
-                ));
-                pending_tools = tool_calls.iter().map(|call| call.id.clone()).collect();
-            }
-            Event::ToolResult {
-                call_id, output, ..
-            } => {
-                pending_tools.retain(|pending| pending != call_id);
-                messages.push(ChatMessage::tool(call_id.clone(), output.clone()));
-            }
-            Event::Compaction { summary, .. } => {
-                flush_pending_tools(&mut messages, &mut pending_tools);
-                messages.push(ChatMessage::system(format!(
-                    "Previous context summary:\n{summary}"
-                )));
-            }
+    let loaded = match niucode_core::load(session.path()) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return Ok(Some(AgentEvent::Warning(format!(
+                "compaction skipped: cannot load session: {error:#}"
+            ))));
         }
+    };
+    let handoff = match build_handoff(&loaded.events, config.context.keep_recent_turns) {
+        Ok(handoff) => handoff,
+        Err(error) => {
+            return Ok(Some(AgentEvent::Warning(format!(
+                "compaction skipped: {error:#}"
+            ))));
+        }
+    };
+
+    let mut candidate = loaded.events.clone();
+    candidate.push(Event::Compaction {
+        summary: handoff.summary.clone(),
+        upto: handoff.upto as u64,
+        before_tokens: before as u64,
+        after_tokens: 0,
+        ts: now_ms(),
+    });
+    let history = match project_history(&candidate) {
+        Ok(history) => history,
+        Err(error) => {
+            return Ok(Some(AgentEvent::Warning(format!(
+                "compaction skipped: projection failed: {error:#}"
+            ))));
+        }
+    };
+    let mut projected = Vec::with_capacity(history.len() + 1);
+    projected.push(ChatMessage::system(system_prompt.to_string()));
+    projected.extend(history);
+    let after = estimate_context(&projected, tools);
+    if after >= before {
+        return Ok(Some(AgentEvent::Warning(format!(
+            "compaction skipped: handoff would not reduce context (~{before} → ~{after} tokens)"
+        ))));
     }
 
-    flush_pending_tools(&mut messages, &mut pending_tools);
-    Ok(messages)
-}
-
-fn flush_pending_tools(messages: &mut Vec<ChatMessage>, pending: &mut Vec<String>) {
-    for call_id in pending.drain(..) {
-        messages.push(ChatMessage::tool(
-            call_id,
-            "cancelled before the tool produced a result".to_string(),
-        ));
+    let event = Event::Compaction {
+        summary: handoff.summary,
+        upto: handoff.upto as u64,
+        before_tokens: before as u64,
+        after_tokens: after as u64,
+        ts: now_ms(),
+    };
+    if let Err(error) = session.append(&event) {
+        return Ok(Some(AgentEvent::Warning(format!(
+            "compaction skipped: append failed: {error:#}"
+        ))));
     }
+
+    *messages = projected;
+    Ok(Some(AgentEvent::Compaction {
+        replaced_events: handoff.upto,
+        before_tokens: before,
+        after_tokens: after,
+    }))
 }
 
 #[derive(Debug, Default)]
@@ -405,14 +506,6 @@ fn add_usage(total: &mut Usage, turn: &Usage) {
     total.reasoning_tokens += turn.reasoning_tokens;
 }
 
-fn non_empty(value: String) -> Option<String> {
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
-}
-
 fn summary(output: &str) -> String {
     output
         .lines()
@@ -432,7 +525,7 @@ mod tests {
 
     use niucode_core::session::load;
     use niucode_provider::{Role, ScriptedProvider, StreamEvent, ToolCallDelta};
-    use niucode_tools::{NetworkMode, SandboxMode};
+    use niucode_tools::{LineKind, NetworkMode, SandboxMode};
 
     use super::*;
 
@@ -543,9 +636,14 @@ mod tests {
         .expect("run");
 
         assert_eq!(requested, 1);
-        assert!(preview_seen
-            .as_deref()
-            .is_some_and(|preview| preview.contains("+bad")));
+        let preview = preview_seen.expect("preview");
+        assert!(preview.is_diff());
+        assert_eq!(preview.files()[0].path, "b.txt");
+        assert_eq!((preview.added, preview.removed), (1, 0));
+        assert!(preview.files()[0].hunks[0]
+            .lines
+            .iter()
+            .any(|line| line.kind == LineKind::Add && line.text == "bad"));
         assert_eq!(outcome.final_text, "stopped");
         assert!(!directory.join("b.txt").exists());
         let loaded = load(session.path()).expect("load");
@@ -817,7 +915,7 @@ mod tests {
 
         let requests = provider.requests();
         assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].tools.len(), 6);
+        assert_eq!(requests[0].tools.len(), 7);
         assert!(requests[1]
             .messages
             .iter()

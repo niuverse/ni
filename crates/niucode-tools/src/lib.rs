@@ -1,8 +1,9 @@
 //! Workspace tools exposed to the model.
 //!
-//! The first closed loop intentionally has four tools: `read`, `write`, `edit`,
-//! and `bash`. All file paths are resolved inside the working directory;
-//! `write`/`edit` require the file to have been observed by `read` first.
+//! The tool surface is deliberately small: `read`, `write`, `edit`, `grep`,
+//! `glob`, and `bash`. All file paths are resolved inside the working
+//! directory; `write`/`edit` require the file to have been observed by `read`
+//! first.
 
 use std::collections::HashSet;
 use std::fs;
@@ -21,6 +22,13 @@ use similar::TextDiff;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tokio::time::timeout;
+
+mod preview;
+
+pub use preview::{
+    ChangePreview, FilePreview, LineKind, PreviewBody, PreviewHunk, PreviewLine,
+    PREVIEW_CONTEXT_LINES,
+};
 
 const READ_MAX_LINES: usize = 2_000;
 const READ_MAX_BYTES: usize = 50_000;
@@ -227,6 +235,30 @@ impl Toolbox {
                     "required": ["pattern"]
                 }),
             ),
+            ToolSpec::function(
+                "subagent",
+                "Run one or more read-only exploration subagents in parallel. Each task gets its own session log, step/token/time budget, and can use read/grep/glob only. Returns a concise summary and log path per task; use it for broad code search, then make writes yourself.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "tasks": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "prompt": {"type": "string", "description": "Read-only exploration task"},
+                                    "max_steps": {"type": "integer", "minimum": 1, "maximum": 12},
+                                    "timeout_secs": {"type": "integer", "minimum": 1, "maximum": 600}
+                                },
+                                "required": ["prompt"]
+                            }
+                        }
+                    },
+                    "required": ["tasks"]
+                }),
+            ),
         ]
     }
 
@@ -238,6 +270,9 @@ impl Toolbox {
             "grep" => self.grep(input),
             "glob" => self.glob(input),
             "bash" => self.bash(input).await,
+            "subagent" => Err(anyhow::anyhow!(
+                "subagent is orchestrated by the agent loop"
+            )),
             other => Err(anyhow::anyhow!("unknown tool {other:?}")),
         };
 
@@ -780,7 +815,7 @@ pub struct ToolResult {
     pub output: String,
 }
 
-fn input_string<'a>(input: &'a Value, key: &str) -> Result<&'a str> {
+pub(crate) fn input_string<'a>(input: &'a Value, key: &str) -> Result<&'a str> {
     input
         .get(key)
         .and_then(Value::as_str)

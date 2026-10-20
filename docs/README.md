@@ -47,6 +47,14 @@ docs/
     0004-session-runtime.md
     0005-auth.md
     0006-sandbox.md
+    0007-diff-preview.md
+    0008-compaction.md
+    0009-instructions-metrics.md
+    0010-event-ids-replay-fork.md
+    0011-subagents.md
+    0012-exec-json.md
+    0013-extension-host.md
+    0014-profiles-plan-goal.md
   architecture.md
   auth.md
   exec.md

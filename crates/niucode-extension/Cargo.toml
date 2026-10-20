@@ -1,0 +1,14 @@
+[package]
+name = "niucode-extension"
+description = "Sidecar extension host for niucode external tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+niucode-provider = { path = "../niucode-provider" }
+niucode-tools = { path = "../niucode-tools" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true

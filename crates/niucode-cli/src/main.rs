@@ -1,5 +1,5 @@
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -10,16 +10,30 @@ use niucode_agent::{
 };
 use niucode_auth::AuthStore;
 use niucode_core::{now_ms, Event, SessionLog};
+use niucode_extension::{discover, ExtensionHost};
 use niucode_provider::{
     ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider,
     RecordingProvider, ReplayProvider, StreamEvent, ThinkingMode,
 };
-use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
+use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
+use serde_json::json;
 
+use crate::theme::{Theme, Tone};
+
+mod diff;
+mod editor;
+mod review;
+mod session_ops;
+mod slash;
+mod theme;
 mod tui;
 
 #[derive(Debug, Parser)]
-#[command(name = "niucode", version, about = "Minimal, observable coding agent")]
+#[command(
+    name = "niucode",
+    version,
+    about = "Minimal, observable coding agent; starts the TUI when no subcommand is given"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -31,6 +45,22 @@ enum Command {
     Session {
         #[command(subcommand)]
         command: SessionCommand,
+    },
+    /// Replay a session offline and print per-turn projections
+    Replay {
+        /// Path to a .jsonl session file
+        path: PathBuf,
+    },
+    /// Copy a session prefix into a new session
+    Fork {
+        /// Path to the source .jsonl session file
+        path: PathBuf,
+        /// Event id to fork at, for example e000012
+        #[arg(long)]
+        at: String,
+        /// Directory for the new session file (defaults to the source directory)
+        #[arg(long)]
+        session_dir: Option<PathBuf>,
     },
     /// Inspect and test model providers
     Provider {
@@ -55,6 +85,12 @@ enum Command {
         /// Maximum model turns
         #[arg(long, default_value_t = 12)]
         max_steps: usize,
+        /// Approximate context budget in tokens before compaction
+        #[arg(long, default_value_t = 64_000)]
+        context_budget: usize,
+        /// Recent user turns kept verbatim when compacting
+        #[arg(long, default_value_t = 3)]
+        keep_recent_turns: usize,
         /// Disable DeepSeek thinking mode
         #[arg(long)]
         no_thinking: bool,
@@ -82,6 +118,9 @@ enum Command {
         /// Network: on or off
         #[arg(long, default_value = "off")]
         network: String,
+        /// Emit a stable JSONL event stream on stdout
+        #[arg(long)]
+        json: bool,
     },
     /// Start the interactive linear TUI
     Tui {
@@ -91,6 +130,12 @@ enum Command {
         /// Override the preset model
         #[arg(long)]
         model: Option<String>,
+        /// Approximate context budget in tokens before compaction
+        #[arg(long, default_value_t = 64_000)]
+        context_budget: usize,
+        /// Recent user turns kept verbatim when compacting
+        #[arg(long, default_value_t = 3)]
+        keep_recent_turns: usize,
         /// Disable DeepSeek thinking mode
         #[arg(long)]
         no_thinking: bool,
@@ -115,6 +160,9 @@ enum Command {
         /// Replay normalized provider turns from a fixture JSON
         #[arg(long)]
         replay: Option<PathBuf>,
+        /// Start in read-only plan mode
+        #[arg(long)]
+        plan: bool,
     },
 }
 
@@ -184,6 +232,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Session { command }) => run_session(command),
+        Some(Command::Replay { path }) => run_replay(path),
+        Some(Command::Fork {
+            path,
+            at,
+            session_dir,
+        }) => run_fork(path, at, session_dir),
         Some(Command::Provider { command }) => run_provider(command).await,
         Some(Command::Auth { command }) => run_auth(command),
         Some(Command::Exec {
@@ -191,6 +245,8 @@ async fn main() -> Result<()> {
             preset,
             model,
             max_steps,
+            context_budget,
+            keep_recent_turns,
             no_thinking,
             cwd,
             session_dir,
@@ -200,12 +256,15 @@ async fn main() -> Result<()> {
             sandbox,
             approval,
             network,
+            json,
         }) => {
             run_exec(
                 prompt,
                 preset,
                 model,
                 max_steps,
+                context_budget,
+                keep_recent_turns,
                 no_thinking,
                 cwd,
                 session_dir,
@@ -215,12 +274,15 @@ async fn main() -> Result<()> {
                 sandbox,
                 approval,
                 network,
+                json,
             )
             .await
         }
         Some(Command::Tui {
             preset,
             model,
+            context_budget,
+            keep_recent_turns,
             no_thinking,
             cwd,
             session_dir,
@@ -229,10 +291,13 @@ async fn main() -> Result<()> {
             approval,
             network,
             replay,
+            plan,
         }) => {
             run_tui(
                 preset,
                 model,
+                context_budget,
+                keep_recent_turns,
                 no_thinking,
                 cwd,
                 session_dir,
@@ -241,14 +306,82 @@ async fn main() -> Result<()> {
                 approval,
                 network,
                 replay,
+                plan,
             )
             .await
         }
         None => {
-            print_banner();
-            Ok(())
+            run_tui(
+                "deepseek".into(),
+                None,
+                64_000,
+                3,
+                false,
+                None,
+                None,
+                None,
+                "workspace-write".into(),
+                "on-failure".into(),
+                "off".into(),
+                None,
+                false,
+            )
+            .await
         }
     }
+}
+
+async fn mount_extensions(
+    workspace: &Path,
+    session: &mut SessionLog,
+) -> Result<Option<Arc<ExtensionHost>>> {
+    let reserved = Toolbox::specs()
+        .into_iter()
+        .map(|tool| tool.function.name)
+        .collect::<Vec<_>>();
+    let report = discover(workspace, &reserved).await;
+    for error in &report.errors {
+        eprintln!("warning: extension: {error}");
+        session.append(&Event::ExtensionError {
+            name: "mount".into(),
+            message: error.clone(),
+            ts: now_ms(),
+        })?;
+    }
+    if report.host.is_empty() {
+        return Ok(None);
+    }
+    for mount in report.host.mounts() {
+        eprintln!(
+            "extension: {} {} · {} tool(s)",
+            mount.name,
+            mount.version,
+            mount.tools.len()
+        );
+        session.append(&Event::ExtensionMount {
+            name: mount.name.clone(),
+            version: mount.version.clone(),
+            tools: mount.tools.clone(),
+            ts: now_ms(),
+        })?;
+    }
+    Ok(Some(Arc::new(report.host)))
+}
+
+async fn unmount_extensions(
+    host: &Option<Arc<ExtensionHost>>,
+    session: &mut SessionLog,
+) -> Result<()> {
+    if let Some(host) = host {
+        for mount in host.mounts() {
+            session.append(&Event::ExtensionUnmount {
+                name: mount.name.clone(),
+                ts: now_ms(),
+            })?;
+        }
+        host.shutdown().await;
+    }
+    Ok(())
 }
 
 fn run_session(command: SessionCommand) -> Result<()> {
@@ -274,7 +407,28 @@ fn run_session(command: SessionCommand) -> Result<()> {
                 eprintln!("warning: {warning}");
             }
             for event in &loaded.events {
-                println!("{:>13}  {}", event.ts(), event.kind());
+                let detail = match event {
+                    Event::Compaction {
+                        upto,
+                        before_tokens,
+                        after_tokens,
+                        ..
+                    } => format!("  upto={upto} ~{before_tokens}→~{after_tokens} tokens"),
+                    Event::Instructions {
+                        sources, digest, ..
+                    } => {
+                        format!("  {} file(s) digest={digest}", sources.len())
+                    }
+                    Event::TurnEnd { usage, .. } => format!(
+                        "  in={} out={} cached={} cache={}%",
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.cached_tokens,
+                        usage.cache_hit_percent()
+                    ),
+                    _ => String::new(),
+                };
+                println!("{:>13}  {}{detail}", event.ts(), event.kind());
             }
             Ok(())
         }
@@ -288,10 +442,60 @@ fn run_session(command: SessionCommand) -> Result<()> {
     }
 }
 
+fn run_replay(path: PathBuf) -> Result<()> {
+    let report = session_ops::replay(&path)?;
+    for warning in &report.warnings {
+        eprintln!("warning: {warning}");
+    }
+    println!("session  {}", report.session.display());
+    println!(
+        "events   {} decoded (warnings {})",
+        report.events,
+        report.warnings.len()
+    );
+    println!("mode     offline projection · no provider calls");
+    println!("turns    {}", report.turns.len());
+    for turn in &report.turns {
+        println!(
+            "turn {:<3} {}  {:?}  messages={} ~{} tokens digest={}",
+            turn.number, turn.event, turn.user, turn.messages, turn.tokens, turn.digest
+        );
+    }
+    println!(
+        "final    messages={} ~{} tokens digest={}",
+        report.final_messages, report.final_tokens, report.final_digest
+    );
+    println!(
+        "counts   compactions={} instructions={}",
+        report.compactions, report.instructions
+    );
+    Ok(())
+}
+
+fn run_fork(path: PathBuf, at: String, session_dir: Option<PathBuf>) -> Result<()> {
+    let destination_dir = session_dir.unwrap_or_else(|| {
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    });
+    let report = session_ops::fork(&path, &at, &destination_dir)?;
+    for warning in &report.warnings {
+        eprintln!("warning: {warning}");
+    }
+    println!("parent  {}", report.parent.display());
+    println!("event   {}", report.at);
+    println!("copied  {} events", report.copied);
+    println!("fork    {}", report.destination.display());
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_tui(
     preset: String,
     model: Option<String>,
+    context_budget: usize,
+    keep_recent_turns: usize,
     no_thinking: bool,
     cwd: Option<PathBuf>,
     session_dir: Option<PathBuf>,
@@ -300,7 +504,14 @@ async fn run_tui(
     approval: String,
     network: String,
     replay: Option<PathBuf>,
+    plan: bool,
 ) -> Result<()> {
+    if context_budget < 100 {
+        bail!("--context-budget must be at least 100 tokens");
+    }
+    if keep_recent_turns == 0 {
+        bail!("--keep-recent-turns must be at least 1");
+    }
     let mut approval_mode = parse_approval(&approval)?;
     let policy = SandboxPolicy::new(parse_sandbox(&sandbox)?, parse_network(&network)?);
     let mut backend = policy.backend();
@@ -408,31 +619,59 @@ async fn run_tui(
         backend: backend.into(),
         ts: now_ms(),
     })?;
+    if plan {
+        session.append(&Event::PlanMode {
+            active: true,
+            ts: now_ms(),
+        })?;
+    }
 
     let mut agent_config = AgentConfig::new(model.clone(), working_dir.clone());
     agent_config.sandbox = policy;
     agent_config.approval = approval_mode;
     agent_config.allow_unsandboxed = allow_unsandboxed;
+    agent_config.context.budget_tokens = context_budget;
+    agent_config.context.keep_recent_turns = keep_recent_turns;
+    let extension_host = mount_extensions(&working_dir, &mut session).await?;
+    agent_config.extension_host = extension_host.clone();
 
+    let theme = Theme::detect_stderr();
     eprintln!(
-        "niucode tui · {} · model={model} · auth={} · cwd={}",
-        provider.name(),
-        auth_source,
-        working_dir.display()
+        "{} {}",
+        theme.accent("niucode tui"),
+        theme.dim(format!(
+            "· {} · model={model} · auth={auth_source} · cwd={}",
+            provider.name(),
+            working_dir.display()
+        ))
     );
     if let Some(path) = &replay {
-        eprintln!("replay: {}", path.display());
+        eprintln!("{}", theme.dim(format!("replay {}", path.display())));
     }
     eprintln!(
-        "policy: sandbox={} network={} approval={} backend={backend}",
-        policy.mode.as_str(),
-        policy.network.as_str(),
-        approval_mode.as_str()
+        "{}",
+        theme.dim(format!(
+            "policy sandbox={} network={} approval={} backend={backend}",
+            policy.mode.as_str(),
+            policy.network.as_str(),
+            approval_mode.as_str()
+        ))
     );
-    eprintln!("session: {}", session.path().display());
-    eprintln!("type a task; exit/quit to leave; Ctrl-C cancels the current turn");
+    eprintln!(
+        "{}",
+        theme.dim(format!(
+            "context budget={context_budget} trigger=75% keep_recent={keep_recent_turns}"
+        ))
+    );
+    eprintln!(
+        "{} {}",
+        theme.dim("session"),
+        theme.paint(Tone::Bright, session.path().display())
+    );
 
-    tui::run(provider.as_ref(), &mut session, &agent_config, history).await
+    let result = tui::run(provider.as_ref(), &mut session, &agent_config, history).await;
+    unmount_extensions(&extension_host, &mut session).await?;
+    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -441,6 +680,8 @@ async fn run_exec(
     preset: String,
     model: Option<String>,
     max_steps: usize,
+    context_budget: usize,
+    keep_recent_turns: usize,
     no_thinking: bool,
     cwd: Option<PathBuf>,
     session_dir: Option<PathBuf>,
@@ -450,9 +691,16 @@ async fn run_exec(
     sandbox: String,
     approval: String,
     network: String,
+    json: bool,
 ) -> Result<()> {
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
+    }
+    if context_budget < 100 {
+        bail!("--context-budget must be at least 100 tokens");
+    }
+    if keep_recent_turns == 0 {
+        bail!("--keep-recent-turns must be at least 1");
     }
 
     let mut approval_mode = parse_approval(&approval)?;
@@ -480,6 +728,10 @@ async fn run_exec(
                 backend = "approval-fallback";
             }
         }
+    }
+
+    if json && approval_mode == ApprovalMode::Ask {
+        bail!("--json cannot prompt for approval; use --approval never or a working sandbox");
     }
 
     let preset = parse_provider(&preset)?;
@@ -570,35 +822,67 @@ async fn run_exec(
         ts: now_ms(),
     })?;
 
-    eprintln!(
-        "niucode exec · {} · model={model} · auth={auth_source} · cwd={}",
-        provider.name(),
-        working_dir.display()
-    );
-    eprintln!(
-        "policy: sandbox={} network={} approval={} backend={backend}",
-        policy.mode.as_str(),
-        policy.network.as_str(),
-        approval_mode.as_str()
-    );
-    if let Some(path) = &replay {
-        eprintln!("replay: {}", path.display());
+    if !json {
+        eprintln!(
+            "niucode exec · {} · model={model} · auth={auth_source} · cwd={}",
+            provider.name(),
+            working_dir.display()
+        );
+        eprintln!(
+            "policy: sandbox={} network={} approval={} backend={backend}",
+            policy.mode.as_str(),
+            policy.network.as_str(),
+            approval_mode.as_str()
+        );
+        eprintln!("context: budget={context_budget} trigger=75% keep_recent={keep_recent_turns}");
+        if let Some(path) = &replay {
+            eprintln!("replay: {}", path.display());
+        }
+        if !history.is_empty() {
+            eprintln!("resumed: {} messages", history.len());
+        }
+        eprintln!("session: {}", session.path().display());
     }
-    if !history.is_empty() {
-        eprintln!("resumed: {} messages", history.len());
-    }
-    eprintln!("session: {}", session.path().display());
 
     let mut agent_config = AgentConfig::new(model, working_dir);
     agent_config.max_steps = max_steps;
     agent_config.sandbox = policy;
     agent_config.approval = approval_mode;
     agent_config.allow_unsandboxed = allow_unsandboxed;
+    agent_config.context.budget_tokens = context_budget;
+    agent_config.context.keep_recent_turns = keep_recent_turns;
+    let extension_host = mount_extensions(&agent_config.working_dir, &mut session).await?;
+    agent_config.extension_host = extension_host.clone();
+
+    if json {
+        emit_json(json!({
+            "type": "start",
+            "protocol": 1,
+            "session": session.path().display().to_string(),
+            "model": agent_config.model,
+            "provider": provider.name(),
+            "cwd": agent_config.working_dir.display().to_string(),
+            "sandbox": policy.mode.as_str(),
+            "network": policy.network.as_str(),
+            "approval": approval_mode.as_str(),
+            "backend": backend,
+        }));
+    }
 
     let mut approver = |request: &ApprovalRequest| -> bool {
-        eprintln!("\napproval required: {}", request.summary);
+        if json {
+            emit_json(json!({
+                "type": "warning",
+                "message": format!("approval requested in json mode; denied: {}", request.summary),
+            }));
+            return false;
+        }
+        eprintln!(
+            "\napproval required: {}",
+            diff::clean_text(&request.summary)
+        );
         if let Some(preview) = &request.preview {
-            eprintln!("{preview}");
+            eprint!("{}", diff::render_plain(preview, 100));
         }
         eprint!("allow? [y/N] ");
         let _ = std::io::stderr().flush();
@@ -611,32 +895,63 @@ async fn run_exec(
 
     let mut line_open = false;
     let result = {
-        let mut observer = |event: AgentEvent| match event {
-            AgentEvent::TextDelta(delta) => {
-                print!("{delta}");
-                let _ = std::io::stdout().flush();
-                line_open = !delta.ends_with('\n');
+        let mut observer = |event: AgentEvent| {
+            if json {
+                emit_json(event_json(&event));
+                return;
             }
-            AgentEvent::ReasoningDelta(_) => {}
-            AgentEvent::ToolCall { name, input } => {
-                if line_open {
-                    println!();
-                    line_open = false;
+            match event {
+                AgentEvent::TextDelta(delta) => {
+                    print!("{delta}");
+                    let _ = std::io::stdout().flush();
+                    line_open = !delta.ends_with('\n');
                 }
-                eprintln!("→ {name} {}", compact_json(&input));
-            }
-            AgentEvent::ToolResult { name, ok, summary } => {
-                eprintln!("← {name} {} {}", if ok { "ok" } else { "error" }, summary);
-            }
-            AgentEvent::TurnEnd { usage } => {
-                if line_open {
-                    println!();
-                    line_open = false;
+                AgentEvent::ReasoningDelta(_) => {}
+                AgentEvent::ToolCall { name, input } => {
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    eprintln!("→ {name} {}", compact_json(&input));
                 }
-                eprintln!(
-                    "turn usage: in={} out={} cached={}",
-                    usage.input_tokens, usage.output_tokens, usage.cached_tokens
+                AgentEvent::ToolResult {
+                    name, ok, summary, ..
+                } => {
+                    eprintln!("← {name} {} {}", if ok { "ok" } else { "error" }, summary);
+                }
+                AgentEvent::TurnEnd { usage } => {
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    eprintln!(
+                        "turn usage: in={} out={} cached={} cache={}%",
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.cached_tokens,
+                        usage.cache_hit_percent()
+                    );
+                }
+                AgentEvent::Compaction {
+                    replaced_events,
+                    before_tokens,
+                    after_tokens,
+                } => {
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    eprintln!(
+                    "compacted: {replaced_events} events · ~{before_tokens} → ~{after_tokens} tokens"
                 );
+                }
+                AgentEvent::Warning(message) => {
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    eprintln!("warning: {}", diff::clean_text(&message));
+                }
             }
         };
         let run = run_with_history(
@@ -656,32 +971,107 @@ async fn run_exec(
     };
 
     if result.is_none() {
+        unmount_extensions(&extension_host, &mut session).await?;
         let _ = session.append(&Event::SessionEnd { ts: now_ms() });
-        eprintln!("\ncancelled");
+        if json {
+            emit_json(json!({"type": "cancelled"}));
+        } else {
+            eprintln!("\ncancelled");
+        }
         return Ok(());
     }
 
     let result = result.expect("checked above");
-    if result.is_err() {
-        eprintln!("session: {}", session.path().display());
-    }
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            unmount_extensions(&extension_host, &mut session).await?;
+            if json {
+                emit_json(json!({"type": "error", "message": format!("{error:#}")}));
+            }
+            eprintln!("session: {}", session.path().display());
+            return Err(error);
+        }
+    };
     if let Some(path) = &record {
         eprintln!("fixture: {}", path.display());
     }
+    unmount_extensions(&extension_host, &mut session).await?;
 
-    let outcome = result?;
-    if !outcome.final_text.ends_with('\n') {
-        println!();
+    if json {
+        emit_json(json!({
+            "type": "done",
+            "turns": outcome.turns,
+            "usage": usage_json(&outcome.usage),
+            "session": session.path().display().to_string(),
+        }));
+    } else {
+        if !outcome.final_text.ends_with('\n') {
+            println!();
+        }
+        eprintln!(
+            "done: {} turns, input={} output={} cached={} cache={}% · {}",
+            outcome.turns,
+            outcome.usage.input_tokens,
+            outcome.usage.output_tokens,
+            outcome.usage.cached_tokens,
+            outcome.usage.cache_hit_percent(),
+            session.path().display()
+        );
     }
-    eprintln!(
-        "done: {} turns, input={} output={} cached={} · {}",
-        outcome.turns,
-        outcome.usage.input_tokens,
-        outcome.usage.output_tokens,
-        outcome.usage.cached_tokens,
-        session.path().display()
-    );
     Ok(())
+}
+
+fn emit_json(value: serde_json::Value) {
+    match serde_json::to_string(&value) {
+        Ok(line) => {
+            println!("{line}");
+            let _ = std::io::stdout().flush();
+        }
+        Err(error) => eprintln!("json encode error: {error}"),
+    }
+}
+
+fn usage_json(usage: &niucode_core::Usage) -> serde_json::Value {
+    json!({
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cached_tokens": usage.cached_tokens,
+        "reasoning_tokens": usage.reasoning_tokens,
+        "cache_hit_percent": usage.cache_hit_percent(),
+    })
+}
+
+fn event_json(event: &AgentEvent) -> serde_json::Value {
+    match event {
+        AgentEvent::TextDelta(text) => json!({"type": "text_delta", "text": text}),
+        AgentEvent::ReasoningDelta(text) => json!({"type": "reasoning_delta", "text": text}),
+        AgentEvent::ToolCall { name, input } => {
+            json!({"type": "tool_call", "name": name, "input": input})
+        }
+        AgentEvent::ToolResult {
+            name, ok, summary, ..
+        } => json!({
+            "type": "tool_result",
+            "name": name,
+            "ok": ok,
+            "summary": summary,
+        }),
+        AgentEvent::TurnEnd { usage } => {
+            json!({"type": "turn_end", "usage": usage_json(usage)})
+        }
+        AgentEvent::Compaction {
+            replaced_events,
+            before_tokens,
+            after_tokens,
+        } => json!({
+            "type": "compaction",
+            "replaced_events": replaced_events,
+            "before_tokens": before_tokens,
+            "after_tokens": after_tokens,
+        }),
+        AgentEvent::Warning(message) => json!({"type": "warning", "message": message}),
+    }
 }
 
 fn parse_sandbox(value: &str) -> Result<SandboxMode> {
@@ -952,18 +1342,53 @@ fn default_sessions_dir() -> PathBuf {
     PathBuf::from(".niucode").join("sessions")
 }
 
-fn print_banner() {
-    println!(
-        "niucode {} · minimal, observable coding agent",
-        env!("CARGO_PKG_VERSION")
-    );
-    println!();
-    println!("status   M1 · TUI");
-    println!("docs     docs/index.html");
-    println!("sessions {}", default_sessions_dir().display());
-    println!();
-    println!("auth     niucode auth set deepseek");
-    println!("next     niucode tui");
-    println!("         niucode exec \"find and fix a small bug\"");
-    println!("         cargo xtask dashboard");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use niucode_core::Usage;
+
+    #[test]
+    fn json_protocol_maps_agent_events() {
+        let text = event_json(&AgentEvent::TextDelta("hi".into()));
+        assert_eq!(text["type"], "text_delta");
+        assert_eq!(text["text"], "hi");
+
+        let tool = event_json(&AgentEvent::ToolResult {
+            name: "read".into(),
+            ok: true,
+            summary: "read a.txt".into(),
+            output: "full output is not part of the protocol".into(),
+        });
+        assert_eq!(tool["type"], "tool_result");
+        assert_eq!(tool["ok"], true);
+        assert_eq!(tool["summary"], "read a.txt");
+        assert!(tool.get("output").is_none());
+
+        let turn = event_json(&AgentEvent::TurnEnd {
+            usage: Usage {
+                input_tokens: 100,
+                output_tokens: 10,
+                cached_tokens: 42,
+                reasoning_tokens: 0,
+            },
+        });
+        assert_eq!(turn["type"], "turn_end");
+        assert_eq!(turn["usage"]["cached_tokens"], 42);
+        assert_eq!(turn["usage"]["cache_hit_percent"], 42);
+    }
+
+    #[test]
+    fn json_protocol_maps_compaction_and_warnings() {
+        let compaction = event_json(&AgentEvent::Compaction {
+            replaced_events: 9,
+            before_tokens: 2000,
+            after_tokens: 300,
+        });
+        assert_eq!(compaction["type"], "compaction");
+        assert_eq!(compaction["replaced_events"], 9);
+
+        let warning = event_json(&AgentEvent::Warning("careful".into()));
+        assert_eq!(warning["type"], "warning");
+        assert_eq!(warning["message"], "careful");
+    }
 }

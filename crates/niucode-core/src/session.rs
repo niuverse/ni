@@ -258,3 +258,28 @@ mod tests {
         fs::remove_dir_all(dir).expect("cleanup");
     }
 }
+
+#[cfg(test)]
+mod compaction_tests {
+    use crate::event::Event;
+
+    #[test]
+    fn old_compaction_events_default_token_counts() {
+        let raw = r#"{"type":"compaction","summary":"handoff","upto":3,"ts":1}"#;
+        let event: Event = serde_json::from_str(raw).expect("parse");
+        match event {
+            Event::Compaction {
+                summary,
+                upto,
+                before_tokens,
+                after_tokens,
+                ..
+            } => {
+                assert_eq!(summary, "handoff");
+                assert_eq!(upto, 3);
+                assert_eq!((before_tokens, after_tokens), (0, 0));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+}

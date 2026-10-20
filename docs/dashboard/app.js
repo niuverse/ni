@@ -801,6 +801,8 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#080a0f' : '#f1ede4');
   }
 
   function bindEvents() {
@@ -899,8 +901,10 @@
         return null;
       }
     })();
-    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    applyTheme(saved || preferred);
+    // niuverse ships dark-first; the toggle, saved preference, and ?theme= still win.
+    const forced = new URLSearchParams(location.search).get('theme');
+    const initial = forced === 'light' || forced === 'dark' ? forced : saved || 'dark';
+    applyTheme(initial);
     bindEvents();
 
     if (location.hash) {

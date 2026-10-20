@@ -5,7 +5,7 @@
     "title": "niucode",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M1 · Diff",
+    "status": "M4 · Extensible",
     "repo": "niuverse/niucode",
     "language": "Rust"
   },
@@ -24,7 +24,7 @@
     {
       "id": "M1",
       "title": "Interaction",
-      "status": "active",
+      "status": "done",
       "goal": "把审批、沙箱和流式交互补齐，让 harness 可以放心跑长任务。",
       "exit": [
         "TUI 流式输出与 diff 预览",
@@ -35,7 +35,7 @@
     {
       "id": "M2",
       "title": "Context",
-      "status": "planned",
+      "status": "done",
       "goal": "让长会话稳定且便宜：压缩、分层指令、缓存可观测。",
       "exit": [
         "compaction 生成可执行 handoff",
@@ -46,12 +46,24 @@
     {
       "id": "M3",
       "title": "Scale",
-      "status": "planned",
+      "status": "done",
       "goal": "多会话、回放与子代理。",
       "exit": [
         "exec --json 成为稳定协议",
         "fork / replay 可用",
         "subagent 有独立日志并可汇总"
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "Extensible",
+      "status": "active",
+      "goal": "在不破坏事件日志、replay 和安全边界的前提下，让 niucode 具备 capability 级扩展与更顺手的交互。",
+      "exit": [
+        "command registry 驱动 TUI 补全与帮助",
+        "/plan 是只读 mode，/goal 是可持久目标",
+        "external tools 走 session 级 extension host",
+        "subagent 有 Explore/Worker capability profile"
       ]
     }
   ],
@@ -88,14 +100,19 @@
       "title": "CLI",
       "layer": "interface",
       "status": "active",
-      "summary": "参数解析、session/auth/provider 命令，niucode exec headless 入口与 niucode tui 启动。",
-      "contract": "niucode exec / niucode tui 启动运行；niucode session 管理日志。不持有对话状态。",
+      "summary": "参数解析、session/auth/provider 命令，niucode exec headless 入口（含 --json）、niucode tui 启动、离线 replay 与 fork。",
+      "contract": "niucode exec / niucode tui 启动运行；niucode session 管理日志；niucode replay 重建投影；niucode fork 复制前缀。不持有对话状态。",
       "paths": [
-        "crates/niucode-cli/src/main.rs"
+        "crates/niucode-cli/src/main.rs",
+        "crates/niucode-cli/src/session_ops.rs"
       ],
       "notes": [
         "CLI 只做参数与生命周期，不实现 turn 逻辑。",
-        "输出模式分 human 与 --json，后者从第一天就稳定。"
+        "输出模式分 human 与 --json，后者从第一天就稳定。",
+        "exec/tui 暴露 --context-budget 与 --keep-recent-turns。",
+        "replay / fork 不调用 provider；fork 只读源文件。",
+        "exec --json 输出 protocol=1 的 JSONL 事件流。",
+        "裸 niucode 直接启动 TUI。"
       ]
     },
     {
@@ -103,15 +120,28 @@
       "title": "TUI",
       "layer": "interface",
       "status": "active",
-      "summary": "线性 TUI：流式文本、thinking 折叠、工具状态、单键审批、取消与会话复用。",
-      "contract": "只消费 AgentEvent；调用 run_with_history；不 import loop 内部；审批 a/d/s，Ctrl-C 取消当前 turn。",
+      "summary": "线性 TUI：Geek 风格块字 logo、自定义行编辑、slash 自动菜单、历史、符号化工具状态、单键审批、diff pager、输出折叠、缓存率、取消与会话复用。",
+      "contract": "只消费 AgentEvent 与 ApprovalRequest；调用 run_with_history；审批 a/d/s，Ctrl-C 取消当前 turn；审批 diff 用宽度感知 pager，不复制路径策略。",
       "paths": [
-        "crates/niucode-cli/src/tui.rs"
+        "crates/niucode-cli/src/tui.rs",
+        "crates/niucode-cli/src/slash.rs",
+        "crates/niucode-cli/src/theme.rs",
+        "crates/niucode-cli/src/diff.rs",
+        "crates/niucode-cli/src/review.rs",
+        "crates/niucode-cli/src/editor.rs"
       ],
       "notes": [
-        "线性输出优先；全屏布局/滚动区未做。",
-        "diff 预览是工具输入的 +/- 片段，完整 diff 在 M1-003。",
-        "非 TTY 时审批退化为逐行输入，方便管道测试。"
+        "线性会话输出；全屏布局未做，pager 只在审批时接管屏幕。",
+        "slash 命令：/init /clear /fork /status /session /last /help /exit；未知 /foo 不发给模型。",
+        "/clear 新建 session，/fork 复制前缀并切换，旧日志保留。",
+        "diff 渲染按终端宽度重排；工具输出超过 12 行/2 KB 折叠，:last 展开。",
+        "颜色只在 TTY 开启，遵循 NO_COLOR / CLICOLOR=0 / TERM=dumb。",
+        "非 TTY 时审批退化为逐行输入，方便管道测试。",
+        "Tab 补全 slash 命令并显示带说明的候选；唯一前缀显示内联 hint。",
+        "↑/↓ 历史，Ctrl-C 清空当前行，Ctrl-D 退出，Ctrl-L 清屏；非 TTY 退化为 read_line。",
+        "裸 niucode 直接进入 TUI。",
+        "M4-001: readable slash auto-menu replaces the rustyline ghost hint.",
+        "/plan toggles read-only plan mode; /goal persists as an event-backed objective label."
       ]
     },
     {
@@ -119,30 +149,38 @@
       "title": "Agent Loop",
       "layer": "engine",
       "status": "active",
-      "summary": "最小 turn loop：流式文本、tool call 聚合、工具派发、事件落盘。",
-      "contract": "run(provider, session, config, prompt, observer)；不解析 wire format，不实现工具。",
+      "summary": "最小 turn loop：流式文本、tool call 聚合、工具派发、事件落盘、上下文压缩、分层指令与并行只读 subagent。",
+      "contract": "run(provider, session, config, prompt, observer)；不解析 wire format，不实现工具；请求前按预算压缩；subagent 任务有独立日志与预算。",
       "paths": [
-        "crates/niucode-agent/src/lib.rs"
+        "crates/niucode-agent/src/lib.rs",
+        "crates/niucode-agent/src/subagent.rs"
       ],
       "notes": [
         "assistant 消息先落盘，再落 tool_result。",
         "max steps 到达时停止并报错，不静默退出。",
-        "Ctrl-C 通过 drop future 取消 provider/工具；bash 进程组被清理。"
+        "Ctrl-C 通过 drop future 取消 provider/工具；bash 进程组被清理。",
+        "请求前检查上下文预算；压缩成功才追加 compaction 事件，失败保留原上下文。",
+        "subagent 只读、并行、每个任务独立 session；父 session 记录 spawn/result。",
+        "PlanMode/GoalSet/GoalCleared events are kernel-defined; plan/goal are injected into the system prompt, not a second state store."
       ]
     },
     {
       "id": "context",
       "title": "Context",
       "layer": "engine",
-      "status": "planned",
-      "summary": "把全量日志投影成模型上下文：预算、裁剪、compaction。",
-      "contract": "project(log, budget) -> Context；有损但不修改日志。",
+      "status": "active",
+      "summary": "把全量事件日志投影成模型上下文：分层 AGENTS.md、token 估算、75% 预算触发、确定性 handoff、resume 回放与缓存命中率。",
+      "contract": "project_history(events) -> Result<Vec<ChatMessage>>；build_handoff(events, keep_recent_turns) -> Result<Handoff>；load(cwd) -> Instructions；只读日志，压缩落成 compaction 事件。",
       "paths": [
-        "crates/niucode-core/src/context.rs"
+        "crates/niucode-agent/src/context.rs",
+        "crates/niucode-agent/src/instructions.rs"
       ],
       "notes": [
-        "日志是全量，上下文是投影；压缩只影响投影。",
-        "保持前缀稳定以命中 provider prompt cache。"
+        "日志是全量，上下文是投影；压缩只影响投影，不修改历史。",
+        "75% 预算触发确定性 handoff；保留最近 N 个 user turn，单 turn 长任务回退到 assistant 边界。",
+        "compaction.upto 是事件绝对下标；最后一个 compaction 生效。",
+        "AGENTS.md 每次 run 从 cwd 向上发现，近者优先，追加在稳定前缀之后。",
+        "instructions 事件记录 sources + digest；缓存命中率从 turn_end.usage 派生。"
       ]
     },
     {
@@ -171,15 +209,18 @@
       "title": "Tools",
       "layer": "adapters",
       "status": "active",
-      "summary": "六个工具：read / write / edit / grep / glob / bash；路径限制、read-before-write、搜索预算、进程组超时。",
-      "contract": "Toolbox::execute(name, input) -> ToolResult；已有文件必须先 read；grep/glob 尊重 .gitignore；bash 使用独立进程组。",
+      "summary": "六个基础工具 + 只读 subagent 编排：read / write / edit / grep / glob / bash；路径限制、read-before-write、搜索预算、进程组超时与审批 diff。",
+      "contract": "Toolbox::execute(name, input) -> ToolResult；preview -> ChangePreview；subagent 由 agent loop 拦截；已有文件必须先 read。",
       "paths": [
-        "crates/niucode-tools/src/lib.rs"
+        "crates/niucode-tools/src/lib.rs",
+        "crates/niucode-tools/src/preview.rs"
       ],
       "notes": [
         "grep / glob 使用 ignore + regex/globset，不依赖外部 rg。",
         "bash 超时会杀进程组，尾部 20KB + 临时输出路径。",
-        "写操作串行；当前工具调用顺序执行。"
+        "写操作串行；当前工具调用顺序执行。",
+        "preview 只读真实文件，不修改 observed/磁盘；执行时重新校验（TOCTOU）。",
+        "subagent 的 schema 在 tools，执行在 agent loop。"
       ]
     },
     {
@@ -203,15 +244,16 @@
       "title": "Session Log",
       "layer": "state",
       "status": "active",
-      "summary": "append-only JSONL 事件日志，resume 与 fork 的基础。",
-      "contract": "SessionLog::append 只追加；load 容忍坏尾行并报告 warning；日志是唯一真相。",
+      "summary": "append-only JSONL 事件日志，稳定事件序号、resume、replay 与 fork 的基础；记录 policy、approval、instructions、compaction、fork 等审计事件。",
+      "contract": "SessionLog::append 只追加；load 容忍坏尾行并报告 warning；事件 ID 是解码事件序号；日志是唯一真相。",
       "paths": [
         "crates/niucode-core/src/session.rs",
         "crates/niucode-core/src/event.rs"
       ],
       "notes": [
         "每条事件立即 flush，进程崩溃最多丢最后一行。",
-        "内存状态是日志的 fold，不维护第二份真相。"
+        "内存状态是日志的 fold，不维护第二份真相。",
+        "事件 ID 是解码事件序号，不写入事件内容。"
       ]
     },
     {
@@ -219,18 +261,22 @@
       "title": "Dashboard",
       "layer": "engineering",
       "status": "active",
-      "summary": "从 project.json、模块、卡片和 Markdown 生成 architecture-first 的离线单文件看板。",
+      "summary": "离线单文件看板：niuverse 组织 logo/favicon、dark-first orbital console 视觉、架构/Work/Docs/Decisions 四视图。",
       "contract": "默认 Architecture；Work / Docs / Decisions 为二级视图；cargo xtask dashboard 可重复构建，--check 保证生成物不过期。",
       "paths": [
         "crates/xtask/src/main.rs",
         "docs/dashboard/app.js",
         "docs/dashboard/style.css",
-        "docs/dashboard/template.html"
+        "docs/dashboard/template.html",
+        "docs/dashboard/logo.png",
+        "docs/dashboard/favicon.png"
       ],
       "notes": [
         "架构视图不显示进度装饰；模块状态只表示落地程度。",
         "浏览器只读；改状态走仓库，避免第二个真相源。",
-        "不引入前端框架；单文件离线是硬约束。"
+        "不引入前端框架；单文件离线是硬约束。",
+        "品牌 mark/favicon 来自 niuverse 组织头像，构建时内嵌为 data URI，保持单文件离线。",
+        "默认 dark，支持 localStorage 与 ?theme=light|dark；不引入外部字体或图片。"
       ]
     },
     {
@@ -251,6 +297,23 @@
         "文件写入使用 0600，状态会提示 insecure 权限。",
         "不支持网页账号 cookie；账号 OAuth 需要独立 ADR。"
       ]
+    },
+    {
+      "id": "extensions",
+      "title": "Extension Host",
+      "layer": "adapters",
+      "status": "active",
+      "summary": "session 级 sidecar host：发现 .niucode/extensions/*.toml，JSON-RPC initialize/tools/call/shutdown，把外部工具并入 agent tool specs。",
+      "contract": "discover(workspace, reserved) -> host；host.specs(); host.execute(name, input); host.shutdown()。不拥有 session 或 loop。",
+      "paths": [
+        "crates/niucode-extension/src/lib.rs"
+      ],
+      "notes": [
+        "一插件一进程；v1 每插件串行调用。",
+        "env_clear：sidecar 不继承 API key。",
+        "mount/unmount/error 写入父 session 事件。",
+        "capability sandbox、worker pool、subagent 共享在 M4-007。"
+      ]
     }
   ],
   "relations": [
@@ -265,9 +328,14 @@
       "label": "run"
     },
     {
+      "from": "tui",
+      "to": "tools",
+      "label": "preview"
+    },
+    {
       "from": "loop",
       "to": "context",
-      "label": "project"
+      "label": "project / compact"
     },
     {
       "from": "loop",
@@ -298,6 +366,21 @@
       "from": "cli",
       "to": "auth",
       "label": "resolve"
+    },
+    {
+      "from": "loop",
+      "to": "extensions",
+      "label": "external tools"
+    },
+    {
+      "from": "cli",
+      "to": "extensions",
+      "label": "mount"
+    },
+    {
+      "from": "tui",
+      "to": "extensions",
+      "label": "mount"
     }
   ],
   "events": [
@@ -428,6 +511,201 @@
       "refs": [
         "M1-001",
         "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Diff 预览归工具层，客户端只负责渲染",
+      "detail": "Toolbox::preview 按真实文件生成结构化 unified diff；loop 转发 ChangePreview，TUI 用宽度感知 pager 渲染，headless 输出纯文本。ADR-0007。",
+      "refs": [
+        "adr-0007",
+        "M1-003"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M1 完成：审批 diff pager 与工具输出折叠",
+      "detail": "完整 unified diff、按文件跳转、resize 重排、输出折叠和 :last 展开落地；M1 交互面收口。",
+      "refs": [
+        "M1-003",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Compaction 是事件日志上的确定性 handoff",
+      "detail": "按估算 token 的 75% 触发；保留最近 N 个 user turn，其余事件生成结构化 handoff。compaction.upto 是绝对事件下标，投影在其处插入摘要且不重写日志。ADR-0008。",
+      "refs": [
+        "adr-0008",
+        "M2-001",
+        "context"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M2-001 compaction 落地",
+      "detail": "上下文估算、确定性 handoff、compaction 事件、resume 回放与失败保留都已验证；下一步是 AGENTS.md 分层与缓存指标。",
+      "refs": [
+        "M2-001",
+        "context"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "分层 AGENTS.md 与缓存指标留在事件日志",
+      "detail": "每次 run 从 cwd 向上发现 AGENTS.md，近者优先，追加在稳定 system prompt 之后；instructions 事件记录 sources + digest；缓存命中率从 turn_end.usage 派生，不引入 Runs 看板。ADR-0009。",
+      "refs": [
+        "adr-0009",
+        "M2-002",
+        "context"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M2 完成：分层指令与缓存指标",
+      "detail": "AGENTS.md 分层发现、instructions 审计事件、缓存命中率与 TUI 风格化落地；看板保持四视图。下一步 M3-001。",
+      "refs": [
+        "M2-001",
+        "M2-002",
+        "context",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "事件 ID 用稳定序号，fork 复制前缀并追加溯源",
+      "detail": "事件 ID 是解码事件的 1-based 序号；replay 只做投影；fork 校验 ID、复制前缀、末尾追加 fork 事件，compaction.upto 不变。ADR-0010。",
+      "refs": [
+        "adr-0010",
+        "M3-001",
+        "session"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M3-001 replay 与 fork 落地",
+      "detail": "离线投影 replay、稳定事件 ID、前缀 fork、坏行截断与溯源事件都已验证；下一步 M3-002 subagent。",
+      "refs": [
+        "M3-001",
+        "session"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Subagent 是带独立日志的只读子运行",
+      "detail": "一个 subagent 工具并行跑 1–4 个只读任务；每个任务独立 session，父 session 只记录 spawn/result 和摘要路径。ADR-0011。",
+      "refs": [
+        "adr-0011",
+        "M3-002",
+        "loop"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "exec --json 是稳定的 JSONL 协议",
+      "detail": "stdout 一行一个 JSON 事件，start 带 protocol=1；tool_result 只含 summary，完整输出留在 session 日志。ADR-0012。",
+      "refs": [
+        "adr-0012",
+        "M3-002",
+        "cli"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M3 完成：replay/fork、subagent 与 JSONL 协议",
+      "detail": "稳定事件 ID、离线 replay、前缀 fork、并行只读 subagent 和 exec --json 都已落地；M0–M3 计划卡全部完成。",
+      "refs": [
+        "M3-001",
+        "M3-002",
+        "exec"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "小内核 + 外置 capability 插件",
+      "detail": "内置工具、loop、context、policy、auth、session 留在内核；external tools/commands 走 session 级 sidecar host；WASM 只做纯计算 tier。ADR-0013。",
+      "refs": [
+        "adr-0013",
+        "M4-002",
+        "loop"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Profile、Plan mode 与 Goal 分离",
+      "detail": "用户只看 ask/review/full-access/ci；/plan 是运行时只读 mode；/goal 是目标标签；access/approval/reviewer/risk 留在实现层。ADR-0014。",
+      "refs": [
+        "adr-0014",
+        "M4-001",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4 开始：可扩展与更顺手的交互",
+      "detail": "M4-001 先落 CommandRegistry、TUI 自动菜单、/plan 和 /goal；extension host 与 subagent profile 随后。",
+      "refs": [
+        "M4-001",
+        "M4-002",
+        "M4-003"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-001 完成：TUI 自动菜单、/plan、/goal",
+      "detail": "CommandRegistry 驱动自动补全和帮助；自定义行编辑器替换 rustyline；/plan 只读模式与 /goal 目标标签落事件日志。",
+      "refs": [
+        "M4-001",
+        "adr-0014",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "M4-002 v1 完成：sidecar external tools",
+      "detail": "workspace manifest + JSON-RPC initialize/tools/call/shutdown；env scrub、timeout、mount/unmount provenance；capability sandbox 与 worker pool 进 M4-007。",
+      "refs": [
+        "M4-002",
+        "M4-007",
+        "adr-0013",
+        "extensions"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "M4-002 v1 只做可信本地 sidecar",
+      "detail": "先验证 manifest/协议/事件/超时；不把未实现的 bwrap 网络隔离和 worker pool 写成已完成，统一进 M4-007。",
+      "refs": [
+        "M4-002",
+        "M4-007",
+        "adr-0013"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "Dashboard 重塑为 niuverse orbital console",
+      "detail": "使用组织 logo 与 favicon；dark-first 视觉、serif 标题、架构卡片、详情 inspector 与响应式布局全面重做。",
+      "refs": [
+        "dashboard",
+        "M4-001"
       ]
     }
   ]

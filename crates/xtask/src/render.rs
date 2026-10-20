@@ -4,6 +4,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
+use base64::Engine as _;
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
 
@@ -72,6 +73,19 @@ pub fn write_dashboard(root: &Path, dashboard: &Dashboard, check: bool) -> Resul
         .with_context(|| format!("read {}", style_path.display()))?;
     let app =
         fs::read_to_string(&app_path).with_context(|| format!("read {}", app_path.display()))?;
+    let logo_path = root.join("docs/dashboard/logo.png");
+    let favicon_path = root.join("docs/dashboard/favicon.png");
+    let logo = fs::read(&logo_path).with_context(|| format!("read {}", logo_path.display()))?;
+    let favicon =
+        fs::read(&favicon_path).with_context(|| format!("read {}", favicon_path.display()))?;
+    let logo_uri = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(logo)
+    );
+    let favicon_uri = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(favicon)
+    );
 
     let data = serde_json::to_string(dashboard).context("serialize dashboard data")?;
     let data = escape_for_script(&data);
@@ -82,6 +96,8 @@ pub fn write_dashboard(root: &Path, dashboard: &Dashboard, check: bool) -> Resul
     let html = template
         .replace("{{STYLE}}", &style)
         .replace("{{APP}}", &app)
+        .replace("{{LOGO}}", &logo_uri)
+        .replace("{{FAVICON}}", &favicon_uri)
         .replace("{{DATA}}", &data);
 
     let index_path = root.join("docs/index.html");
@@ -123,6 +139,8 @@ pub fn write_dashboard(root: &Path, dashboard: &Dashboard, check: bool) -> Resul
             "docs/dashboard/template.html".into(),
             "docs/dashboard/style.css".into(),
             "docs/dashboard/app.js".into(),
+            "docs/dashboard/logo.png".into(),
+            "docs/dashboard/favicon.png".into(),
         ],
     };
     let receipt_path = root.join("docs/dashboard/receipt.json");

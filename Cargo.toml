@@ -6,6 +6,7 @@ members = [
     "crates/niucode-provider",
     "crates/niucode-tools",
     "crates/niucode-agent",
+    "crates/niucode-extension",
     "crates/niucode-cli",
     "crates/xtask",
 ]
@@ -18,6 +19,7 @@ repository = "https://github.com/niuverse/niucode"
 
 [workspace.dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 async-stream = "0.3"
 async-trait = "0.1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
@@ -37,4 +39,5 @@ thiserror = "2.0"
 tokio-util = { version = "0.7", features = ["codec", "io-util"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "process", "signal"] }
 toml = "0.8"
+unicode-width = "0.2"
 walkdir = "2.5"

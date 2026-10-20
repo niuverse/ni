@@ -48,8 +48,8 @@ state = fold(events)
 ## 投影规则
 
 1. 原始事件永远保留。
-2. 最后一个 `compaction` 之前的消息不进入模型上下文，替换为摘要。
-3. `tool_result` 必须和对应 `assistant_message.tool_calls` 成对出现；缺失时投影报错，不猜。
+2. 最后一个 `compaction` 的 `upto` 之前的事件不进入模型上下文，替换为摘要；`upto` 是绝对事件下标，精确语义见 ADR-0008。
+3. `tool_result` 必须和对应 `assistant_message.tool_calls` 成对出现；日志里缺失 result（例如取消）时，投影补一条 cancelled tool result。
 4. reasoning 是否进入上下文由 provider 适配层决定，日志始终保留原文。
 5. 投影是纯函数：相同日志 + 相同预算 → 相同上下文。
 

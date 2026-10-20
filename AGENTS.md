@@ -79,7 +79,9 @@ A task is not done until:
 
 ## Current focus
 
-M1-001 and M1-002 are done: linear `niucode tui`, bwrap `workspace-write + network off`,
-single-key approval, and `policy` / `approval` audit events. The next card is
-`M1-003` (full diff preview and tool-output folding). Do not start MCP, subagents,
-or a plugin system before the interaction surface is stable.
+M0–M3 are done; M4 is active. M4-001 and M4-002 are done: CommandRegistry,
+TUI slash auto-menu, `/plan`, `/goal`, and the session-scoped sidecar
+extension host for external tools. M4-003 (subagent Explore/Worker capability
+profiles) is next. Keep the event log
+as the only durable state; plugins are capability-scoped and out-of-process,
+never a second durable store.
