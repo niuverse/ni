@@ -1,6 +1,6 @@
 +++
 id = "M0-011"
-title = "ni auth：keyring 与安全凭证解析"
+title = "niucode auth：keyring 与安全凭证解析"
 status = "done"
 milestone = "M0"
 module = "auth"
@@ -14,11 +14,11 @@ docs = ["auth", "adr-0005"]
 
 ## 范围
 
-- 新增 `ni-auth`：凭证解析顺序 env → OS keyring → 0600 文件。
-- `ni auth set <provider>` 隐藏输入，或 `--stdin` 供脚本使用。
-- `ni auth status` 只显示来源，不打印密钥。
-- `ni auth unset <provider>` 清理 keyring 和文件。
-- `ni provider test` 通过 `ni-auth` 取 key，不再只读环境变量。
+- 新增 `niucode-auth`：凭证解析顺序 env → OS keyring → 0600 文件。
+- `niucode auth set <provider>` 隐藏输入，或 `--stdin` 供脚本使用。
+- `niucode auth status` 只显示来源，不打印密钥。
+- `niucode auth unset <provider>` 清理 keyring 和文件。
+- `niucode provider test` 通过 `niucode-auth` 取 key，不再只读环境变量。
 
 ## 验收
 
@@ -30,4 +30,4 @@ docs = ["auth", "adr-0005"]
 
 ## 记录
 
-Linux 的 keyring 走 Secret Service（需要 DBus）；无桌面/容器环境可设置 `NI_AUTH_DISABLE_KEYRING=1` 强制文件。这个卡片只解决 API key 的登录体验；ChatGPT 账号 OAuth（SIWC）和 DeepSeek 网页账号不在范围内。
+Linux 的 keyring 走 Secret Service（需要 DBus）；无桌面/容器环境可设置 `NIUCODE_AUTH_DISABLE_KEYRING=1` 强制文件。这个卡片只解决 API key 的登录体验；ChatGPT 账号 OAuth（SIWC）和 DeepSeek 网页账号不在范围内。

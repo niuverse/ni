@@ -1,0 +1,16 @@
+[package]
+name = "niucode-agent"
+description = "Minimal turn loop for the niucode coding agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+niucode-core = { path = "../niucode-core" }
+niucode-provider = { path = "../niucode-provider" }
+niucode-tools = { path = "../niucode-tools" }
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

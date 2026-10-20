@@ -29,4 +29,4 @@ docs = ["provider", "architecture"]
 
 ## 记录
 
-实现 `ni-provider`：Provider trait、OpenAI-compatible SSE 客户端、DeepSeek preset、scripted provider，以及本地 TCP + SSE 测试（不访问网络）。录制的 DeepSeek SSE fixture 在 `crates/ni-provider/tests/fixtures/deepseek-tool-call.sse`。当前环境没有 API key，所以没有做真实 DeepSeek 调用；`ni provider test --preset deepseek` 可在配置 key 后验证。
+实现 `niucode-provider`：Provider trait、OpenAI-compatible SSE 客户端、DeepSeek preset、scripted provider，以及本地 TCP + SSE 测试（不访问网络）。录制的 DeepSeek SSE fixture 在 `crates/niucode-provider/tests/fixtures/deepseek-tool-call.sse`。当前环境没有 API key，所以没有做真实 DeepSeek 调用；`niucode provider test --preset deepseek` 可在配置 key 后验证。

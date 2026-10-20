@@ -13,7 +13,7 @@ Accepted · 2026-10-20
 
 ## 背景
 
-ni 是一个单二进制 CLI：长会话、流式子进程、沙箱、可能的多子代理。语言选型要在两端做取舍：
+niucode 是一个单二进制 CLI：长会话、流式子进程、沙箱、可能的多子代理。语言选型要在两端做取舍：
 
 - **运行时**：harness 自身耗时（SSE 解析、JSON、日志、调度）通常只占一个 turn 的 1–5ms，而模型 TTFT + 生成是 1–3s。换语言不会让 agent 明显变快。
 - **工程形态**：冷启动、常驻内存、单二进制分发、进程组/信号控制、原生沙箱，这些是 Rust 的真实优势。
@@ -25,11 +25,11 @@ ni 是一个单二进制 CLI：长会话、流式子进程、沙箱、可能的�
 
 ```text
 crates/
-  ni-core/       # 事件、会话、loop、context
-  ni-cli/        # 参数与生命周期
-  ni-provider/   # 后续：wire adapters
-  ni-tools/      # 后续：工具
-  ni-sandbox/    # 后续：策略与平台隔离
+  niucode-core/       # 事件、会话、loop、context
+  niucode-cli/        # 参数与生命周期
+  niucode-provider/   # 后续：wire adapters
+  niucode-tools/      # 后续：工具
+  niucode-sandbox/    # 后续：策略与平台隔离
   xtask/         # 仓库工具（看板构建）
 ```
 
@@ -52,7 +52,7 @@ crates/
 
 ## 缓解
 
-1. workspace 拆小 crate，`ni-core` 不依赖 CLI / TUI，增量编译范围小。
+1. workspace 拆小 crate，`niucode-core` 不依赖 CLI / TUI，增量编译范围小。
 2. `bacon` / `cargo-watch` + `cargo check` 作为内循环；链接器用 mold/lld。
 3. 控制 proc-macro 依赖，provider 边界允许 `serde_json::Value`，内部强类型。
 4. headless first，TUI last；loop / tools 用 scripted provider 离线测试。

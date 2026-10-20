@@ -11,7 +11,7 @@ completed = "2026-10-20"
 
 ## 范围
 
-- 三个 crate：`ni-core`、`ni-cli`、`xtask`。
+- 三个 crate：`niucode-core`、`niucode-cli`、`xtask`。
 - 统一 edition、依赖版本和 workspace lint 入口。
 - `cargo xtask dashboard` 作为仓库工具入口。
 

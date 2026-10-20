@@ -1,6 +1,6 @@
 +++
 id = "M0-012"
-title = "最小 ni exec 闭环"
+title = "最小 niucode exec 闭环"
 status = "done"
 milestone = "M0"
 module = "loop"
@@ -14,9 +14,9 @@ docs = ["exec", "architecture"]
 
 ## 范围
 
-- 新增 `ni-tools`：`read` / `write` / `edit` / `bash`，路径限制、read-before-write、输出截断。
-- 新增 `ni-agent`：turn loop、流式文本、tool call 聚合、工具派发、事件落盘、max steps。
-- `ni exec "<task>"`：通过 `ni-auth` 取 key，创建 session，流式输出。
+- 新增 `niucode-tools`：`read` / `write` / `edit` / `bash`，路径限制、read-before-write、输出截断。
+- 新增 `niucode-agent`：turn loop、流式文本、tool call 聚合、工具派发、事件落盘、max steps。
+- `niucode exec "<task>"`：通过 `niucode-auth` 取 key，创建 session，流式输出。
 - Session 事件：`session_start → user_message → assistant_message → turn_end → tool_result* → … → session_end`。
 
 ## 验收

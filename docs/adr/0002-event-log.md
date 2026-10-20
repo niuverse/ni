@@ -62,5 +62,5 @@ state = fold(events)
 ## 风险与缓解
 
 - 日志过大：按 session 归档，支持 `compact --archive`；看板 Runs 视图只读聚合指标。
-- 敏感信息：session 目录默认 `0700`；提供 `ni session redact` 的后续入口。
+- 敏感信息：session 目录默认 `0700`；提供 `niucode session redact` 的后续入口。
 - 坏行：加载时 warning + 行号；`--strict` 模式用于 CI。

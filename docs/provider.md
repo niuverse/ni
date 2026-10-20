@@ -16,36 +16,36 @@ Provider 层只做三件事：发请求、解析 SSE、归一化成 `StreamEvent
 ## CLI
 
 ```sh
-ni auth set deepseek
-ni provider list
+niucode auth set deepseek
+niucode provider list
 
 # DeepSeek：默认模型 deepseek-flash，默认开启 thinking
-ni provider test --preset deepseek
+niucode provider test --preset deepseek
 
 # 指定模型 / 关闭 thinking
-ni provider test --preset deepseek --model deepseek-v4-pro --no-thinking
+niucode provider test --preset deepseek --model deepseek-v4-pro --no-thinking
 
 # OpenAI
-ni auth set openai
-ni provider test --preset openai
+niucode auth set openai
+niucode provider test --preset openai
 ```
 
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | 必填或 `ni auth` | DeepSeek API key |
+| `DEEPSEEK_API_KEY` | 必填或 `niucode auth` | DeepSeek API key |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | 不要重复拼 `/chat/completions` |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | 也可用 `deepseek-v4-pro` |
 | `DEEPSEEK_THINKING` | `enabled` | `enabled` / `disabled` |
 | `DEEPSEEK_REASONING_EFFORT` | API 默认（high） | `none` / `low` / `high` / `max` |
-| `OPENAI_API_KEY` | 必填或 `ni auth` | OpenAI key |
+| `OPENAI_API_KEY` | 必填或 `niucode auth` | OpenAI key |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | 兼容网关可覆盖 |
 | `OPENAI_MODEL` | `gpt-4o-mini` | 兼容网关可覆盖 |
 
 模型名会变化。DeepSeek 当前推荐 `deepseek-flash` 与 `deepseek-v4-pro`，以 [官方文档](https://api-docs.deepseek.com/zh-cn/) 为准。
 
-凭证解析顺序是 env → OS keyring → 0600 文件；详见 [凭证与 ni auth](auth.md)。
+凭证解析顺序是 env → OS keyring → 0600 文件；详见 [凭证与 niucode auth](auth.md)。
 
 ## 请求
 
@@ -101,7 +101,7 @@ SSE 解析器按行缓冲，支持一个事件跨多个网络 chunk、多行 `da
 ## 测试
 
 ```sh
-cargo test -p ni-provider
+cargo test -p niucode-provider
 ```
 
 测试不访问网络：一个本地 TCP server 返回 SSE，验证流式解析；另外覆盖 429 `Retry-After`、context overflow 分类、reasoning/tool call 的序列化。

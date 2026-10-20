@@ -1,41 +1,41 @@
 +++
 id = "exec"
-title = "ni exec 与最小闭环"
+title = "niucode exec 与最小闭环"
 kind = "doc"
 status = "living"
 order = 32
-summary = "headless 任务入口、四个工具、session 事件，以及当前闭环的能力与边界。"
+summary = "headless 任务入口、六个工具、session 事件，以及当前闭环的能力与边界。"
 +++
 
 ## 用法
 
 ```sh
-ni auth set deepseek
-ni exec "find the failing test and fix it"
+niucode auth set deepseek
+niucode exec "find the failing test and fix it"
 
 # 更便宜/更快的验证
-ni exec "read a.txt and summarize it" --no-thinking
+niucode exec "read a.txt and summarize it" --no-thinking
 
 # 指定工作区和会话目录
-ni exec "fix the build" \
+niucode exec "fix the build" \
   --cwd /path/to/repo \
-  --session-dir /tmp/ni-sessions
+  --session-dir /tmp/niucode-sessions
 
 # 换模型 / 限制轮数
-ni exec "..." --model deepseek-v4-pro --max-steps 20
+niucode exec "..." --model deepseek-v4-pro --max-steps 20
 
 # 沙箱三轴
-ni exec "..." --sandbox read-only --network off
-ni exec "..." --sandbox workspace-write --approval ask
-ni exec "..." --sandbox full-access --network on --approval never
+niucode exec "..." --sandbox read-only --network off
+niucode exec "..." --sandbox workspace-write --approval ask
+niucode exec "..." --sandbox full-access --network on --approval never
 ```
 
-`ni exec` 是 headless 入口：文本流到 stdout，工具调用和 usage 流到 stderr，session 写入 JSONL。
+`niucode exec` 是 headless 入口：文本流到 stdout，工具调用和 usage 流到 stderr，session 写入 JSONL。
 
-凭证通过 `ni-auth` 解析：环境变量 → OS keyring → 0600 文件。没有凭证时会提示：
+凭证通过 `niucode-auth` 解析：环境变量 → OS keyring → 0600 文件。没有凭证时会提示：
 
 ```text
-no credential for deepseek; run `ni auth set deepseek` or set DEEPSEEK_API_KEY
+no credential for deepseek; run `niucode auth set deepseek` or set DEEPSEEK_API_KEY
 ```
 
 ## 闭环结构
@@ -73,13 +73,13 @@ session_start
 
 ```sh
 # 从已有 session 继续
-ni exec "continue from here" --resume /path/to/session.jsonl
+niucode exec "continue from here" --resume /path/to/session.jsonl
 
 # 录制归一化 provider turn
-ni exec "record this" --record /tmp/fixture.json
+niucode exec "record this" --record /tmp/fixture.json
 
 # 完全离线重放，不需要 API key
-ni exec "replay this" --replay /tmp/fixture.json
+niucode exec "replay this" --replay /tmp/fixture.json
 ```
 
 `--resume` 会从 `user_message`、`assistant_message`、`tool_result` 重建历史，跳过 `turn_end` / `session_end`，并把最后一个 `compaction` 摘要作为 system 消息。未指定 `--cwd` 时使用 `session_start` 里的 cwd。
@@ -106,8 +106,8 @@ Fixture 是归一化事件，不是原始 SSE：
 离线回归：
 
 ```sh
-cargo test -p ni-agent --test golden
-cargo test -p ni-provider fixture::tests
+cargo test -p niucode-agent --test golden
+cargo test -p niucode-provider fixture::tests
 ```
 
 ## 安全边界
@@ -155,7 +155,7 @@ Linux 第一后端是 bwrap，需要安装 `bubblewrap`。它仍是 namespace �
 不烧 token 的路径：
 
 ```sh
-cargo test -p ni-agent -p ni-tools -p ni-provider
+cargo test -p niucode-agent -p niucode-tools -p niucode-provider
 ```
 
-本地 mock server：把 `DEEPSEEK_BASE_URL` 指向本地 SSE 服务，用假的 key 执行 `ni exec`。provider 文档里有 SSE 格式和错误分类。
+本地 mock server：把 `DEEPSEEK_BASE_URL` 指向本地 SSE 服务，用假的 key 执行 `niucode exec`。provider 文档里有 SSE 格式和错误分类。

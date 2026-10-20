@@ -4,12 +4,12 @@ title = "架构"
 kind = "doc"
 status = "living"
 order = 10
-summary = "ni 的边界、数据流、事件生命周期与明确不做的事。"
+summary = "niucode 的边界、数据流、事件生命周期与明确不做的事。"
 +++
 
 ## 一句话
 
-ni 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、工具面、三条安全轴。当前最小闭环已有六个工具，Linux bash 默认走 bwrap 沙箱。
+niucode 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、工具面、三条安全轴。当前最小闭环已有六个工具，Linux bash 默认走 bwrap 沙箱。
 
 ## 设计约束
 
@@ -65,7 +65,7 @@ user input
 | State | Session | 追加、加载、容错；不解释业务 |
 | Engineering | Dashboard | 架构阅读面（默认 Architecture）；不参与运行时 |
 
-依赖方向只能向下：Interface → Engine → Adapters / State。`ni-core` 不依赖 `ni-cli`，TUI 不 import loop 内部。
+依赖方向只能向下：Interface → Engine → Adapters / State。`niucode-core` 不依赖 `niucode-cli`，TUI 不 import loop 内部。
 
 ## 工具面
 

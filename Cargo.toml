@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/ni-core",
-    "crates/ni-auth",
-    "crates/ni-provider",
-    "crates/ni-tools",
-    "crates/ni-agent",
-    "crates/ni-cli",
+    "crates/niucode-core",
+    "crates/niucode-auth",
+    "crates/niucode-provider",
+    "crates/niucode-tools",
+    "crates/niucode-agent",
+    "crates/niucode-cli",
     "crates/xtask",
 ]
 
@@ -14,7 +14,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-repository = "https://github.com/niuverse/ni"
+repository = "https://github.com/niuverse/niucode"
 
 [workspace.dependencies]
 anyhow = "1.0"

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const DATA = JSON.parse(document.getElementById('ni-data').textContent);
+  const DATA = JSON.parse(document.getElementById('niucode-data').textContent);
 
   const VIEWS = ['arch', 'work', 'docs', 'decisions'];
   const VIEW_ALIASES = { board: 'work', timeline: 'decisions' };
@@ -281,7 +281,7 @@
 
     let html = viewHead(
       'Architecture',
-      'How ni is shaped',
+      'How niucode is shaped',
       '语义分层，不是目录树。选中模块聚焦它的依赖；状态只表示落地程度。',
       stats,
     );
@@ -421,7 +421,7 @@
 
     let html = viewHead(
       'Decisions',
-      'Why ni is shaped this way',
+      'Why niucode is shaped this way',
       'ADR 与关键决策。进度事件不进入这里。',
       stats,
     );
@@ -740,7 +740,7 @@
     svg.setAttribute('width', width);
     svg.setAttribute('height', height);
 
-    const defs = '<defs><marker id="ni-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head" d="M 0 0 L 10 5 L 0 10 z"/></marker><marker id="ni-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head-active" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>';
+    const defs = '<defs><marker id="niucode-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head" d="M 0 0 L 10 5 L 0 10 z"/></marker><marker id="niucode-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="arrow-head-active" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>';
     const parts = [defs];
     const selectedModule = state.selection?.type === 'module' ? state.selection.id : null;
 
@@ -785,7 +785,7 @@
 
       const connected = selectedModule && (relation.from === selectedModule || relation.to === selectedModule);
       const className = connected ? 'edge edge-active' : 'edge';
-      const marker = connected ? 'ni-arrow-active' : 'ni-arrow';
+      const marker = connected ? 'niucode-arrow-active' : 'niucode-arrow';
       const title = `${relation.from} → ${relation.to}${relation.label ? ` · ${relation.label}` : ''}`;
       parts.push(`<path class="${className}" d="${path}" marker-end="url(#${marker})"><title>${esc(title)}</title></path>`);
 
@@ -849,7 +849,7 @@
       const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       applyTheme(next);
       try {
-        localStorage.setItem('ni-theme', next);
+        localStorage.setItem('niucode-theme', next);
       } catch {
         /* file:// or private mode */
       }
@@ -894,7 +894,7 @@
   function init() {
     const saved = (() => {
       try {
-        return localStorage.getItem('ni-theme');
+        return localStorage.getItem('niucode-theme');
       } catch {
         return null;
       }

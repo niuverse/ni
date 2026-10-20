@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "project": {
-    "name": "ni",
-    "title": "ni",
+    "name": "niucode",
+    "title": "niucode",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
     "status": "M1 · Diff",
-    "repo": "niuverse/ni",
+    "repo": "niuverse/niucode",
     "language": "Rust"
   },
   "milestones": [
@@ -16,7 +16,7 @@
       "status": "done",
       "goal": "跑通 headless 闭环：一个 provider、六个工具、可恢复的会话。",
       "exit": [
-        "ni exec 能修复一个真实小 bug",
+        "niucode exec 能修复一个真实小 bug",
         "session 可 resume，坏尾行不丢历史",
         "loop / tools 有离线 fixture 测试"
       ]
@@ -88,10 +88,10 @@
       "title": "CLI",
       "layer": "interface",
       "status": "active",
-      "summary": "参数解析、session/auth/provider 命令，ni exec headless 入口与 ni tui 启动。",
-      "contract": "ni exec / ni tui 启动运行；ni session 管理日志。不持有对话状态。",
+      "summary": "参数解析、session/auth/provider 命令，niucode exec headless 入口与 niucode tui 启动。",
+      "contract": "niucode exec / niucode tui 启动运行；niucode session 管理日志。不持有对话状态。",
       "paths": [
-        "crates/ni-cli/src/main.rs"
+        "crates/niucode-cli/src/main.rs"
       ],
       "notes": [
         "CLI 只做参数与生命周期，不实现 turn 逻辑。",
@@ -106,7 +106,7 @@
       "summary": "线性 TUI：流式文本、thinking 折叠、工具状态、单键审批、取消与会话复用。",
       "contract": "只消费 AgentEvent；调用 run_with_history；不 import loop 内部；审批 a/d/s，Ctrl-C 取消当前 turn。",
       "paths": [
-        "crates/ni-cli/src/tui.rs"
+        "crates/niucode-cli/src/tui.rs"
       ],
       "notes": [
         "线性输出优先；全屏布局/滚动区未做。",
@@ -122,7 +122,7 @@
       "summary": "最小 turn loop：流式文本、tool call 聚合、工具派发、事件落盘。",
       "contract": "run(provider, session, config, prompt, observer)；不解析 wire format，不实现工具。",
       "paths": [
-        "crates/ni-agent/src/lib.rs"
+        "crates/niucode-agent/src/lib.rs"
       ],
       "notes": [
         "assistant 消息先落盘，再落 tool_result。",
@@ -138,7 +138,7 @@
       "summary": "把全量日志投影成模型上下文：预算、裁剪、compaction。",
       "contract": "project(log, budget) -> Context；有损但不修改日志。",
       "paths": [
-        "crates/ni-core/src/context.rs"
+        "crates/niucode-core/src/context.rs"
       ],
       "notes": [
         "日志是全量，上下文是投影；压缩只影响投影。",
@@ -153,12 +153,12 @@
       "summary": "OpenAI-compatible SSE 适配；DeepSeek preset 支持 thinking、reasoning_content 与 usage。",
       "contract": "Provider::stream(request) -> StreamEvent；错误分 Auth / ContextOverflow / Http / Network / Decode；不依赖 tools 或 UI。",
       "paths": [
-        "crates/ni-provider/src/lib.rs",
-        "crates/ni-provider/src/openai.rs",
-        "crates/ni-provider/src/sse.rs",
-        "crates/ni-provider/src/scripted.rs",
-        "crates/ni-provider/src/message.rs",
-        "crates/ni-provider/src/error.rs"
+        "crates/niucode-provider/src/lib.rs",
+        "crates/niucode-provider/src/openai.rs",
+        "crates/niucode-provider/src/sse.rs",
+        "crates/niucode-provider/src/scripted.rs",
+        "crates/niucode-provider/src/message.rs",
+        "crates/niucode-provider/src/error.rs"
       ],
       "notes": [
         "SSE 解析器按行缓冲，支持跨 chunk、多行 data 和缺失 [DONE]。",
@@ -174,7 +174,7 @@
       "summary": "六个工具：read / write / edit / grep / glob / bash；路径限制、read-before-write、搜索预算、进程组超时。",
       "contract": "Toolbox::execute(name, input) -> ToolResult；已有文件必须先 read；grep/glob 尊重 .gitignore；bash 使用独立进程组。",
       "paths": [
-        "crates/ni-tools/src/lib.rs"
+        "crates/niucode-tools/src/lib.rs"
       ],
       "notes": [
         "grep / glob 使用 ignore + regex/globset，不依赖外部 rg。",
@@ -190,7 +190,7 @@
       "summary": "三轴策略：read-only / workspace-write / full-access，network on/off，approval ask/on-failure/never；Linux 用 bwrap。",
       "contract": "SandboxPolicy 决定文件工具权限与 bash 包装；审批由 loop 在变更型工具前调用；每次运行写 policy/approval 事件。",
       "paths": [
-        "crates/ni-tools/src/lib.rs"
+        "crates/niucode-tools/src/lib.rs"
       ],
       "notes": [
         "bwrap 只读根 + cwd bind；network=off 用 network namespace。",
@@ -206,8 +206,8 @@
       "summary": "append-only JSONL 事件日志，resume 与 fork 的基础。",
       "contract": "SessionLog::append 只追加；load 容忍坏尾行并报告 warning；日志是唯一真相。",
       "paths": [
-        "crates/ni-core/src/session.rs",
-        "crates/ni-core/src/event.rs"
+        "crates/niucode-core/src/session.rs",
+        "crates/niucode-core/src/event.rs"
       ],
       "notes": [
         "每条事件立即 flush，进程崩溃最多丢最后一行。",
@@ -241,10 +241,10 @@
       "summary": "凭证解析与安全存储：env → OS keyring → 0600 file。",
       "contract": "AuthStore::resolve 只返回值与来源；不打印 key；provider 保持凭证无关。",
       "paths": [
-        "crates/ni-auth/src/lib.rs",
-        "crates/ni-auth/src/file.rs",
-        "crates/ni-auth/src/keyring_store.rs",
-        "crates/ni-auth/src/error.rs"
+        "crates/niucode-auth/src/lib.rs",
+        "crates/niucode-auth/src/file.rs",
+        "crates/niucode-auth/src/keyring_store.rs",
+        "crates/niucode-auth/src/error.rs"
       ],
       "notes": [
         "环境变量优先；keyring 不可用时回退 0600 文件。",
@@ -373,7 +373,7 @@
     {
       "date": "2026-10-20",
       "kind": "milestone",
-      "title": "最小 ni exec 闭环打通",
+      "title": "最小 niucode exec 闭环打通",
       "detail": "真实 DeepSeek 文本与 read tool call 验证通过；本地 mock 覆盖 text/tool 两条路径。",
       "refs": [
         "M0-012",

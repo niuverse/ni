@@ -1,6 +1,6 @@
 +++
 id = "M0-008"
-title = "Turn loop 与 ni exec"
+title = "Turn loop 与 niucode exec"
 status = "done"
 milestone = "M0"
 module = "loop"
@@ -18,7 +18,7 @@ docs = ["architecture", "exec"]
 - 当前是函数边界 `run(provider, session, config, prompt, observer)`；Command/Event 通道留给 TUI/Web 阶段（ADR-0004）。
 - 循环直到无 tool call、达到 max steps、被取消或 fatal error。
 - 只读工具可并发，写工具串行。
-- `ni exec "<prompt>"` headless 入口，输出最终文本和 usage。
+- `niucode exec "<prompt>"` headless 入口，输出最终文本和 usage。
 
 ## 验收
 

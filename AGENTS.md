@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository is `ni`, a minimal coding-agent harness. Keep it small, legible,
+This repository is `niucode`, a minimal coding-agent harness. Keep it small, legible,
 and observable. The project dashboard in `docs/index.html` is part of the
 product, not decoration.
 
@@ -26,10 +26,10 @@ cargo xtask dashboard --check
 ## Hard rules
 
 - **The event log is the only durable truth.** Never invent a second session
-  state that survives restarts. `ni-core` owns `Event` and `SessionLog`.
+  state that survives restarts. `niucode-core` owns `Event` and `SessionLog`.
 - **Context is a projection.** Compaction, truncation, and prompt assembly read
   the log; they never rewrite it.
-- **Dependency direction:** `ni-core` does not depend on CLI, TUI, providers, or
+- **Dependency direction:** `niucode-core` does not depend on CLI, TUI, providers, or
   tools. UI consumes events; it does not call loop internals.
 - **Tool surface stays small.** Add a tool only when an existing one cannot do
   the job. Every tool description is prompt surface.
@@ -39,7 +39,7 @@ cargo xtask dashboard --check
   shell commands kill their process group.
 - **Do not hand-edit** `docs/index.html` or `docs/dashboard/model.json`. Edit the
   sources under `docs/` and rebuild.
-- **Credentials go through `ni-auth`.** Never read API keys directly in new
+- **Credentials go through `niucode-auth`.** Never read API keys directly in new
   call sites, print them, or append them to a session event. Resolution order is
   env → OS keyring → 0600 file.
 - **Read before write.** This applies to the agent and to the filesystem policy:
@@ -79,7 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M1-001 and M1-002 are done: linear `ni tui`, bwrap `workspace-write + network off`,
+M1-001 and M1-002 are done: linear `niucode tui`, bwrap `workspace-write + network off`,
 single-key approval, and `policy` / `approval` audit events. The next card is
 `M1-003` (full diff preview and tool-output folding). Do not start MCP, subagents,
 or a plugin system before the interaction surface is stable.

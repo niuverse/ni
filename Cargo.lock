@@ -1214,38 +1214,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
-name = "ni"
+name = "niucode"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "crossterm",
  "futures-util",
- "ni-agent",
- "ni-auth",
- "ni-core",
- "ni-provider",
- "ni-tools",
+ "niucode-agent",
+ "niucode-auth",
+ "niucode-core",
+ "niucode-provider",
+ "niucode-tools",
  "rpassword",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "ni-agent"
+name = "niucode-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures-util",
- "ni-core",
- "ni-provider",
- "ni-tools",
+ "niucode-core",
+ "niucode-provider",
+ "niucode-tools",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "ni-auth"
+name = "niucode-auth"
 version = "0.1.0"
 dependencies = [
  "keyring",
@@ -1255,7 +1255,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ni-core"
+name = "niucode-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1264,13 +1264,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ni-provider"
+name = "niucode-provider"
 version = "0.1.0"
 dependencies = [
  "async-stream",
  "async-trait",
  "futures-util",
- "ni-core",
+ "niucode-core",
  "reqwest",
  "serde",
  "serde_json",
@@ -1280,14 +1280,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ni-tools"
+name = "niucode-tools"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "globset",
  "ignore",
  "libc",
- "ni-provider",
+ "niucode-provider",
  "regex",
  "serde_json",
  "similar",

@@ -4,33 +4,33 @@ title = "线性 TUI 与审批"
 kind = "doc"
 status = "living"
 order = 33
-summary = "ni tui：流式文本、折叠 reasoning、工具状态、单键审批、取消与 session 复用。"
+summary = "niucode tui：流式文本、折叠 reasoning、工具状态、单键审批、取消与 session 复用。"
 +++
 
 ## 用法
 
 ```sh
-ni tui
-ni tui --cwd /path/to/repo
-ni tui --sandbox read-only --network off
-ni tui --approval ask
-ni tui --resume /path/to/session.jsonl
-ni tui --replay /path/to/fixture.json
+niucode tui
+niucode tui --cwd /path/to/repo
+niucode tui --sandbox read-only --network off
+niucode tui --approval ask
+niucode tui --resume /path/to/session.jsonl
+niucode tui --replay /path/to/fixture.json
 ```
 
-默认策略与 `ni exec` 相同：`workspace-write + network off + on-failure`。
+默认策略与 `niucode exec` 相同：`workspace-write + network off + on-failure`。
 
 ## 交互
 
 ```text
-ni> find the failing test
+niucode> find the failing test
 thinking…
 → bash cargo test
 ← bash ok exit: 1 ...
 …streaming answer…
 turn usage: in=... out=...
 
-ni> exit
+niucode> exit
 ```
 
 - 输入一行任务，Enter 提交；`exit` / `quit` / `:q` 退出。

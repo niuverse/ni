@@ -1,0 +1,23 @@
+[package]
+name = "niucode"
+description = "Minimal, observable coding agent"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "niucode"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+futures-util.workspace = true
+niucode-agent = { path = "../niucode-agent" }
+niucode-auth = { path = "../niucode-auth" }
+niucode-core = { path = "../niucode-core" }
+niucode-provider = { path = "../niucode-provider" }
+niucode-tools = { path = "../niucode-tools" }
+rpassword.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

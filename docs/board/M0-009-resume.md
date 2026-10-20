@@ -14,14 +14,14 @@ docs = ["adr-0002", "exec"]
 
 ## 范围
 
-- `ni exec --resume <session>` 从日志重建上下文继续。
+- `niucode exec --resume <session>` 从日志重建上下文继续。
 - scripted provider：按预设返回 tool call 序列，完全离线。
 - 录制 / 回放 provider 响应的 fixture 目录。
 - golden transcript 测试 loop 行为。
 
 ## 验收
 
-- [x] `ni exec --resume <session>` 从日志重建上下文继续；未指定 `--cwd` 时使用 session 的 cwd。
+- [x] `niucode exec --resume <session>` 从日志重建上下文继续；未指定 `--cwd` 时使用 session 的 cwd。
 - [x] `--record` 把归一化 provider turn 写成 fixture；`--replay` 完全离线重放，不需要 key。
 - [x] 回放同一 fixture 两次，事件序列一致。
 - [x] golden transcript 测试不访问网络、不烧 token。

@@ -13,8 +13,8 @@ docs = ["adr-0002"]
 
 ## 范围
 
-- `ni replay <session>`：按事件重建状态并校验投影。
-- `ni fork <session> --at <event-id>`：复制前缀，生成新 session。
+- `niucode replay <session>`：按事件重建状态并校验投影。
+- `niucode fork <session> --at <event-id>`：复制前缀，生成新 session。
 - 事件 id 稳定，fork 后历史可追溯。
 
 ## 验收

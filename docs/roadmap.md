@@ -43,7 +43,7 @@ M0   CLI 骨架 / 事件日志 / auth / dashboard / minimal exec
      └─ M0-005 provider（scripted + OpenAI-compatible SSE）
      └─ M0-006 文件工具
      └─ M0-007 bash（超时、进程组、输出预算）
-     └─ M0-008 loop + ni exec（SessionRuntime 边界）
+     └─ M0-008 loop + niucode exec（SessionRuntime 边界）
      └─ M0-009 resume + fixture
 M1   TUI / approval / sandbox / diff
 M1.5 只读 Web Session Viewer（JSONL → turn/tool/diff）
@@ -67,7 +67,7 @@ M3   replay / fork / subagent（视需要）
 
 ## M0 完成定义
 
-- `ni exec "<task>"` 能在真实 repo 里完成一个小修改并跑测试。
+- `niucode exec "<task>"` 能在真实 repo 里完成一个小修改并跑测试。
 - session 可 resume；坏尾行不丢历史。
 - 工具有输出上限；bash 能超时杀进程组。
 - 至少一个 scripted provider 的离线回归测试。

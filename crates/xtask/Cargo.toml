@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository tooling for ni"
+description = "Repository tooling for niucode"
 version.workspace = true
 edition.workspace = true
 publish = false

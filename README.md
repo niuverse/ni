@@ -1,38 +1,38 @@
-# ni
+# niucode
 
 Minimal, observable coding agent.
 
-`ni` is a small agent harness built around an append-only event log, a thin
+`niucode` is a small agent harness built around an append-only event log, a thin
 provider layer, and a sharp tool surface. It is intentionally smaller than a
 general agent framework: one loop, six tools, and a session file you can read,
 replay, and resume.
 
 ## Status
 
-M1 · TUI landed. `ni exec` and `ni tui` share six tools, bwrap isolation,
+M1 · TUI landed. `niucode exec` and `niucode tui` share six tools, bwrap isolation,
 per-tool approval, cancellation, resume, and recorded fixtures. The next card is
 full diff rendering.
 
 ## Quick start
 
-Requires Rust 1.85+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NI_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
+Requires Rust 1.85+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
-cargo run -p ni                 # banner and current status
-cargo run -p ni -- session new  # create a session, print its path
-cargo run -p ni -- session show <path>
-cargo run -p ni -- auth set deepseek
-cargo run -p ni -- auth status
-cargo run -p ni -- provider list
-cargo run -p ni -- provider test --preset deepseek
+cargo run -p niucode                 # banner and current status
+cargo run -p niucode -- session new  # create a session, print its path
+cargo run -p niucode -- session show <path>
+cargo run -p niucode -- auth set deepseek
+cargo run -p niucode -- auth status
+cargo run -p niucode -- provider list
+cargo run -p niucode -- provider test --preset deepseek
 
-cargo run -p ni -- exec "read a.txt and summarize it" --no-thinking
-cargo run -p ni -- exec "continue" --resume /path/to/session.jsonl
-cargo run -p ni -- exec "replay" --replay /path/to/fixture.json
-cargo run -p ni -- tui
-cargo run -p ni -- exec "review only" --sandbox read-only
-cargo run -p ni -- exec "fix it" --sandbox workspace-write --network off --approval ask
-cargo run -p ni -- exec "trusted" --sandbox full-access --network on --approval never
+cargo run -p niucode -- exec "read a.txt and summarize it" --no-thinking
+cargo run -p niucode -- exec "continue" --resume /path/to/session.jsonl
+cargo run -p niucode -- exec "replay" --replay /path/to/fixture.json
+cargo run -p niucode -- tui
+cargo run -p niucode -- exec "review only" --sandbox read-only
+cargo run -p niucode -- exec "fix it" --sandbox workspace-write --network off --approval ask
+cargo run -p niucode -- exec "trusted" --sandbox full-access --network on --approval never
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -47,12 +47,12 @@ no server, CDN, or network access is required.
 
 ```text
 crates/
-  ni-core/    event model and append-only JSONL session log
-  ni-auth/    env → OS keyring → 0600 file credential resolution
-  ni-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
-  ni-tools/   six tools, path policy, bwrap sandbox, approval policy
-  ni-agent/   turn loop, tool dispatch, session events
-  ni-cli/     argument parsing, sessions, provider checks
+  niucode-core/     event model and append-only JSONL session log
+  niucode-auth/     env → OS keyring → 0600 file credential resolution
+  niucode-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
+  niucode-tools/    six tools, path policy, bwrap sandbox, approval policy
+  niucode-agent/    turn loop, tool dispatch, session events
+  niucode-cli/      argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
 docs/
   index.html  generated project dashboard
