@@ -11,14 +11,40 @@ use anyhow::{bail, Result};
 use futures_util::StreamExt;
 use ni_core::{now_ms, Event, SessionLog, ToolCall, Usage};
 use ni_provider::{ChatMessage, CompletionRequest, Provider, StreamEvent};
-use ni_tools::Toolbox;
+use ni_tools::{SandboxPolicy, Toolbox};
 use serde_json::{json, Value};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalMode {
+    Ask,
+    OnFailure,
+    Never,
+}
+
+impl ApprovalMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::OnFailure => "on-failure",
+            Self::Never => "never",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ApprovalRequest {
+    pub tool: String,
+    pub summary: String,
+}
 
 pub struct AgentConfig {
     pub model: String,
     pub max_steps: usize,
     pub system_prompt: String,
     pub working_dir: PathBuf,
+    pub sandbox: SandboxPolicy,
+    pub approval: ApprovalMode,
+    pub allow_unsandboxed: bool,
 }
 
 impl AgentConfig {
@@ -38,6 +64,9 @@ impl AgentConfig {
             max_steps: 12,
             system_prompt,
             working_dir,
+            sandbox: SandboxPolicy::default(),
+            approval: ApprovalMode::OnFailure,
+            allow_unsandboxed: false,
         }
     }
 }
@@ -72,9 +101,19 @@ pub async fn run(
     session: &mut SessionLog,
     config: &AgentConfig,
     prompt: &str,
+    approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
-    run_with_history(provider, session, config, prompt, Vec::new(), observer).await
+    run_with_history(
+        provider,
+        session,
+        config,
+        prompt,
+        Vec::new(),
+        approver,
+        observer,
+    )
+    .await
 }
 
 /// Continue with messages reconstructed from an existing session.
@@ -84,13 +123,18 @@ pub async fn run_with_history(
     config: &AgentConfig,
     prompt: &str,
     history: Vec<ChatMessage>,
+    approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
     if config.max_steps == 0 {
         bail!("max_steps must be greater than zero");
     }
 
-    let toolbox = Toolbox::new(&config.working_dir)?;
+    let toolbox = Toolbox::with_policy_and_fallback(
+        &config.working_dir,
+        config.sandbox,
+        config.allow_unsandboxed,
+    )?;
     let tools = Toolbox::specs();
     let mut messages = Vec::with_capacity(history.len() + 2);
     messages.push(ChatMessage::system(config.system_prompt.clone()));
@@ -178,7 +222,28 @@ pub async fn run_with_history(
                 input: call.input.clone(),
             });
 
-            let result = toolbox.execute(&call.name, &call.input).await;
+            let result = if requires_approval(&call.name) && config.approval == ApprovalMode::Ask {
+                let request = ApprovalRequest {
+                    tool: call.name.clone(),
+                    summary: approval_summary(&call),
+                };
+                let allowed = approver(&request);
+                session.append(&Event::Approval {
+                    tool: call.name.clone(),
+                    allowed,
+                    ts: now_ms(),
+                })?;
+                if allowed {
+                    toolbox.execute(&call.name, &call.input).await
+                } else {
+                    ni_tools::ToolResult {
+                        ok: false,
+                        output: "approval denied by user".into(),
+                    }
+                }
+            } else {
+                toolbox.execute(&call.name, &call.input).await
+            };
 
             session.append(&Event::ToolResult {
                 call_id: call.id.clone(),
@@ -203,6 +268,20 @@ pub async fn run_with_history(
     )
 }
 
+fn requires_approval(tool: &str) -> bool {
+    matches!(tool, "write" | "edit" | "bash")
+}
+
+fn approval_summary(call: &ToolCall) -> String {
+    let detail = match call.name.as_str() {
+        "bash" => call.input.get("command").and_then(Value::as_str),
+        "write" | "edit" => call.input.get("path").and_then(Value::as_str),
+        _ => None,
+    };
+    let detail = detail.unwrap_or("").chars().take(240).collect::<String>();
+    format!("{} {}", call.name, detail).trim().to_string()
+}
+
 /// Rebuild provider messages from durable session events.
 ///
 /// `SessionStart`, `TurnEnd`, and `SessionEnd` carry no conversation content.
@@ -213,7 +292,11 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
 
     for event in events {
         match event {
-            Event::SessionStart { .. } | Event::TurnEnd { .. } | Event::SessionEnd { .. } => {}
+            Event::SessionStart { .. }
+            | Event::TurnEnd { .. }
+            | Event::Policy { .. }
+            | Event::Approval { .. }
+            | Event::SessionEnd { .. } => {}
             Event::UserMessage { text, .. } => {
                 messages.push(ChatMessage::user(text.clone()));
             }
@@ -299,11 +382,13 @@ fn summary(output: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use ni_core::session::load;
     use ni_provider::{Role, ScriptedProvider, StreamEvent, ToolCallDelta};
+    use ni_tools::{NetworkMode, SandboxMode};
 
     use super::*;
 
@@ -331,11 +416,18 @@ mod tests {
                 finish_reason: Some("stop".into()),
             },
         ]]);
-        let config = AgentConfig::new("test-model", directory.clone());
+        let config = test_config(&directory);
 
-        let outcome = run(&provider, &mut session, &config, "do nothing", &mut |_| {})
-            .await
-            .expect("run");
+        let outcome = run(
+            &provider,
+            &mut session,
+            &config,
+            "do nothing",
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
 
         assert_eq!(outcome.final_text, "done");
         assert_eq!(outcome.turns, 1);
@@ -349,6 +441,68 @@ mod tests {
                 "session_end"
             ]
         );
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    fn test_config(directory: &Path) -> AgentConfig {
+        let mut config = AgentConfig::new("test-model", directory.to_path_buf());
+        config.sandbox = SandboxPolicy::new(SandboxMode::FullAccess, NetworkMode::On);
+        config.approval = ApprovalMode::Never;
+        config.allow_unsandboxed = true;
+        config
+    }
+
+    #[tokio::test]
+    async fn denies_mutating_tool_without_approval() {
+        let directory = temp_dir("approval-deny");
+        let mut session = SessionLog::create(directory.as_path()).expect("session");
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("write_1".into()),
+                    name: Some("write".into()),
+                    arguments: "{\"path\":\"b.txt\",\"content\":\"bad\"}".into(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("stopped".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        let mut config = test_config(&directory);
+        config.approval = ApprovalMode::Ask;
+        let mut requested = 0_usize;
+        let mut approver = |_: &ApprovalRequest| {
+            requested += 1;
+            false
+        };
+
+        let outcome = run(
+            &provider,
+            &mut session,
+            &config,
+            "write b.txt",
+            &mut approver,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+
+        assert_eq!(requested, 1);
+        assert_eq!(outcome.final_text, "stopped");
+        assert!(!directory.join("b.txt").exists());
+        let loaded = load(session.path()).expect("load");
+        assert!(loaded
+            .events
+            .iter()
+            .any(|event| matches!(event, Event::Approval { allowed: false, .. })));
 
         fs::remove_dir_all(directory).expect("cleanup");
     }
@@ -401,10 +555,17 @@ mod tests {
                 finish_reason: Some("stop".into()),
             },
         ]]);
-        let config = AgentConfig::new("test-model", directory.clone());
-        run(&first, &mut session, &config, "first task", &mut |_| {})
-            .await
-            .expect("first run");
+        let config = test_config(&directory);
+        run(
+            &first,
+            &mut session,
+            &config,
+            "first task",
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("first run");
 
         let loaded = load(session.path()).expect("load session");
         let history = project_history(&loaded.events).expect("project");
@@ -420,6 +581,7 @@ mod tests {
             &config,
             "second task",
             history,
+            &mut |_| true,
             &mut |_| {},
         )
         .await
@@ -472,13 +634,14 @@ mod tests {
                 },
             ],
         ]);
-        let config = AgentConfig::new("test-model", directory.clone());
+        let config = test_config(&directory);
 
         let outcome = run(
             &provider,
             &mut session,
             &config,
             "fix the failing test",
+            &mut |_| true,
             &mut |_| {},
         )
         .await
@@ -508,7 +671,7 @@ mod tests {
             },
         ]]);
         fs::write(directory.join("a.txt"), "hello").expect("fixture");
-        let mut config = AgentConfig::new("test-model", directory.clone());
+        let mut config = test_config(&directory);
         config.max_steps = 1;
 
         let error = run(
@@ -516,6 +679,7 @@ mod tests {
             &mut session,
             &config,
             "read forever",
+            &mut |_| true,
             &mut |_| {},
         )
         .await
@@ -551,7 +715,7 @@ mod tests {
                 },
             ],
         ]);
-        let config = AgentConfig::new("test-model", directory.clone());
+        let config = test_config(&directory);
         let mut events = Vec::new();
 
         let outcome = run(
@@ -559,6 +723,7 @@ mod tests {
             &mut session,
             &config,
             "read a.txt",
+            &mut |_| true,
             &mut |event| events.push(event),
         )
         .await

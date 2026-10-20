@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Command as StdCommand, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -30,13 +30,98 @@ const BASH_MAX_TIMEOUT: u64 = 600;
 const BASH_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
 const SEARCH_MAX_RESULTS: usize = 200;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxMode {
+    ReadOnly,
+    WorkspaceWrite,
+    FullAccess,
+}
+
+impl SandboxMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::WorkspaceWrite => "workspace-write",
+            Self::FullAccess => "full-access",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkMode {
+    On,
+    Off,
+}
+
+impl NetworkMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::On => "on",
+            Self::Off => "off",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SandboxPolicy {
+    pub mode: SandboxMode,
+    pub network: NetworkMode,
+}
+
+impl Default for SandboxPolicy {
+    fn default() -> Self {
+        Self {
+            mode: SandboxMode::WorkspaceWrite,
+            network: NetworkMode::Off,
+        }
+    }
+}
+
+impl SandboxPolicy {
+    pub fn new(mode: SandboxMode, network: NetworkMode) -> Self {
+        Self { mode, network }
+    }
+
+    pub fn backend(self) -> &'static str {
+        if self.mode == SandboxMode::FullAccess && self.network == NetworkMode::On {
+            "none"
+        } else if sandbox_available() {
+            "bwrap"
+        } else {
+            "unavailable"
+        }
+    }
+}
+
+pub fn sandbox_available() -> bool {
+    StdCommand::new("bwrap")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 pub struct Toolbox {
     cwd: PathBuf,
     observed: Mutex<HashSet<PathBuf>>,
+    policy: SandboxPolicy,
+    allow_unsandboxed: bool,
 }
 
 impl Toolbox {
     pub fn new(cwd: impl AsRef<Path>) -> Result<Self> {
+        Self::with_policy(cwd, SandboxPolicy::default())
+    }
+
+    pub fn with_policy(cwd: impl AsRef<Path>, policy: SandboxPolicy) -> Result<Self> {
+        Self::with_policy_and_fallback(cwd, policy, false)
+    }
+
+    pub fn with_policy_and_fallback(
+        cwd: impl AsRef<Path>,
+        policy: SandboxPolicy,
+        allow_unsandboxed: bool,
+    ) -> Result<Self> {
         let cwd = cwd.as_ref().canonicalize().with_context(|| {
             format!("canonicalize working directory {}", cwd.as_ref().display())
         })?;
@@ -47,11 +132,21 @@ impl Toolbox {
         Ok(Self {
             cwd,
             observed: Mutex::new(HashSet::new()),
+            policy,
+            allow_unsandboxed,
         })
     }
 
     pub fn cwd(&self) -> &Path {
         &self.cwd
+    }
+
+    pub fn policy(&self) -> SandboxPolicy {
+        self.policy
+    }
+
+    pub fn allows_unsandboxed(&self) -> bool {
+        self.allow_unsandboxed
     }
 
     pub fn specs() -> Vec<ToolSpec> {
@@ -200,6 +295,9 @@ impl Toolbox {
     }
 
     fn write(&self, input: &Value) -> Result<String> {
+        if self.policy.mode == SandboxMode::ReadOnly {
+            bail!("sandbox is read-only; cannot write files");
+        }
         let path = self.resolve_for_write(input_string(input, "path")?)?;
         let content = input_string(input, "content")?;
 
@@ -231,6 +329,9 @@ impl Toolbox {
     }
 
     fn edit(&self, input: &Value) -> Result<String> {
+        if self.policy.mode == SandboxMode::ReadOnly {
+            bail!("sandbox is read-only; cannot edit files");
+        }
         let path = self.resolve_existing(input_string(input, "path")?)?;
         if !self.is_observed(&path) {
             bail!("read {} before editing it", self.display_path(&path));
@@ -287,10 +388,8 @@ impl Toolbox {
             .unwrap_or(BASH_DEFAULT_TIMEOUT)
             .clamp(1, BASH_MAX_TIMEOUT);
 
-        let mut child_command = Command::new("bash");
+        let mut child_command = self.bash_command(command)?;
         child_command
-            .arg("-c")
-            .arg(command)
             .current_dir(&self.cwd)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -367,6 +466,51 @@ impl Toolbox {
         }
 
         Ok(format!("exit: {status}\n{combined}"))
+    }
+
+    fn bash_command(&self, command: &str) -> Result<Command> {
+        if self.policy.mode == SandboxMode::FullAccess && self.policy.network == NetworkMode::On {
+            let mut child = Command::new("bash");
+            child.arg("-c").arg(command);
+            return Ok(child);
+        }
+
+        if !sandbox_available() {
+            if self.allow_unsandboxed {
+                let mut child = Command::new("bash");
+                child.arg("-c").arg(command);
+                return Ok(child);
+            }
+            bail!(
+                "sandbox backend bwrap is not installed; use --approval ask to allow an unsandboxed fallback, or install bubblewrap"
+            );
+        }
+
+        let mut child = Command::new("bwrap");
+        child.arg("--die-with-parent").arg("--unshare-all");
+        if self.policy.network == NetworkMode::On {
+            child.arg("--share-net");
+        }
+
+        if self.policy.mode == SandboxMode::FullAccess {
+            child.arg("--bind").arg("/").arg("/");
+        } else {
+            child.arg("--ro-bind").arg("/").arg("/");
+        }
+        child.arg("--dev").arg("/dev").arg("--proc").arg("/proc");
+
+        if self.policy.mode == SandboxMode::WorkspaceWrite {
+            child.arg("--bind").arg(&self.cwd).arg(&self.cwd);
+        }
+
+        child
+            .arg("--chdir")
+            .arg(&self.cwd)
+            .arg("--")
+            .arg("bash")
+            .arg("-c")
+            .arg(command);
+        Ok(child)
     }
 
     fn grep(&self, input: &Value) -> Result<String> {
@@ -671,11 +815,19 @@ mod tests {
         directory
     }
 
+    fn test_toolbox(directory: &Path) -> Toolbox {
+        Toolbox::with_policy(
+            directory,
+            SandboxPolicy::new(SandboxMode::FullAccess, NetworkMode::On),
+        )
+        .expect("toolbox")
+    }
+
     #[tokio::test]
     async fn read_write_edit_round_trip() {
         let directory = temp_workspace("roundtrip");
         fs::write(directory.join("a.txt"), "hello\nworld\n").expect("fixture");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
 
         let read = tools.execute("read", &json!({"path": "a.txt"})).await;
         assert!(read.ok, "{}", read.output);
@@ -710,7 +862,7 @@ mod tests {
     async fn existing_file_must_be_read_before_write() {
         let directory = temp_workspace("read-first");
         fs::write(directory.join("a.txt"), "old").expect("fixture");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
 
         let rejected = tools
             .execute("write", &json!({"path": "a.txt", "content": "new"}))
@@ -732,7 +884,7 @@ mod tests {
     async fn edit_rejects_ambiguous_match() {
         let directory = temp_workspace("ambiguous");
         fs::write(directory.join("a.txt"), "same same").expect("fixture");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
         tools.execute("read", &json!({"path": "a.txt"})).await;
 
         let result = tools
@@ -752,7 +904,7 @@ mod tests {
             .expect("parent")
             .join("outside-secret.txt");
         fs::write(&outside, "secret").expect("fixture");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
 
         let result = tools
             .execute("read", &json!({"path": "../outside-secret.txt"}))
@@ -772,7 +924,7 @@ mod tests {
         fs::write(directory.join("src/b.txt"), "needle\n").expect("fixture");
         fs::write(directory.join(".gitignore"), "ignored.rs\n").expect("gitignore");
         fs::write(directory.join("ignored.rs"), "needle\n").expect("fixture");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
 
         let grep = tools
             .execute("grep", &json!({"pattern": "needle", "include": "*.rs"}))
@@ -791,9 +943,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn read_only_policy_denies_mutation() {
+        let directory = temp_workspace("read-only");
+        fs::write(directory.join("a.txt"), "old").expect("fixture");
+        let tools = Toolbox::with_policy(
+            &directory,
+            SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off),
+        )
+        .expect("toolbox");
+        tools.execute("read", &json!({"path": "a.txt"})).await;
+
+        let write = tools
+            .execute("write", &json!({"path": "a.txt", "content": "new"}))
+            .await;
+        assert!(!write.ok);
+        assert!(write.output.contains("read-only"));
+
+        let edit = tools
+            .execute(
+                "edit",
+                &json!({"path": "a.txt", "old": "old", "new": "new"}),
+            )
+            .await;
+        assert!(!edit.ok);
+        assert!(edit.output.contains("read-only"));
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
+    async fn workspace_write_denies_escape_through_bash() {
+        if !sandbox_available() {
+            return;
+        }
+
+        let directory = temp_workspace("bwrap");
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let outside = std::env::temp_dir().join(format!("ni-escape-{stamp}"));
+        let tools = Toolbox::with_policy(
+            &directory,
+            SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off),
+        )
+        .expect("toolbox");
+
+        let result = tools
+            .execute(
+                "bash",
+                &json!({"command": format!("echo bad > {}", outside.display())}),
+            )
+            .await;
+
+        assert!(result.ok);
+        assert!(result.output.contains("exit: 1"));
+        assert!(!outside.exists());
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
     async fn bash_timeout_kills_the_process_group() {
         let directory = temp_workspace("timeout");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
         let started = Instant::now();
 
         let result = tools
@@ -810,7 +1023,7 @@ mod tests {
     #[tokio::test]
     async fn bash_returns_output_and_exit_code() {
         let directory = temp_workspace("bash");
-        let tools = Toolbox::new(&directory).expect("toolbox");
+        let tools = test_toolbox(&directory);
 
         let result = tools
             .execute("bash", &json!({"command": "printf 'hello'; exit 3"}))

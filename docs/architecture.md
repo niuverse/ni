@@ -9,7 +9,7 @@ summary = "ni 的边界、数据流、事件生命周期与明确不做的事。
 
 ## 一句话
 
-ni 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、工具面、三条安全轴。当前最小闭环已有六个工具；真正的沙箱和审批仍在 M1。
+ni 是一个围绕 **append-only 事件日志** 构建的最小 coding agent harness：一个 turn 引擎、一层薄 provider 适配、工具面、三条安全轴。当前最小闭环已有六个工具，Linux bash 默认走 bwrap 沙箱。
 
 ## 设计约束
 
@@ -93,7 +93,9 @@ user input
 - **approval**：ask / on-failure / never。
 - **network**：on / off。
 
-沙箱用平台原生能力（Linux landlock + seccomp，macOS seatbelt）。没有真沙箱的平台，明确降级为"变更型 bash 强制审批"，并告诉用户原因。
+Linux 第一后端用 bwrap namespace：只读根 + workspace bind，network off 用独立 net namespace。没有 bwrap 时，`never` 启动失败，`on-failure` / `ask` 降级为逐工具审批并提示网络策略未执行。landlock/seccomp 与 macOS seatbelt 是后续后端，见 ADR-0006。
+
+路径策略与 shell 隔离分开：文件工具在进程内 canonicalize；bash 的外部隔离由 bwrap 提供。两者都不是 VM，工作区外文件默认可读。
 
 ## 明确不做
 

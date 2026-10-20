@@ -9,13 +9,13 @@ replay, and resume.
 
 ## Status
 
-M0 complete. `ni exec` runs a real coding turn end-to-end with six tools, bash
-process-group cancellation, resume, recorded fixtures, session log, and auth.
-M1 starts with approval/sandbox before the TUI.
+M1 · sandbox landed. `ni exec` has six tools, bwrap workspace/network isolation,
+per-tool approval, process-group cancellation, resume, recorded fixtures, and
+auth. The next card is the in-process TUI.
 
 ## Quick start
 
-Requires Rust 1.85+. On Linux, the OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NI_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
+Requires Rust 1.85+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NI_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
 cargo run -p ni                 # banner and current status
@@ -29,6 +29,9 @@ cargo run -p ni -- provider test --preset deepseek
 cargo run -p ni -- exec "read a.txt and summarize it" --no-thinking
 cargo run -p ni -- exec "continue" --resume /path/to/session.jsonl
 cargo run -p ni -- exec "replay" --replay /path/to/fixture.json
+cargo run -p ni -- exec "review only" --sandbox read-only
+cargo run -p ni -- exec "fix it" --sandbox workspace-write --network off --approval ask
+cargo run -p ni -- exec "trusted" --sandbox full-access --network on --approval never
 
 cargo test --workspace
 cargo xtask dashboard           # regenerate docs/index.html
@@ -46,7 +49,7 @@ crates/
   ni-core/    event model and append-only JSONL session log
   ni-auth/    env → OS keyring → 0600 file credential resolution
   ni-provider/ OpenAI-compatible SSE, DeepSeek preset, scripted provider
-  ni-tools/   read / write / edit / bash with workspace policy
+  ni-tools/   six tools, path policy, bwrap sandbox, approval policy
   ni-agent/   turn loop, tool dispatch, session events
   ni-cli/     argument parsing, sessions, provider checks
   xtask/      dashboard builder and repository checks
@@ -63,9 +66,10 @@ docs/
 2. Model context is a lossy projection of the log, not a second transcript.
 3. Keep the tool surface small; every tool is prompt surface and failure surface.
 4. Keep the provider layer thin; normalize only what the loop needs.
-5. Be honest about sandbox boundaries. In-process path checks are not isolation.
+5. Be honest about sandbox boundaries. File tools use in-process path checks;
+   bash uses bwrap on Linux, and missing bwrap downgrades to explicit approval.
 
-More detail: [architecture](docs/architecture.md) · [exec](docs/exec.md) · [provider](docs/provider.md) · [auth](docs/auth.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md).
+More detail: [architecture](docs/architecture.md) · [exec](docs/exec.md) · [provider](docs/provider.md) · [auth](docs/auth.md) · [roadmap](docs/roadmap.md) · [ADR-0001: Rust](docs/adr/0001-rust-core.md) · [ADR-0002: event log](docs/adr/0002-event-log.md) · [ADR-0006: sandbox](docs/adr/0006-sandbox.md).
 
 ## Dashboard
 

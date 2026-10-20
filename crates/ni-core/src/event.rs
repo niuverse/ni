@@ -70,6 +70,20 @@ pub enum Event {
         upto: u64,
         ts: Timestamp,
     },
+    /// Effective sandbox/approval/network policy for this run.
+    Policy {
+        sandbox: String,
+        approval: String,
+        network: String,
+        backend: String,
+        ts: Timestamp,
+    },
+    /// Human approval decision for a mutating tool call.
+    Approval {
+        tool: String,
+        allowed: bool,
+        ts: Timestamp,
+    },
     SessionEnd {
         ts: Timestamp,
     },
@@ -85,6 +99,8 @@ impl Event {
             Self::ToolResult { .. } => "tool_result",
             Self::TurnEnd { .. } => "turn_end",
             Self::Compaction { .. } => "compaction",
+            Self::Policy { .. } => "policy",
+            Self::Approval { .. } => "approval",
             Self::SessionEnd { .. } => "session_end",
         }
     }
@@ -97,6 +113,8 @@ impl Event {
             | Self::ToolResult { ts, .. }
             | Self::TurnEnd { ts, .. }
             | Self::Compaction { ts, .. }
+            | Self::Policy { ts, .. }
+            | Self::Approval { ts, .. }
             | Self::SessionEnd { ts } => *ts,
         }
     }

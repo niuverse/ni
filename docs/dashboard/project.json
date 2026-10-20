@@ -5,7 +5,7 @@
     "title": "ni",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M1 · Sandbox",
+    "status": "M1 · TUI",
     "repo": "niuverse/ni",
     "language": "Rust"
   },
@@ -185,15 +185,16 @@
       "id": "sandbox",
       "title": "Sandbox",
       "layer": "adapters",
-      "status": "planned",
-      "summary": "sandbox / approval / network 三轴策略。",
-      "contract": "执行前返回 allow / ask / deny；bash 必须经过进程组与超时包装。",
+      "status": "active",
+      "summary": "三轴策略：read-only / workspace-write / full-access，network on/off，approval ask/on-failure/never；Linux 用 bwrap。",
+      "contract": "SandboxPolicy 决定文件工具权限与 bash 包装；审批由 loop 在变更型工具前调用；每次运行写 policy/approval 事件。",
       "paths": [
-        "crates/ni-sandbox/src/lib.rs"
+        "crates/ni-tools/src/lib.rs"
       ],
       "notes": [
-        "进程内路径校验不是安全边界，bash 能绕过。",
-        "没有真沙箱时，变更型 bash 强制审批。"
+        "bwrap 只读根 + cwd bind；network=off 用 network namespace。",
+        "无 bwrap 时 never 启动失败，on-failure/ask 降级到逐工具审批。",
+        "workspace-write 目前只允许写 cwd；cargo 缓存等 writable roots 后续补。"
       ]
     },
     {
@@ -397,6 +398,25 @@
       "refs": [
         "M0-009",
         "exec"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "decision",
+      "title": "Linux 沙箱首选 bwrap，landlock/seccomp 后置",
+      "detail": "三轴策略独立；bwrap 提供文件系统与网络隔离，缺少 bwrap 时显式降级到逐工具审批。",
+      "refs": [
+        "adr-0006",
+        "M1-002"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "kind": "milestone",
+      "title": "Sandbox 三轴落地",
+      "detail": "默认 workspace-write + network off；read-only、full-access、审批与策略审计事件可用。",
+      "refs": [
+        "M1-002"
       ]
     }
   ]

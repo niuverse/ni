@@ -46,6 +46,7 @@ docs/
     0003-architecture-first-dashboard.md
     0004-session-runtime.md
     0005-auth.md
+    0006-sandbox.md
   architecture.md
   auth.md
   exec.md

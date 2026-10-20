@@ -79,7 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M0 is complete: `ni exec` has six tools, process-group bash, cancellation, resume,
-recorded fixtures, and a golden transcript test. M1 starts with `M1-002`
-(sandbox + approval) before the TUI. Do not start MCP, subagents, or a plugin
-system before the M1 interaction surface is stable.
+M1-002 is done: default `workspace-write + network off` via bwrap, per-tool
+approval, and `policy` / `approval` audit events. The next card is `M1-001`
+(in-process TUI), then `M1-003` (diff). Do not start MCP, subagents, or a plugin
+system before the interaction surface is stable.

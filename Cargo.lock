@@ -1183,6 +1183,7 @@ dependencies = [
  "ni-auth",
  "ni-core",
  "ni-provider",
+ "ni-tools",
  "rpassword",
  "serde_json",
  "tokio",

@@ -23,6 +23,11 @@ ni exec "fix the build" \
 
 # 换模型 / 限制轮数
 ni exec "..." --model deepseek-v4-pro --max-steps 20
+
+# 沙箱三轴
+ni exec "..." --sandbox read-only --network off
+ni exec "..." --sandbox workspace-write --approval ask
+ni exec "..." --sandbox full-access --network on --approval never
 ```
 
 `ni exec` 是 headless 入口：文本流到 stdout，工具调用和 usage 流到 stderr，session 写入 JSONL。
@@ -37,10 +42,12 @@ no credential for deepseek; run `ni auth set deepseek` or set DEEPSEEK_API_KEY
 
 ```text
 session_start
+  → policy
   → user_message
   → provider.stream
   → assistant_message
   → turn_end
+  → approval (?)
   → tool_result (0..n)
   → provider.stream (下一 turn)
   → ...
@@ -105,18 +112,29 @@ cargo test -p ni-provider fixture::tests
 
 ## 安全边界
 
-当前是最小闭环，不是安全沙箱：
+默认是 `workspace-write + network=off + approval=on-failure`：
 
-- `write` / `edit` 会修改工作区文件。
-- `bash` 可以执行任意命令，也可以访问工作区外路径。
-- 没有 approval 提示、没有 OS 级 sandbox、没有 network 开关。
-- 默认最大 12 个模型 turn；超过会报错并停止。
+- **sandbox**
+  - `read-only`：文件工具拒绝 write/edit；bash 用只读根。
+  - `workspace-write`：只能写 cwd；`/` 以只读方式 bind。
+  - `full-access`：不套 bwrap，必须显式选择。
+- **network**
+  - `off`：bwrap `--unshare-all`，子进程无法建立连接。
+  - `on`：`--share-net`；只在需要时开启。
+- **approval**
+  - `ask`：每个 write/edit/bash 前在终端询问。
+  - `on-failure`：沙箱可用时不问；bwrap 不可用时降级为逐工具询问。
+  - `never`：不问；没有 bwrap 且需要隔离时启动直接失败。
 
-因此只在可信仓库、临时工作区或容器里运行。真正的 sandbox / approval 是 M1-002。
+Linux 第一后端是 bwrap，需要安装 `bubblewrap`。它仍是 namespace 隔离，不是 VM；工作区外文件默认可读。`workspace-write` 目前只允许写 cwd，cargo registry / `~/.cargo` 等缓存目录会写入失败。
+
+每次运行的策略写 `policy` 事件，人工审批写 `approval` 事件；拒绝的 tool_result 也落盘。
 
 ## 当前能力
 
 - 真实 DeepSeek `deepseek-flash` 文本 + read 工具调用已验证。
+- bwrap workspace-write 阻断工作区外写入；network off 阻断连接；read-only 阻断文件工具变更。
+- 逐工具 approval 的允许/拒绝路径都有测试。
 - 本地 mock SSE server 可以完整跑 text 与 tool 两条路径，不消耗 token。
 - 脚本化 provider 的 agent 测试覆盖：无工具完成、工具后继续、max steps。
 - 每次 turn 写 `assistant_message`、`turn_end`、`tool_result`，usage 含 cached tokens。
@@ -125,7 +143,8 @@ cargo test -p ni-provider fixture::tests
 
 ## 明确还没有
 
-- approval / OS sandbox / network 开关（M1-002）；bash 仍可访问工作区外。
+- landlock/seccomp 与 macOS seatbelt（ADR-0006 的后续后端）。
+- 可配置 writable roots（cargo 缓存、`/tmp`）。
 - compaction / 上下文预算（M2）；长任务可能撞上下文上限。
 - 并行工具；当前顺序执行。
 - SessionRuntime 的 Command/Event 通道；当前是函数边界。

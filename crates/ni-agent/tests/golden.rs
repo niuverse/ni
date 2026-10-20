@@ -31,9 +31,16 @@ async fn golden_read_transcript_is_offline_and_stable() {
     let mut session = SessionLog::create(directory.as_path()).expect("session");
     let config = AgentConfig::new("replay-model", directory.clone());
 
-    let outcome = run(&provider, &mut session, &config, "read a.txt", &mut |_| {})
-        .await
-        .expect("run golden transcript");
+    let outcome = run(
+        &provider,
+        &mut session,
+        &config,
+        "read a.txt",
+        &mut |_| true,
+        &mut |_| {},
+    )
+    .await
+    .expect("run golden transcript");
 
     assert_eq!(outcome.final_text, "read it");
     assert_eq!(outcome.turns, 2);

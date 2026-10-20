@@ -5,13 +5,16 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
-use ni_agent::{project_history, run_with_history, AgentConfig, AgentEvent};
+use ni_agent::{
+    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalMode, ApprovalRequest,
+};
 use ni_auth::AuthStore;
 use ni_core::{now_ms, Event, SessionLog};
 use ni_provider::{
     ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider,
     RecordingProvider, ReplayProvider, StreamEvent, ThinkingMode,
 };
+use ni_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 
 #[derive(Debug, Parser)]
 #[command(name = "ni", version, about = "Minimal, observable coding agent")]
@@ -68,6 +71,15 @@ enum Command {
         /// Replay normalized provider turns from a fixture JSON
         #[arg(long)]
         replay: Option<PathBuf>,
+        /// Sandbox: read-only, workspace-write, or full-access
+        #[arg(long, default_value = "workspace-write")]
+        sandbox: String,
+        /// Approval: ask, on-failure, or never
+        #[arg(long, default_value = "on-failure")]
+        approval: String,
+        /// Network: on or off
+        #[arg(long, default_value = "off")]
+        network: String,
     },
 }
 
@@ -150,6 +162,9 @@ async fn main() -> Result<()> {
             resume,
             record,
             replay,
+            sandbox,
+            approval,
+            network,
         }) => {
             run_exec(
                 prompt,
@@ -162,6 +177,9 @@ async fn main() -> Result<()> {
                 resume,
                 record,
                 replay,
+                sandbox,
+                approval,
+                network,
             )
             .await
         }
@@ -221,9 +239,39 @@ async fn run_exec(
     resume: Option<PathBuf>,
     record: Option<PathBuf>,
     replay: Option<PathBuf>,
+    sandbox: String,
+    approval: String,
+    network: String,
 ) -> Result<()> {
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
+    }
+
+    let mut approval_mode = parse_approval(&approval)?;
+    let policy = SandboxPolicy::new(parse_sandbox(&sandbox)?, parse_network(&network)?);
+    let mut backend = policy.backend();
+    let mut allow_unsandboxed = false;
+    if backend == "unavailable" {
+        match approval_mode {
+            ApprovalMode::Never => bail!(
+                "sandbox backend bwrap is unavailable; install bubblewrap or use --approval ask"
+            ),
+            ApprovalMode::OnFailure => {
+                eprintln!(
+                    "warning: sandbox backend unavailable; falling back to per-action approval (network policy is not enforced)"
+                );
+                approval_mode = ApprovalMode::Ask;
+                allow_unsandboxed = true;
+                backend = "approval-fallback";
+            }
+            ApprovalMode::Ask => {
+                eprintln!(
+                    "warning: sandbox backend unavailable; using per-action approval (network policy is not enforced)"
+                );
+                allow_unsandboxed = true;
+                backend = "approval-fallback";
+            }
+        }
     }
 
     let preset = parse_provider(&preset)?;
@@ -306,10 +354,24 @@ async fn run_exec(
         (session, Vec::new())
     };
 
+    session.append(&Event::Policy {
+        sandbox: policy.mode.as_str().into(),
+        approval: approval_mode.as_str().into(),
+        network: policy.network.as_str().into(),
+        backend: backend.into(),
+        ts: now_ms(),
+    })?;
+
     eprintln!(
         "ni exec · {} · model={model} · auth={auth_source} · cwd={}",
         provider.name(),
         working_dir.display()
+    );
+    eprintln!(
+        "policy: sandbox={} network={} approval={} backend={backend}",
+        policy.mode.as_str(),
+        policy.network.as_str(),
+        approval_mode.as_str()
     );
     if let Some(path) = &replay {
         eprintln!("replay: {}", path.display());
@@ -321,6 +383,20 @@ async fn run_exec(
 
     let mut agent_config = AgentConfig::new(model, working_dir);
     agent_config.max_steps = max_steps;
+    agent_config.sandbox = policy;
+    agent_config.approval = approval_mode;
+    agent_config.allow_unsandboxed = allow_unsandboxed;
+
+    let mut approver = |request: &ApprovalRequest| -> bool {
+        eprintln!("\napproval required: {}", request.summary);
+        eprint!("allow? [y/N] ");
+        let _ = std::io::stderr().flush();
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err() {
+            return false;
+        }
+        matches!(line.trim(), "y" | "Y" | "yes" | "YES")
+    };
 
     let mut line_open = false;
     let result = {
@@ -358,6 +434,7 @@ async fn run_exec(
             &agent_config,
             &prompt,
             history,
+            &mut approver,
             &mut observer,
         );
         tokio::pin!(run);
@@ -394,6 +471,34 @@ async fn run_exec(
         session.path().display()
     );
     Ok(())
+}
+
+fn parse_sandbox(value: &str) -> Result<SandboxMode> {
+    match value {
+        "read-only" => Ok(SandboxMode::ReadOnly),
+        "workspace-write" => Ok(SandboxMode::WorkspaceWrite),
+        "full-access" => Ok(SandboxMode::FullAccess),
+        other => {
+            bail!("invalid --sandbox {other:?}; use read-only, workspace-write, or full-access")
+        }
+    }
+}
+
+fn parse_network(value: &str) -> Result<NetworkMode> {
+    match value {
+        "on" => Ok(NetworkMode::On),
+        "off" => Ok(NetworkMode::Off),
+        other => bail!("invalid --network {other:?}; use on or off"),
+    }
+}
+
+fn parse_approval(value: &str) -> Result<ApprovalMode> {
+    match value {
+        "ask" => Ok(ApprovalMode::Ask),
+        "on-failure" => Ok(ApprovalMode::OnFailure),
+        "never" => Ok(ApprovalMode::Never),
+        other => bail!("invalid --approval {other:?}; use ask, on-failure, or never"),
+    }
 }
 
 fn compact_json(value: &serde_json::Value) -> String {
