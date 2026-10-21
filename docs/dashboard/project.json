@@ -1084,6 +1084,17 @@
         "adr-0027",
         "tui"
       ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "fix",
+      "title": "启动 alternate-screen 修复与 UI 模式可见",
+      "detail": "移除启动 LeaveAlternateScreen；统一 stdout/flush；移除 workspace 启动行；/status 显示 inline/linear；M5-006 因缺少真实 Ghostty 测试环境 blocked。",
+      "refs": [
+        "M5-006",
+        "tui",
+        "adr-0022"
+      ]
     }
   ]
 }

@@ -1,12 +1,13 @@
 +++
 id = "M5-006"
 title = "Stabilize inline TUI on Ghostty"
-status = "backlog"
+status = "blocked"
 milestone = "M5"
 module = "tui"
 size = "M"
 priority = "P1"
-updated = "2026-10-20"
+updated = "2026-10-21"
+blocked_reason = "This headless environment has no real Ghostty display; tmux cannot reproduce Ghostty's 1049 saved-cursor behavior. Startup alt-screen bug is fixed; inline still needs a real Ghostty screen capture before re-enabling."
 depends_on = ["M5-003", "M5-005"]
 docs = ["adr-0022", "adr-0019", "tui"]
 +++

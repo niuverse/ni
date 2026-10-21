@@ -1413,12 +1413,12 @@
     {
       "id": "M5-006",
       "title": "Stabilize inline TUI on Ghostty",
-      "status": "backlog",
+      "status": "blocked",
       "milestone": "M5",
       "module": "tui",
       "size": "M",
       "priority": "P1",
-      "updated": "2026-10-20",
+      "updated": "2026-10-21",
       "completed": null,
       "depends_on": [
         "M5-003",
@@ -1429,7 +1429,7 @@
         "adr-0019",
         "tui"
       ],
-      "blocked_reason": null,
+      "blocked_reason": "This headless environment has no real Ghostty display; tmux cannot reproduce Ghostty's 1049 saved-cursor behavior. Startup alt-screen bug is fixed; inline still needs a real Ghostty screen capture before re-enabling.",
       "body_html": "<h2>问题</h2>\n<p>Ghostty 1.3.1 上 inline viewport 仍出现输入区/背景覆盖或错位；tmux 抓屏正常不能代表 Ghostty。</p>\n<h2>验收</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\"/>\n在真实 Ghostty 中抓屏：提交前后、picker 展开/关闭、滚动多轮均不覆盖 transcript。</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\n固定/动态 viewport 的 cursor/clear 语义有终端级回归测试。</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\n通过后移除 Ghostty 默认 linear fallback。</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\n保持 <code>NIUCODE_TUI_LINEAR=1</code> 作为显式 fallback。</li>\n</ul>\n<h2>备注</h2>\n<p>当前 Ghostty 默认 linear；<code>NIUCODE_TUI_INLINE=1</code> 可强制 inline 复现。\n2026-10-21：linear 的 startup 重叠已单独修复——启动信息统一走 stdout、显式 flush、workspace 只打印 project key；不再出现 prompt 覆盖 workspace 行。</p>\n",
       "path": "docs/board/M5-006-ghostty-inline.md"
     },
@@ -2530,6 +2530,17 @@
         "M5-009",
         "adr-0027",
         "tui"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "fix",
+      "title": "启动 alternate-screen 修复与 UI 模式可见",
+      "detail": "移除启动 LeaveAlternateScreen；统一 stdout/flush；移除 workspace 启动行；/status 显示 inline/linear；M5-006 因缺少真实 Ghostty 测试环境 blocked。",
+      "refs": [
+        "M5-006",
+        "tui",
+        "adr-0022"
       ]
     }
   ],
