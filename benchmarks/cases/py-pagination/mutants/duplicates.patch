@@ -1,0 +1,11 @@
+--- a/client.py
++++ b/client.py
+@@ -6,7 +6,7 @@
+         seen_urls.add(url)
+         page = fetch(url)
+         for item in page['items']:
+-            if item['id'] not in seen_ids:
++            if True:
+                 items.append(item)
+                 seen_ids.add(item['id'])
+         url = page['next']

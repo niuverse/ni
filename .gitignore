@@ -2,3 +2,6 @@
 .niucode/
 docs/dashboard/receipt.json
 .DS_Store
+benchmarks/results/
+__pycache__/
+benchmarks/node_modules/

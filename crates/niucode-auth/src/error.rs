@@ -2,6 +2,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AuthError {
+    #[error(
+        "credential shell import requires a literal assignment; shell expressions are not executed"
+    )]
+    UnsupportedShellAssignment,
     #[error("cannot determine a config directory; set NIUCODE_CONFIG_DIR or HOME")]
     NoConfigDir,
     #[error("cannot store an empty API key")]

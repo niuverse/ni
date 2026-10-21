@@ -1,0 +1,10 @@
+{
+  "id": "rs-dry-run",
+  "language": "rust",
+  "kind": "feature",
+  "split": "test",
+  "mutants": [
+    "writes-dry-run",
+    "ignores-flag"
+  ]
+}

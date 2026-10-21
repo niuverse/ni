@@ -1,0 +1,17 @@
+{
+  "id": "polyglot-py-grade-school",
+  "language": "python",
+  "suite": "polyglot-subset",
+  "upstream": "https://github.com/Aider-AI/polyglot-benchmark",
+  "commit": "7e0611e77b54e2dea774cdc0aa00cf9f7ed6144f",
+  "upstream_path": "python/exercises/practice/grade-school",
+  "upstream_sha256": "d83e2bd43d4ff3c7af8a7bc5317c3f97865e1ee54bf2a1640afa1fa748461846",
+  "solution_files": [
+    "grade_school.py"
+  ],
+  "test_files": [
+    "grade_school_test.py"
+  ],
+  "grading": "upstream tests; Rust ignored tests explicitly included",
+  "license": "MIT; see ../LICENSE.exercism"
+}

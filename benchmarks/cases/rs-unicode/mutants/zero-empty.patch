@@ -1,0 +1,9 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,5 +1,6 @@
+ pub mod filter;
+ pub fn excerpt(line:&str,limit:usize)->String {
++    if limit==0 {return String::new();}
+     let mut chars=line.chars();
+     let prefix:String=chars.by_ref().take(limit).collect();
+     if chars.next().is_some() {format!("{prefix}…")} else {prefix}

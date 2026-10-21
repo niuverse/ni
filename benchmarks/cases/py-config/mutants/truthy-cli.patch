@@ -1,0 +1,10 @@
+--- a/config.py
++++ b/config.py
+@@ -6,6 +6,6 @@
+         if value is not None:
+             result[key] = json.loads(value)
+     for key, value in cli.items():
+-        if value is not None:
++        if value:
+             result[key] = value
+     return result

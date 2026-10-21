@@ -1,0 +1,17 @@
+{
+  "id": "polyglot-py-transpose",
+  "language": "python",
+  "suite": "polyglot-subset",
+  "upstream": "https://github.com/Aider-AI/polyglot-benchmark",
+  "commit": "7e0611e77b54e2dea774cdc0aa00cf9f7ed6144f",
+  "upstream_path": "python/exercises/practice/transpose",
+  "upstream_sha256": "b465b29a7698a468e49b7bbdf30b37ecd2c1c9f2324c5e5b1fd54c44c305a4a8",
+  "solution_files": [
+    "transpose.py"
+  ],
+  "test_files": [
+    "transpose_test.py"
+  ],
+  "grading": "upstream tests; Rust ignored tests explicitly included",
+  "license": "MIT; see ../LICENSE.exercism"
+}

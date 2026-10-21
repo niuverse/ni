@@ -1,0 +1,10 @@
+--- a/config.py
++++ b/config.py
+@@ -1,6 +1,6 @@
+ import json
+ def resolve(defaults, file_values, environment, cli):
+-    result = dict(defaults)
++    result = defaults
+     result.update(file_values)
+     for key, value in environment.items():
+         if value is not None:

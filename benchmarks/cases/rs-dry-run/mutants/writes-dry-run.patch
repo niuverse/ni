@@ -1,0 +1,11 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,7 +1,7 @@
+ use std::path::Path;
+ pub fn update(path:&Path,value:&str,dry_run:bool)->std::io::Result<String> {
+     let old=std::fs::read_to_string(path)?;
+-    if !dry_run {std::fs::write(path,value)?;}
++    if true {std::fs::write(path,value)?;}
+     Ok(format!("{} -> {}",old.trim_end(),value.trim_end()))
+ }
+ pub fn set_value(path:&Path,value:&str)->std::io::Result<String> {update(path,value,false)}

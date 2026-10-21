@@ -1,0 +1,22 @@
+--- a/client.py
++++ b/client.py
+@@ -1,8 +1,13 @@
+-def collect(fetch,start):
+-    items=[]; url=start
++def collect(fetch, start):
++    items, seen_urls, seen_ids = [], set(), set()
++    url = start
+     while url is not None:
+-        page=fetch(url)
+-        if not page['items']: break
+-        items.extend(page['items'])
+-        url=page['next']
++        if url in seen_urls: raise ValueError('pagination cycle')
++        seen_urls.add(url)
++        page = fetch(url)
++        for item in page['items']:
++            if item['id'] not in seen_ids:
++                items.append(item)
++                seen_ids.add(item['id'])
++        url = page['next']
+     return items

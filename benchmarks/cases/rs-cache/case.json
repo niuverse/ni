@@ -1,0 +1,10 @@
+{
+  "id": "rs-cache",
+  "language": "rust",
+  "kind": "feature",
+  "split": "test",
+  "mutants": [
+    "boundary",
+    "overflow"
+  ]
+}

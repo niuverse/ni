@@ -6,6 +6,7 @@
 mod error;
 mod file;
 mod keyring_store;
+mod shell;
 
 pub use error::AuthError;
 
@@ -116,6 +117,23 @@ impl AuthStore {
     pub fn resolve(&self, provider: &str) -> Result<Option<Resolved>, AuthError> {
         let env_value = env_var(provider).and_then(|name| env::var(name).ok());
         self.resolve_with(provider, env_value)
+    }
+
+    /// Explicit launch-time import. Inherited environment wins; the file is never executed.
+    /// The imported literal acts as an environment value, before keyring/file fallback.
+    pub fn resolve_with_shell_file(
+        &self,
+        provider: &str,
+        path: &Path,
+    ) -> Result<Option<Resolved>, AuthError> {
+        let value = match env_var(provider) {
+            Some(name) => match env::var(name).ok().filter(|value| !value.trim().is_empty()) {
+                Some(value) => Some(value),
+                None => shell::literal_assignment(path, name)?,
+            },
+            None => None,
+        };
+        self.resolve_with(provider, value)
     }
 
     pub fn resolve_with(

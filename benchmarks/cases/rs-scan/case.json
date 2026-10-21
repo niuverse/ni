@@ -1,0 +1,10 @@
+{
+  "id": "rs-scan",
+  "language": "rust",
+  "kind": "bug",
+  "split": "test",
+  "mutants": [
+    "exact-only",
+    "empty-excludes"
+  ]
+}

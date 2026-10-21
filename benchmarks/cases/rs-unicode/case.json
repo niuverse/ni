@@ -1,0 +1,10 @@
+{
+  "id": "rs-unicode",
+  "language": "rust",
+  "kind": "bug",
+  "split": "test",
+  "mutants": [
+    "always-ellipsis",
+    "zero-empty"
+  ]
+}

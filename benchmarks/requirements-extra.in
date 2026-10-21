@@ -1,0 +1,2 @@
+# LiteLLM imports the MCP types even when only local function tools are used.
+mcp

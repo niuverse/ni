@@ -1,0 +1,10 @@
+{
+  "id": "py-config",
+  "language": "python",
+  "kind": "bug",
+  "split": "test",
+  "mutants": [
+    "truthy-cli",
+    "mutates-input"
+  ]
+}

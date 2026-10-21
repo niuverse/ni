@@ -1,0 +1,14 @@
+--- a/config.py
++++ b/config.py
+@@ -3,9 +3,9 @@
+     result = dict(defaults)
+     result.update(file_values)
+     for key, value in environment.items():
+-        if value:
++        if value is not None:
+             result[key] = json.loads(value)
+     for key, value in cli.items():
+-        if value:
++        if value is not None:
+             result[key] = value
+     return result

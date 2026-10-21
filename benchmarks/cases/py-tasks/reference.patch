@@ -1,0 +1,20 @@
+--- a/cli.py
++++ b/cli.py
+@@ -1,7 +1,14 @@
+-import argparse
++import argparse,json
+ from store import load
+ from render import render_text
+ def main():
+-    p=argparse.ArgumentParser(); p.add_argument('file'); args=p.parse_args()
+-    print(render_text(load(args.file)))
++    parser=argparse.ArgumentParser()
++    parser.add_argument('file')
++    parser.add_argument('--status',choices=['open','done'])
++    parser.add_argument('--json',action='store_true')
++    args=parser.parse_args()
++    tasks=load(args.file)
++    if args.status is not None:
++        tasks=[t for t in tasks if t['status']==args.status]
++    print(json.dumps(tasks,ensure_ascii=False) if args.json else render_text(tasks))
+ if __name__=='__main__': main()

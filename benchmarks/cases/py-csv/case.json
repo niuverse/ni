@@ -1,0 +1,10 @@
+{
+  "id": "py-csv",
+  "language": "python",
+  "kind": "feature",
+  "split": "test",
+  "mutants": [
+    "zero-on-error",
+    "nonfinite"
+  ]
+}

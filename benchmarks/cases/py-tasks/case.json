@@ -1,0 +1,10 @@
+{
+  "id": "py-tasks",
+  "language": "python",
+  "kind": "feature",
+  "split": "test",
+  "mutants": [
+    "no-filter",
+    "reordered"
+  ]
+}

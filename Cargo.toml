@@ -9,6 +9,7 @@ members = [
     "crates/niucode-extension",
     "crates/niucode-cli",
     "crates/xtask",
+    "benchmarks/gateway",
 ]
 
 [workspace.package]

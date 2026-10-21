@@ -1,0 +1,9 @@
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -2,5 +2,5 @@
+     let dry=args.first().is_some_and(|arg|arg=="--dry-run");
+     if dry {args.remove(0);}
+     if args.len()!=2 {return Err("expected [--dry-run] FILE VALUE".into());}
+-    println!("{}",rs_dry_run::update(std::path::Path::new(&args[0]),&format!("{}\n",args[1]),dry)?);Ok(())
++    println!("{}",rs_dry_run::update(std::path::Path::new(&args[0]),&format!("{}\n",args[1]),false)?);Ok(())
+ }

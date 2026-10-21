@@ -1,0 +1,10 @@
+{
+  "id": "py-pagination",
+  "language": "python",
+  "kind": "bug",
+  "split": "test",
+  "mutants": [
+    "empty-stop",
+    "duplicates"
+  ]
+}

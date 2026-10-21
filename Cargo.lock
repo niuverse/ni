@@ -1495,6 +1495,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "niucode-bench-gateway"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures-util",
+ "niucode-auth",
+ "reqwest",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "niucode-core"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,10 @@
+--- a/client.py
++++ b/client.py
+@@ -5,6 +5,7 @@
+         if url in seen_urls: raise ValueError('pagination cycle')
+         seen_urls.add(url)
+         page = fetch(url)
++        if not page['items']: break
+         for item in page['items']:
+             if item['id'] not in seen_ids:
+                 items.append(item)

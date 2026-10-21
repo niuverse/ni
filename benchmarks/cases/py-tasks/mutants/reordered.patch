@@ -1,0 +1,11 @@
+--- a/cli.py
++++ b/cli.py
+@@ -7,7 +7,7 @@
+     parser.add_argument('--status',choices=['open','done'])
+     parser.add_argument('--json',action='store_true')
+     args=parser.parse_args()
+-    tasks=load(args.file)
++    tasks=sorted(load(args.file),key=lambda t:t['id'])
+     if args.status is not None:
+         tasks=[t for t in tasks if t['status']==args.status]
+     print(json.dumps(tasks,ensure_ascii=False) if args.json else render_text(tasks))

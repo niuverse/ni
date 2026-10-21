@@ -1,0 +1,11 @@
+--- a/summary.py
++++ b/summary.py
+@@ -11,7 +11,7 @@
+         raw=row[value]
+         if raw is None or raw.strip()=='':
+             if missing=='skip': continue
+-            if missing=='error': raise ValueError('missing amount')
++            if False: raise ValueError('missing amount')
+             raw='0'
+         try: number=Decimal(raw)
+         except Exception as error: raise ValueError('invalid amount') from error

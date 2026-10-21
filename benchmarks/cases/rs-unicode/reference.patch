@@ -1,0 +1,12 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,6 +1,8 @@
+ pub mod filter;
+ pub fn excerpt(line:&str,limit:usize)->String {
+-    if line.len()<=limit {line.to_owned()} else {format!("{}…",&line[..limit])}
++    let mut chars=line.chars();
++    let prefix:String=chars.by_ref().take(limit).collect();
++    if chars.next().is_some() {format!("{prefix}…")} else {prefix}
+ }
+ #[cfg(test)] mod tests {
+     #[test] fn ascii() {assert_eq!(super::excerpt("hello",3),"hel…");}

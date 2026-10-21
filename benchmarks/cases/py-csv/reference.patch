@@ -1,0 +1,22 @@
+--- a/summary.py
++++ b/summary.py
+@@ -2,3 +2,19 @@
+ from decimal import Decimal
+ def total(text):
+     return str(sum((Decimal(row['amount']) for row in csv.DictReader(io.StringIO(text))),Decimal(0)))
++def summarize(text,group,value,missing='error'):
++    if missing not in ('error','skip','zero'): raise ValueError('invalid policy')
++    reader=csv.DictReader(io.StringIO(text))
++    if not reader.fieldnames or group not in reader.fieldnames or value not in reader.fieldnames: raise ValueError('missing column')
++    totals={}
++    for row in reader:
++        raw=row[value]
++        if raw is None or raw.strip()=='':
++            if missing=='skip': continue
++            if missing=='error': raise ValueError('missing amount')
++            raw='0'
++        try: number=Decimal(raw)
++        except Exception as error: raise ValueError('invalid amount') from error
++        if not number.is_finite(): raise ValueError('nonfinite amount')
++        totals[row[group]]=totals.get(row[group],Decimal(0))+number
++    return {key:str(number) for key,number in totals.items()}
