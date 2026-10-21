@@ -5,7 +5,7 @@
     "title": "niucode",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M4 · Extensible",
+    "status": "M6 · Reliable pairing / terminal acceptance pending",
     "repo": "niuverse/niucode",
     "language": "Rust"
   },
@@ -69,12 +69,37 @@
     {
       "id": "M5",
       "title": "Kernel seams",
-      "status": "active",
-      "goal": "把 provider、tool、loop 的边界做成可测试、可扩展的 seam，而不破坏事件日志。",
+      "status": "done",
+      "goal": "把 provider、tool、loop 的边界做成可测试、可扩展的 seam，而不破坏事件日志。 Kernel seams 退出条件已满足；M5-003/M5-006 的独立终端验收卡仍保持原状态，由 M6 验收继续跟踪。",
       "exit": [
         "provider catalog and cross-provider selection",
         "tool risk metadata",
         "loop phases"
+      ]
+    },
+    {
+      "id": "M6",
+      "title": "Reliable pairing",
+      "status": "active",
+      "goal": "交付可靠的原生终端结对闭环：统一编辑与呈现、运行中纠偏、共享工作区冲突检测与证据审阅。",
+      "exit": [
+        "同一编辑内核支持多行、Unicode、粘贴、历史和补全；终端输出由单一所有者管理",
+        "运行中补充/排队/取消可恢复且状态准确，CLI/TUI 共用事件驱动 runtime",
+        "累计 diff 区分原有与未知来源改动；验证状态关联实际执行记录",
+        "Linux/macOS 指定终端与 tmux 组合有版本化实测证据，Ghostty gate 满足",
+        "删除被替代实现，无重复会话存储，fmt/test/clippy/dashboard 检查通过"
+      ]
+    },
+    {
+      "id": "M7",
+      "title": "Public harness benchmark",
+      "status": "planned",
+      "goal": "以公开、可复现的同模型四方双轨评测指导日常编码可靠性；取得可信基线，不要求 niucode 获胜。",
+      "exit": [
+        "八个合成任务与独立验收、错误修复自检通过",
+        "niucode/mini-SWE-agent/DeepSeek Harness/Pi 基础/增强配置固定并有完整配对结果",
+        "DeepSeek 全部调用计入 300 元总预算，token/费用/失败可审计",
+        "外部固定任务使用上游原始测试评分并公开协议差异；格式/测试/clippy/dashboard 通过，M6 实机 gate 保持独立"
       ]
     }
   ],
@@ -131,21 +156,26 @@
       "title": "TUI",
       "layer": "interface",
       "status": "active",
-      "summary": "线性 TUI：Geek 风格块字 logo、自定义行编辑、slash 自动菜单、历史、符号化工具状态、单键审批、diff pager、输出折叠、缓存率、取消与会话复用。",
-      "contract": "只消费 AgentEvent 与 ApprovalRequest；调用 run_with_history；审批 a/d/s，Ctrl-C 取消当前 turn；审批 diff 用宽度感知 pager，不复制路径策略。",
+      "summary": "共享 Unicode 编辑器、原生 transcript、运行中补充/排队、可取消审批与日志历史详情。",
+      "contract": "Command/Event runtime 客户端；live 独占活动终端；presentation 从审阅事实生成紧凑收尾和详情；Composer/Completion 管编辑，text_layout 管布局，Theme 管可信高亮。",
       "paths": [
         "crates/niucode-cli/src/tui.rs",
         "crates/niucode-cli/src/slash.rs",
         "crates/niucode-cli/src/theme.rs",
         "crates/niucode-cli/src/diff.rs",
         "crates/niucode-cli/src/review.rs",
-        "crates/niucode-cli/src/editor.rs"
+        "crates/niucode-cli/src/editor.rs",
+        "crates/niucode-cli/src/composer.rs",
+        "crates/niucode-cli/src/completion.rs",
+        "crates/niucode-cli/src/terminal.rs",
+        "crates/niucode-cli/src/live.rs",
+        "crates/niucode-cli/src/details.rs",
+        "crates/niucode-cli/src/text_layout.rs",
+        "crates/niucode-cli/src/presentation.rs"
       ],
       "notes": [
-        "线性会话输出；全屏布局未做，pager 只在审批时接管屏幕。",
         "slash 命令：/init /clear /fork /status /session /last /help /exit；未知 /foo 不发给模型。",
         "/clear 新建 session，/fork 复制前缀并切换，旧日志保留。",
-        "diff 渲染按终端宽度重排；工具输出超过 12 行/2 KB 折叠，:last 展开。",
         "颜色只在 TTY 开启，遵循 NO_COLOR / CLICOLOR=0 / TERM=dumb。",
         "非 TTY 时审批退化为逐行输入，方便管道测试。",
         "Tab 补全 slash 命令并显示带说明的候选；唯一前缀显示内联 hint。",
@@ -155,14 +185,16 @@
         "/plan toggles read-only plan mode; /goal persists as an event-backed objective label.",
         "鼠标悬停/点击 slash 菜单；命令输入高亮；Ctrl-R/Ctrl-N/Ctrl-P 历史操作。",
         "prompt 显示 plan/goal 徽标；/goal 设置后立即启动 goal run。",
-        "鼠标捕获只在 slash 菜单打开时启用；TerminalGuard 统一恢复终端状态。",
-        "--max-steps 默认 24；max-steps 错误给提升提示并保留已写文件。",
         "/reload 重读 AGENTS.md；/clear 保留 plan/goal；/reset 全量重置；/resume 切换 session。",
-        "鼠标 hover 支持绝对行号与相对移动 fallback。",
         "/model 切换当前 provider 内模型；/permissions 映射 ask/review/full-access/ci。",
         "model_change / permission_change 事件随 resume 恢复；clear 保留、reset 清除。",
-        "/model 与 /permissions 使用参数下拉；裸命令 Enter 显示当前值。",
-        "默认 max-steps=0（256 安全 cap）；/compact 手动压缩，ContextOverflow 强制 compact。"
+        "/model 与 /permissions Enter 打开参数菜单；选择后一次确认生效；Esc 取消，Tab 仅填入。",
+        "默认 max-steps=0（256 安全 cap）；/compact 手动压缩，ContextOverflow 强制 compact。",
+        "Enter 补充、Alt-Enter 排队、Ctrl-O 日志详情；reasoning 默认收起。",
+        "删除独立 inline editor；linear/inline 共用字素编辑、布局、历史、补全与撤销。",
+        "终端模式只有活动 owner 修改；菜单关闭释放鼠标；crossterm 单版本与 level-triggered 输入。",
+        "M6 本地 PTY、100 轮与 30 分钟慢输出压力验收通过；真实 Linux/macOS 矩阵仍待完成，Ghostty gate 保留。",
+        "M6 第二阶段：主屏收尾有界、成功工具进度合并、审批恢复历史位置、活动状态动画与默认收起证据。"
       ]
     },
     {
@@ -171,10 +203,12 @@
       "layer": "engine",
       "status": "active",
       "summary": "最小 turn loop：流式文本、tool call 聚合、工具派发、事件落盘、上下文压缩、分层指令与并行只读 subagent。",
-      "contract": "run(provider, session, config, prompt, observer)；不解析 wire format，不实现工具；请求前按预算压缩；subagent 任务有独立日志与预算。",
+      "contract": "run_interactive 的有界 Command/Event 通道与 headless callback adapter 共用引擎；输入/审批/取消在 effect 等待期间处理；队列与证据只从日志恢复。",
       "paths": [
         "crates/niucode-agent/src/lib.rs",
-        "crates/niucode-agent/src/subagent.rs"
+        "crates/niucode-agent/src/subagent.rs",
+        "crates/niucode-agent/src/runtime.rs",
+        "crates/niucode-agent/src/changes.rs"
       ],
       "notes": [
         "assistant 消息先落盘，再落 tool_result。",
@@ -182,7 +216,10 @@
         "Ctrl-C 通过 drop future 取消 provider/工具；bash 进程组被清理。",
         "请求前检查上下文预算；压缩成功才追加 compaction 事件，失败保留原上下文。",
         "subagent 只读、并行、每个任务独立 session；父 session 记录 spawn/result。",
-        "PlanMode/GoalSet/GoalCleared events are kernel-defined; plan/goal are injected into the system prompt, not a second state store."
+        "PlanMode/GoalSet/GoalCleared events are kernel-defined; plan/goal are injected into the system prompt, not a second state store.",
+        "新增 input/task/evidence 事实；审批使用独立 request ID，拒绝迟到答复；取消独立于事件通道背压。",
+        "受预算限制的工作区快照生成累计 diff；命令证据关联 call/cwd/退出状态和内容摘要；未知归属与过期检查明确显示。",
+        "审阅区分已证实变化与覆盖未知；快照通过日志内已校验 digest 复用正文，保留任务开始基线。"
       ]
     },
     {
@@ -231,17 +268,20 @@
       "layer": "adapters",
       "status": "active",
       "summary": "六个基础工具 + 只读 subagent 编排：read / write / edit / grep / glob / bash；路径限制、read-before-write、搜索预算、进程组超时与审批 diff。",
-      "contract": "Toolbox::execute(name, input) -> ToolResult；preview -> ChangePreview；subagent 由 agent loop 拦截；已有文件必须先 read。",
+      "contract": "execute_recorded -> ToolResult + ExecutionEvidence；prepare_mutation/preview/execute_prepared 绑定版本与修改内容；既有 execute/ToolResult.ok 保持兼容。",
       "paths": [
         "crates/niucode-tools/src/lib.rs",
-        "crates/niucode-tools/src/preview.rs"
+        "crates/niucode-tools/src/preview.rs",
+        "crates/niucode-tools/src/mutation.rs"
       ],
       "notes": [
         "grep / glob 使用 ignore + regex/globset，不依赖外部 rg。",
         "bash 超时会杀进程组，尾部 20KB + 临时输出路径。",
         "写操作串行；当前工具调用顺序执行。",
         "preview 只读真实文件，不修改 observed/磁盘；执行时重新校验（TOCTOU）。",
-        "subagent 的 schema 在 tools，执行在 agent loop。"
+        "subagent 的 schema 在 tools，执行在 agent loop。",
+        "已读行覆盖 + SHA-256 + 文件身份/权限检测；准备临时文件、再次校验、原子替换；外部程序最终检查/rename 竞态仍存在。",
+        "退出码/信号/超时与调用成功分离；进程组 guard 在取消时清理 shell 与子代理 Git 命令。"
       ]
     },
     {
@@ -311,7 +351,8 @@
         "crates/niucode-auth/src/lib.rs",
         "crates/niucode-auth/src/file.rs",
         "crates/niucode-auth/src/keyring_store.rs",
-        "crates/niucode-auth/src/error.rs"
+        "crates/niucode-auth/src/error.rs",
+        "crates/niucode-auth/src/shell.rs"
       ],
       "notes": [
         "环境变量优先；keyring 不可用时回退 0600 文件。",
@@ -350,6 +391,21 @@
       "notes": [
         "项目根零状态；旧 flat sessions/extensions 硬切。",
         "ToolResult 1 MiB 预算。"
+      ]
+    },
+    {
+      "id": "benchmark",
+      "title": "Harness benchmark",
+      "layer": "engineering",
+      "status": "active",
+      "summary": "八个公开合成小仓库、四题 Polyglot 子集、隔离评分、四方双轨适配与有预算的 API 网关。",
+      "contract": "评测设施不进入内核；每次运行固定输入与环境，评分由独立测试决定；费用事实追加，报告从产物派生。",
+      "paths": [
+        "benchmarks"
+      ],
+      "notes": [
+        "M7 首轮 96 次配对基线完成；可靠性专项与重复试验待办。M6 保持 active，真实终端 gate 未关闭。",
+        "首轮 DeepSeek API 总预算 300 元；参赛容器不持有真实密钥。"
       ]
     }
   ],
@@ -423,6 +479,16 @@
       "from": "cli",
       "to": "workspace",
       "label": "resolve"
+    },
+    {
+      "from": "benchmark",
+      "to": "cli",
+      "label": "headless black-box evaluation"
+    },
+    {
+      "from": "benchmark",
+      "to": "auth",
+      "label": "metered gateway credential resolution"
     }
   ],
   "events": [
@@ -1094,6 +1160,139 @@
         "M5-006",
         "tui",
         "adr-0022"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0028 accepted：可靠的原生终端结对",
+      "detail": "用户确认原生 scrollback、运行中补充、默认收起 reasoning、累计 diff、共享工作区冲突检测与 Linux/macOS 多终端验收；robust/clean 为交付门槛。M6 为 planned，尚未实现。",
+      "refs": [
+        "adr-0028",
+        "pairing-upgrade",
+        "M6-001"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0028 实现边界：单 writer、prepared mutation 与终端 owner",
+      "detail": "日志内部串行 append 且首个写失败后停用；输入和审批 request ID 由 runtime 管理。文件预览绑定不可变版本，审批后获取 W1 再校验。默认收起 reasoning，替代 ADR-0021 第 3–5 条；真实终端 gate 保持。",
+      "refs": [
+        "adr-0028",
+        "adr-0021",
+        "architecture"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "milestone",
+      "title": "M6 进入实现审阅与终端验收",
+      "detail": "Kernel seams 退出条件已满足，M6 为当前 active；M5-003/M5-006 验收状态不变。共享编辑、runtime、冲突检测与证据审阅已实现，离线/PTY 回归覆盖主要行为；真实终端矩阵和压力验收仍开放。",
+      "refs": [
+        "M6-002",
+        "M6-004",
+        "M6-007",
+        "M6-008",
+        "M6-009",
+        "terminal-acceptance"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0028 交互补充：设置选择一次生效与明确光标焦点",
+      "detail": "TTY 的 model/permissions 菜单打开不修改配置，确认选择后直接应用；更新 ADR-0015 的 TTY 裸命令行为。标准光标协议区分输入/菜单，inline 清屏交还 viewport 起点，herdr 不加品牌特判。",
+      "refs": [
+        "adr-0028",
+        "adr-0015",
+        "M6-002",
+        "M6-003"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0029：公开同模型 harness benchmark",
+      "detail": "用户确认四方基础/增强双轨、公开简单案例及外部基准、DeepSeek 300 元预算；以可信基线而非击败竞品作为完成标准。",
+      "refs": [
+        "adr-0029",
+        "benchmark-plan",
+        "M7-001",
+        "benchmark"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "milestone",
+      "title": "M7 首轮公开评测基线完成",
+      "detail": "八个自建题与四个 Polyglot 子集题完成四方双轨 96 次配对，保留两次真实失败；含调试费用上界 14.219348 元。后续优先处理生成截断结束状态，再做故障恢复专项与重复评测。",
+      "refs": [
+        "M7-004",
+        "M7-007",
+        "benchmark-baseline",
+        "benchmark"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0030：生成截断不能报告完成",
+      "detail": "Loop 持久记录 finish_reason；length 复用任务错误路径，CLI/TUI 不报告成功，不派发截断工具、不自动续写；保留 v1 基线。",
+      "refs": [
+        "adr-0030",
+        "M7-007",
+        "loop"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0028 补充：统一文本布局，静态输出不创建编辑器",
+      "detail": "输入、预览、inline transcript、详情与 diff 共享字素布局；仅输入生成光标映射，linear 保留原生软换行；不变更日志或终端所有权。",
+      "refs": [
+        "adr-0028",
+        "M6-010",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "decision",
+      "title": "ADR-0031：结构化审阅、紧凑 TUI 与日志正文复用",
+      "detail": "用户授权全部实施第二阶段。未知覆盖不代表变化；CLI 统一呈现与高亮；digest 复用同一事件日志已有正文，不新增 core 字段或持久 store。",
+      "refs": [
+        "adr-0031",
+        "M6-011",
+        "M6-012",
+        "M6-014",
+        "tui"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "milestone",
+      "title": "M6 第二阶段 TUI 实现与本地验收完成",
+      "detail": "M6-011 至 M6-016：纠正覆盖误报，紧凑收尾和统一呈现，日志正文复用，高亮与活动反馈；209 测试、100 轮及 30 分钟合成压力通过。真实 Linux/macOS gate 保留。",
+      "refs": [
+        "M6-011",
+        "M6-012",
+        "M6-013",
+        "M6-014",
+        "M6-015",
+        "M6-016",
+        "tui-upgrade-validation"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "milestone",
+      "title": "代码清理与分批提交；记录重复轮次中的定时器崩溃",
+      "detail": "删除无消费者的启动字段与重复预算推导，共用 PTY 启动壳；保留全部 benchmark 原始证据。常规回归通过，debug 多轮偶发 panic 由 M6-018 单独跟踪，未宣称修复。",
+      "refs": [
+        "M6-017",
+        "M6-018",
+        "tui"
       ]
     }
   ]

@@ -79,7 +79,7 @@ A task is not done until:
 
 ## Current focus
 
-M0–M4 are done; M5 is active. M4-001/M4-002/M4-003 are done: CommandRegistry,
+M0–M5 kernel milestones are done; M6 is active. M5-003/M5-006 terminal gates remain open. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
 M4-004/M4-005/M4-006/M4-007/M4-008/M4-009/M4-010/M4-011/M4-012 are done.
@@ -89,8 +89,36 @@ fixed by unifying startup output/flush; inline remains M5-006 blocked pending a 
 `.niucode`; state lives in `~/.niucode/projects/<key>/`. skills discovery/trust is done (M5-007); tool metadata/LoopPhase and the
 interactive `/resume` picker are done.
 `/goal run` is available in TUI and headless via `exec --goal`. TUI mouse capture
-is menu-scoped, terminal state is restored by `TerminalGuard`, session
+is menu-scoped, terminal state is restored by `TerminalSession`/`DetailScreen`, session
 lifecycle is `/clear` vs `/reset` vs `/resume`, and runtime selection is
 `/model` / `/permissions` (ADR-0015), with dropdown argument completion. Keep the event log
 as the only durable state; plugins are capability-scoped and out-of-process,
 never a second durable store.
+
+M6 Reliable pairing is implemented and in review: shared Composer/Completion,
+TerminalSession/live ownership, event-driven runtime, live steering/queue,
+recorded details, prepared file mutations and task evidence. Read
+`docs/pairing-upgrade.md`, ADR-0028 and `docs/terminal-acceptance.md`.
+The event log remains the only durable truth; do not add another queue/store.
+M6-009 is blocked on real Linux/macOS terminal and device-specific pressure tests.
+PTY success does not close M5 Ghostty gates. Keep the default linear fallback.
+
+M6-011–M6-016 are done: structured review separates unknown coverage from proven
+changes, compact task completion and shared highlighting, event-log snapshot-body
+reuse, and history-preserving approval views. Synthetic 100-turn and 30-minute PTY
+acceptance passed; see `docs/tui-upgrade-validation.md`. This does not close the
+real-terminal M6-009 or M5 Ghostty gates.
+
+M6-017 removes unused startup state and shares the PTY test launcher. Repeated
+debug runs exposed an intermittent Tokio timer panic, also reproduced before
+that cleanup; M6-018 tracks diagnosis. Passing release stress evidence does not
+close this new issue. Do not suppress the assertion or weaken the PTY tests.
+
+M7 benchmark preparation lives in `benchmarks/` (ADR-0029). Four harnesses,
+DeepSeek, basic/enhanced tracks, eight synthetic cases and a separate four-task
+Polyglot subset. Read `benchmarks/README.md` and `docs/benchmark-plan.md` before
+changing evaluation semantics. Scored runs freeze cases, adapter, runner, grader
+and image hashes; never tune them mid-campaign or overwrite failed attempts.
+The benchmark gateway owns a separate append-only cost journal, not session state.
+All model calls, including development and delegated calls, share one CNY 300 cap.
+M6 remains active and real-terminal acceptance stays independent.

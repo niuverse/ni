@@ -25,7 +25,7 @@ niucode 是一个围绕 **append-only 事件日志** 构建的最小 coding agen
 user input
    │
    ▼
- CLI ──► loop ──► context.project(log, budget) ──► provider.stream
+ CLI ──► runtime ──► loop ──► context.project(log, budget) ──► provider.stream
             │                                          │
             │                                     StreamEvent
             │                                          ▼
@@ -49,7 +49,7 @@ user input
 | `user_message` | 用户输入 | text |
 | `assistant_message` | 一次模型响应结束 | text、reasoning、tool_calls |
 | `tool_result` | 每个工具执行完 | call_id、ok、output |
-| `turn_end` | 一个 turn 结束 | usage（含 cached / reasoning） |
+| `turn_end` | 一次模型响应结束，不代表任务成功 | usage（含 cached / reasoning）、可选 finish_reason |
 | `init_proposal` | `/init` 生成完整提案 | content、path |
 | `instructions` | 每次 run 发现 AGENTS.md | sources、digest |
 | `fork` | fork 出新 session | parent、parent_event |
@@ -64,6 +64,11 @@ user input
 | `extension_error` | sidecar 挂载/调用失败 | name、message |
 | `compaction` | 上下文压缩 | summary、upto、before/after tokens |
 | `session_end` | 正常退出 | ts |
+| `input_submitted` / `input_applied` | 运行中接收 / 注入下一请求 | id、text、queued |
+| `task_started` / `task_finished` | 一次独立任务边界 | id、cwd / status |
+| `tool_evidence` | 已完成工具的结构化证据 | call_id、process / change / conflict |
+| `task_snapshot` | 任务前后受预算限制的磁盘快照 | task_id、phase、files、coverage |
+| `check_snapshot` | 命令退出后、释放 W1 前 | call_id、workspace digest |
 
 `compaction.upto` 是事件日志的绝对下标：摘要替换 `events[..upto]`。compaction 事件本身追加在日志末尾，但投影时在 `upto` 处插入摘要。resume 只使用最后一个 compaction；原始事件永远保留。
 
@@ -80,6 +85,10 @@ user input
 | Engineering | Dashboard | 架构阅读面（默认 Architecture）；不参与运行时 |
 
 依赖方向只能向下：Interface → Engine → Adapters / State。`niucode-core` 不依赖 `niucode-cli`，TUI 不 import loop 内部。
+
+CLI 的 `text_layout` 集中处理输入/输出的字素布局与控制字符可视化；静态输出不创建
+Composer，不生成编辑历史或光标映射。Composer 持有输入状态，TerminalSession 持有
+终端模式；布局模块不读写会话，见 ADR-0028 的文本布局补充。
 
 ## 工具面
 
@@ -119,6 +128,9 @@ user input
 
 `niucode exec --json` 在 stdout 输出一行一个 JSON 事件，第一行 `start` 带 `protocol: 1`。事件类型与 `AgentEvent` 同构，另有 `start` / `done` / `cancelled` / `error`。`tool_result` 只含 summary，完整 output 在 session 日志。stderr 保留人类诊断；`--approval ask` 在 JSON 模式下被拒绝。决策见 ADR-0012。
 
+生成 `finish_reason=length` 记录 usage 和响应后返回错误，不派发该响应的工具，
+不发任务完成；CLI/TUI 复用 runtime 错误路径，见 ADR-0030。
+
 ## 上下文与压缩
 
 - `project_history(events)` 是全量日志到模型上下文的有损投影；`compaction` 在 cutoff 处插入一条 system handoff。
@@ -151,6 +163,16 @@ Linux 第一后端用 bwrap namespace：只读根 + workspace bind，network off
 - 不在 loop 里做 prompt 字符串拼接；prompt 是独立、可版本化的输入。
 
 ## 开放问题
+
+公开 harness 评测设施位于 `benchmarks/`，属于 engineering，见
+[评测计划](benchmark-plan.md) 和 [ADR-0029](adr/0029-public-harness-benchmark.md)。
+容器 runner、独立 grader、费用网关不进入 agent/core；网关凭证经 niucode-auth。
+评测结果不充当会话状态，也不替代终端验收。
+
+M6 的目标契约和具体迁移计划见 [可靠的终端结对编码实施计划](pairing-upgrade.md)
+及 [ADR-0028](adr/0028-terminal-pairing.md)。共享编辑器、终端 owner、运行时命令/事件、prepared mutation 和证据审阅已落地。
+新增事件只记录持久事实；排队、上下文和审阅仍从日志投影。SessionLog 内部串行化追加，写失败后停止。
+实机与压力验收见 [终端验收记录](terminal-acceptance.md)；M5 的真实 Ghostty gate 保持有效。
 
 1. `assistant_message` 是否要保留 reasoning 原文，还是只保留摘要？不同 provider 的回传要求不同。
 2. 确定性 handoff 在什么任务上开始丢意图？需要模型生成 handoff 时，如何限制额外调用成本？

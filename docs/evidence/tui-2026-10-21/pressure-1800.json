@@ -1,0 +1,11 @@
+{
+  "duration_s": 1800.05,
+  "cancel_ms": 12.41,
+  "requests_to_local_fixture": 1,
+  "detail_visits": 120,
+  "output_bytes": 7556048,
+  "rss_kib_first": 12976,
+  "rss_kib_last": 14008,
+  "rss_kib_peak": 14008,
+  "binary_sha256": "194d526a8a0a5fa30d2b0710cc0635270aa16cb49b896159ae663eeec64c0663"
+}

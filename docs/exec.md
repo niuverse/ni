@@ -32,6 +32,9 @@ niucode exec "..." --context-budget 128000 --keep-recent-turns 4
 # 机器可读的 JSONL 事件流
 niucode exec "..." --json > events.jsonl
 
+# 限定本轮可用工具，例如基础单 agent 评测
+niucode exec "..." --tools read,write,edit,grep,glob,bash
+
 # 沙箱三轴
 niucode exec "..." --sandbox read-only --network off
 niucode exec "..." --sandbox workspace-write --approval ask
@@ -39,6 +42,11 @@ niucode exec "..." --sandbox full-access --network on --approval never
 ```
 
 `niucode exec` 是 headless 入口：默认文本流到 stdout，工具调用和 usage 流到 stderr，session 写入 JSONL；加 `--json` 时 stdout 改为 JSONL 事件流。
+
+模型因输出上限结束（`finish_reason=length`）时，进程非零退出并输出 `error`，
+不会报告 `done`。已收到的正文/推理和 usage 保存在会话中，`turn_end` 记录结束原因，
+`task_finished` 为 `error`。该响应中的工具调用不执行；检查记录后可继续任务，
+不会自动重试或续写。`--goal` evaluator 也拒绝截断的判断。见 ADR-0030。
 
 凭证通过 `niucode-auth` 解析：环境变量 → OS keyring → 0600 文件。没有凭证时会提示：
 
@@ -66,6 +74,9 @@ session_start
 一个 turn 的事件顺序固定：assistant 消息先落盘，再落工具执行结果，然后进入下一轮。工具结果不会丢；resume 可以从同一份日志重建。
 
 ## 工具
+
+`--tools` 是逗号分隔的工具白名单，同时限制模型看到的工具和工具实际执行；
+省略时保留默认注册工具。它不是 shell 沙箱：`bash` 的权限仍由安全策略控制。
 
 | 工具 | 行为 | 约束 |
 |---|---|---|

@@ -1,0 +1,24 @@
+3/3 · e000009 · task changes / command evidence · [/] previous/next · ↑↓ scroll
+# Task 1792570623754-3294825-0:task:3
+Status: complete · 0.0s
+cwd: <synthetic fixture>/work
+
+# Command evidence
+No recorded command checks.
+Command exit status is evidence for that command, not proof of all acceptance c
+riteria.
+
+Tool failures: 0 · denied approvals: 0
+
+# Coverage unknown
+Git enumeration unavailable; bounded non-ignored file coverage only
+
+Missing evidence is not proof of no changes. No automatic retry of uncertain wr
+ites.
+
+1–17 / 17 · ↑↓ scroll · [/] history · Esc close
+
+
+
+
+

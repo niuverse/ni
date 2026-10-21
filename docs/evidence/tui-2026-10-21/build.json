@@ -1,0 +1,8 @@
+{
+  "binary_sha256": "2e6381508bf227d4b0253025f77311a84d9cf5718927e2e9f058e437e8ba8a35",
+  "rust_tests_passed": 209,
+  "model_api_cost": 0,
+  "benchmark_evidence_files_unchanged": 58,
+  "sustained_test_binary_sha256": "194d526a8a0a5fa30d2b0710cc0635270aa16cb49b896159ae663eeec64c0663",
+  "final_patch": "Error-cause presentation moved after terminal guard teardown; no change to streaming, snapshots, or activity loop."
+}

@@ -11,6 +11,9 @@ summary = "无 picker 时底部占 3 行；打开 picker 才扩到 6 行；reaso
 
 Accepted · 2026-10-20
 
+2026-10-21：ADR-0028 的默认收起 reasoning / 日志详情已实现并通过离线与 PTY 回归，替代本 ADR 第 3–5 条。跨终端实机验收仍未完成。
+输入区紧凑原则继续有效。实施计划见 `docs/pairing-upgrade.md`。
+
 ## 背景
 
 inline v1 固定 8 行（4 help/picker + 3 input + footer），即使没有 picker 也长期占满底部；help 文案重复，输入区显得拥挤。reasoning 事件只打印一次 “thinking…”，用户看不到实际思考内容，主观上像被隐藏。

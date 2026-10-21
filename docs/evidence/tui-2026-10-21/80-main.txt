@@ -1,0 +1,24 @@
+niucode tui · work · replay
+workspace-write · net off · on-failure · /help
+
+niucode ▸ hello
+# Review
+Plain text with `inline code`.
+```rust
+fn main() { let count = 42; }
+```
+Ready for your next task.
+✓ done · 0.0s
+
+niucode ▸
+work · replay/replay · permissions startup · context 54400
+
+
+
+
+
+
+
+
+
+

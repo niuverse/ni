@@ -17,6 +17,11 @@ summary = "从 M0 到可用 coding harness：组件地图、自研/用库边界�
 
 ## 组件地图
 
+M0–M5 kernel 退出条件已满足，M6 **Reliable pairing** active；实现进入 review，M5-003/M5-006 的独立终端验收状态保持。
+见 [M6 实施计划](pairing-upgrade.md) 和 ADR-0028：统一编辑与渲染 → 运行中协作 → 冲突检测与证据审阅 → Linux/macOS 真实终端验收。
+代码质量门槛包含删除重复实现、单一事件日志 writer、有界队列和完整取消路径；实现卡记录本地证据；M6-009 等待真实终端矩阵和压力验收，见 terminal-acceptance。
+下方初期学习顺序保留为历史背景，当前状态以工作卡与 project.json 为准。
+
 - **Runtime / loop**（M0-008）— 自研 Command/Event 与 turn 状态机；用 tokio。学会：画出命令/事件生命周期，说明取消发生在哪。
 - **Provider**（M0-005）— 自研流式归一化、SSE 映射、错误分类；用 reqwest。学会：解释重试边界和 token 账本。
 - **Tools**（M0-006/007）— 自研注册表与六个工具；用 serde_json / ignore / globset。学会：证明工具输出不会撑爆上下文。
@@ -54,6 +59,10 @@ M3   replay / fork / subagent（视需要）
 每个阶段都必须能离线测试，不能依赖真实 API 才能验证 loop。
 
 ## 学习检查点
+
+下一阶段 M7 先建立公开证据：八个自建小仓库、四个外部 Polyglot 任务、
+同一 DeepSeek 的四方双轨基线。先依据真实失败分类安排修复，再扩展任务难度和重复数。
+详见 [公开评测计划](benchmark-plan.md)。M6 仍是 active 阶段，真实终端与压力测试继续独立验收。
 
 完成一个阶段时，应该能回答：
 
