@@ -125,6 +125,8 @@ impl Provider for ParallelProvider {
 #[tokio::test]
 async fn two_subagents_run_in_parallel_with_independent_logs() {
     let directory = temp_dir("parallel");
+    // Snapshots legitimately contain workspace text, including other task names.
+    fs::write(directory.join("notes.txt"), "inspect a\ninspect b\n").expect("notes");
     let provider = ParallelProvider::new();
     let mut session = start_session(&directory);
     let config = config(&directory);
@@ -168,6 +170,8 @@ async fn two_subagents_run_in_parallel_with_independent_logs() {
         .collect::<Vec<_>>();
     assert_eq!(spawns.len(), 2);
     assert_eq!(results.len(), 2);
+    assert_ne!(spawns[0].0, spawns[1].0);
+    assert_ne!(spawns[0].1, spawns[1].1);
     assert!(results.iter().all(|(_, ok, _)| *ok));
 
     for (id, path, task) in &spawns {
@@ -176,17 +180,36 @@ async fn two_subagents_run_in_parallel_with_independent_logs() {
             sub.events.first(),
             Some(Event::SessionStart { id: sub_id, .. }) if sub_id == id
         ));
-        assert!(sub.events.iter().any(|event| matches!(
-            event,
-            Event::UserMessage { text, .. } if text == task
-        )));
-        let other = if task == "inspect a" {
-            "inspect b"
-        } else {
-            "inspect a"
-        };
-        let raw = fs::read_to_string(path).expect("read subagent");
-        assert!(!raw.contains(other), "subagent logs must not be mixed");
+        let prompts: Vec<_> = sub
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::UserMessage { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            prompts,
+            [task.as_str()],
+            "subagent prompts must not be mixed"
+        );
+        let answers: Vec<_> = sub
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::AssistantMessage { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        let result = results
+            .iter()
+            .find(|result| &result.0 == id)
+            .expect("matching result");
+        assert_eq!(
+            answers,
+            [result.2.as_str()],
+            "subagent results must not be mixed"
+        );
     }
 
     let requests = provider.requests();

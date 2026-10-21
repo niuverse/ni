@@ -176,6 +176,13 @@ impl Toolbox {
         if !cwd.is_dir() {
             bail!("working directory is not a directory: {}", cwd.display());
         }
+        let read_roots = read_roots
+            .into_iter()
+            .map(|root| {
+                root.canonicalize()
+                    .with_context(|| format!("canonicalize read-only root {}", root.display()))
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             cwd,

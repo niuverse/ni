@@ -11,6 +11,48 @@ fn toolbox(path: &std::path::Path) -> Toolbox {
     .unwrap()
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn read_roots_resolve_aliases_without_allowing_writes_or_retargeting() {
+    use std::os::unix::fs::symlink;
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("work");
+    let root = dir.path().join("skills");
+    let outside = dir.path().join("outside");
+    let alias = dir.path().join("alias");
+    for path in [&work, &root, &outside] {
+        fs::create_dir(path).unwrap();
+    }
+    fs::write(root.join("SKILL.md"), "skill").unwrap();
+    fs::write(outside.join("SKILL.md"), "outside").unwrap();
+    symlink(&root, &alias).unwrap();
+    let tools =
+        Toolbox::with_policy_and_roots(&work, SandboxPolicy::default(), false, vec![alias.clone()])
+            .unwrap();
+    let input = json!({"path":alias.join("SKILL.md")});
+    let read = tools.execute("read", &input).await;
+    assert!(read.ok, "{}", read.output);
+    assert!(
+        !tools
+            .execute(
+                "write",
+                &json!({"path":root.join("SKILL.md"),"content":"changed"})
+            )
+            .await
+            .ok
+    );
+    fs::remove_file(&alias).unwrap();
+    symlink(&outside, &alias).unwrap();
+    assert!(!tools.execute("read", &input).await.ok);
+    assert!(
+        tools
+            .execute("read", &json!({"path":root.join("SKILL.md")}))
+            .await
+            .ok
+    );
+    assert_eq!(fs::read_to_string(root.join("SKILL.md")).unwrap(), "skill");
+}
+
 #[tokio::test]
 async fn equal_length_external_edit_conflicts_and_read_again_recovers() {
     let dir = tempfile::tempdir().unwrap();

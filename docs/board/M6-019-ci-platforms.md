@@ -33,6 +33,10 @@ docs = ["adr-0025"]
   仍可读取并核对恢复的 termios。异常清理先关闭 PTY，再有界等待回收子进程。
 - CI 即时打印测试失败，继续执行其他测试目标，并给测试步骤设置 5 分钟超时，避免一个挂起场景隐藏其他失败。
 - 批量写入 fixture 显式采用 `full-access / network on / approval never`，不依赖 bwrap 执行断网。
+- Toolbox 构造时统一 canonicalize 只读 roots，避免 macOS `/var` 与 `/private/var` 的别名
+  导致授权目录被误拒；符号链接根目录回归同时检查只读、改向后拒绝和原根目录仍可读。
+- 子代理隔离断言验证独立 session ID/路径、唯一任务消息和匹配回复，不把快照正文中的
+  其他任务名误判为串日志；fixture 主动包含两项任务名，确保该情形稳定覆盖。
 
 ADR-0025 的强制隔离不变；不提供无沙箱降级，不修改 benchmark 冻结输入或证据。
 CI 的 macOS PTY 回归仍保留，不代替真实终端验收。
@@ -55,6 +59,10 @@ CI 配置采用仅影响当前 VM 的 sysctl，不写系统持久配置。
 在重新启用 ICANON 时主动设置该 pending-input 状态位，并在下一次输入处理中清除。
 常规 PTY 和压力脚本共用恢复断言：macOS 仅排除此内核状态位，所有模式、速率和控制字符
 仍须一致；其他平台继续完整比较。不改生产代码来清除一个正常的内核状态。
+
+[run 39579470906](https://github.com/niuverse/niucode/actions/runs/39579470906)
+的 macOS PTY 已全部通过，完整 Rust 测试继续暴露上述 roots 匹配和日志断言问题。
+两者均在 Linux 新 fixture 下先复现失败、修复后通过，不只依赖 macOS runner 验证。
 
 ## 验收
 
