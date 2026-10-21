@@ -959,11 +959,7 @@ async fn run_tui(
         theme.dim("session"),
         theme.paint(Tone::Bright, session.path().display())
     );
-    println!(
-        "{} {}",
-        theme.dim("workspace"),
-        theme.paint(Tone::Bright, workspace.project_key.clone())
-    );
+    let _ = std::io::stdout().flush();
 
     let result = tui::run(
         provider,

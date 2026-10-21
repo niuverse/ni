@@ -2356,6 +2356,13 @@ fn print_status(session: &SessionLog, config: &AgentConfig, out: Theme) -> Resul
         config.context.keep_recent_turns
     );
     println!("  session    {}", session.path().display());
+    if let Ok(workspace) = Workspace::discover(&config.working_dir) {
+        println!(
+            "  workspace  {} ({})",
+            workspace.project_dir.display(),
+            workspace.project_key
+        );
+    }
     println!(
         "  plan       {}",
         if ui.plan_mode {
