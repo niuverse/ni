@@ -1,3 +1,7 @@
+// These tests exercise real namespace isolation, which requires Linux/bubblewrap.
+// Missing-backend rejection is covered on every platform by the CLI tests.
+#![cfg(target_os = "linux")]
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};

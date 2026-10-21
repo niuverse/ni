@@ -21,7 +21,17 @@ fn temp_dir(tag: &str) -> PathBuf {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn exec_mounts_calls_and_unmounts_a_sidecar() {
+    check_extension_lifecycle(true);
+}
+
+#[test]
+fn exec_records_extension_error_when_sandbox_is_missing() {
+    check_extension_lifecycle(false);
+}
+
+fn check_extension_lifecycle(sandbox_available: bool) {
     let dir = temp_dir("exec");
     let work = dir.join("work");
     let sessions = dir.join("sessions");
@@ -85,7 +95,8 @@ for line in sys.stdin:
     )
     .expect("fixture");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_niucode"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_niucode"));
+    command
         .args([
             "exec",
             "use demo",
@@ -102,9 +113,14 @@ for line in sys.stdin:
             "--network",
             "on",
         ])
-        .env("NIUCODE_HOME", &home)
-        .output()
-        .expect("run niucode");
+        .env("NIUCODE_HOME", &home);
+    if !sandbox_available {
+        // Change only the child environment, so parallel tests remain isolated.
+        let empty_path = dir.join("empty-path");
+        fs::create_dir(&empty_path).expect("empty PATH");
+        command.env("PATH", empty_path);
+    }
+    let output = command.output().expect("run niucode");
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -121,9 +137,37 @@ for line in sys.stdin:
         })
         .expect("session file");
     let log = fs::read_to_string(session).expect("session log");
-    assert!(log.contains(r#""type":"extension_mount""#));
-    assert!(log.contains(r#""output":"echo: hello""#));
-    assert!(log.contains(r#""type":"extension_unmount""#));
+    if sandbox_available {
+        assert!(
+            log.contains(r#""type":"extension_mount""#),
+            "missing extension mount; stderr: {}\nsession: {log}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(log.contains(r#""output":"echo: hello""#));
+        assert!(log.contains(r#""type":"extension_unmount""#));
+        assert!(!log.contains(r#""type":"extension_error""#));
+    } else {
+        let events: Vec<serde_json::Value> = log
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("event"))
+            .collect();
+        let error = events
+            .iter()
+            .find(|event| event["type"] == "extension_error")
+            .expect("missing sandbox must be recorded as an extension error");
+        assert!(error["message"]
+            .as_str()
+            .expect("message")
+            .contains("spawn extension demo under bwrap"));
+        assert!(!log.contains(r#""type":"extension_mount""#));
+        assert!(!log.contains(r#""type":"extension_unmount""#));
+        let result = events
+            .iter()
+            .find(|event| event["type"] == "tool_result")
+            .expect("tool result");
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["output"], "error: unknown tool \"demo_echo\"");
+    }
 
     fs::remove_dir_all(dir).expect("cleanup");
 }

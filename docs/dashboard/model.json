@@ -2029,6 +2029,26 @@
       "path": "docs/board/M6-018-debug-timer-panic.md"
     },
     {
+      "id": "M6-019",
+      "title": "Restore Linux and macOS CI with explicit sandbox prerequisites",
+      "status": "review",
+      "milestone": "M6",
+      "module": "extensions",
+      "size": "S",
+      "priority": "P1",
+      "updated": "2026-10-21",
+      "completed": null,
+      "depends_on": [
+        "M4-007"
+      ],
+      "docs": [
+        "adr-0025"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>问题</h2>\n<p><a href=\"https://github.com/niuverse/niucode/actions/runs/39576343751\">CI run 39576343751</a>\n在 Linux 和 macOS 的 <code>exec_mounts_calls_and_unmounts_a_sidecar</code> 中失败。\n测试无条件要求 bwrap 挂载成功，但 Linux job 未安装 bubblewrap，macOS 不支持\n该 Linux namespace 后端。将本地测试进程的 PATH 指向空目录可复现相同断言失败；\n实际日志记录 <code>extension_error</code>，原因是无法启动 bwrap。</p>\n<h2>修改</h2>\n<ul>\n<li>Linux CI 安装 bubblewrap，并在测试前实际创建隔离 namespace；依赖不满足时明确失败。</li>\n<li>真实 sidecar 挂载、网络/文件隔离、worker pool 测试只在 Linux 执行，保留全部断言。</li>\n<li>所有平台运行缺少 bwrap 的 CLI 回归：子进程使用空 PATH，必须记录挂载错误，\n不得注册/卸载未挂载扩展，其工具调用必须失败。不会修改测试宿主的 PATH。</li>\n<li>挂载成功断言附上 stderr 与会话日志，便于定位后续环境问题。</li>\n</ul>\n<p>ADR-0025 的强制隔离不变；不提供无沙箱降级，不修改 benchmark 冻结输入或证据。\nCI 的 macOS PTY 回归仍保留，不代替真实终端验收。</p>\n<h2>验收</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nworkspace tests、fmt、clippy、benchmark 离线验证与 dashboard check 通过。</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\n修复提交在 GitHub Actions 的 Linux/macOS matrix 全部通过。</li>\n</ul>\n",
+      "path": "docs/board/M6-019-ci-platforms.md"
+    },
+    {
       "id": "M7-001",
       "title": "Public benchmark contract and frozen evaluation design",
       "status": "done",
@@ -3513,7 +3533,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 66,
+    "cards": 67,
     "modules": 13,
     "docs": 45,
     "generator": "cargo xtask dashboard"
