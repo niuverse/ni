@@ -59,3 +59,52 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
 | 把 niuse 并入 niucode monorepo | 改变 niucode 的定位与发布节奏；见 niuse ADR-0003 |
 | 给 niucode 加 `--profile personal` | 把产品藏进内核，内核被迫理解身份与记忆 |
 | 只暴露事件流，让 niuse 自建 TUI | 等于把前端复制一次，没有解决根因 |
+
+## 实施草图（proposed）
+
+这一步不改变上面的决策，只把「接受之后第一步做什么」拆到可评审的程度。
+
+### 1. 结构
+
+- `niucode-cli` 新增 `src/lib.rs`，把 `main.rs` 里的 `main()` 主体移成 `pub fn run() -> ExitCode`；bin 只保留一行调用。
+- 模块声明迁入 lib；所有 `crate::` 路径保持原样。这一步只移动、不改行为，单独一个 commit，可单独 revert。
+- 库目标不改变现有二进制、安装方式和终端验收。
+
+### 2. API
+
+```rust
+pub struct TuiOptions {
+    // session path, cwd, policy, approval, config
+}
+
+pub trait TurnHooks {
+    fn augment_system_prompt(&mut self, _prompt: &mut String) {}
+    fn on_turn_end(&mut self, _outcome: &RunOutcome) {}
+    fn on_event(&mut self, _event: &Event) {}
+}
+
+pub fn run_tui(options: TuiOptions, hooks: Box<dyn TurnHooks>) -> Result<()>;
+```
+
+- `augment_system_prompt` 在构造 `AgentConfig` 之前调用一次。
+- `on_event` 由 TUI 的观察者转发，只读，不写日志。
+- `on_turn_end` 在最终事件落盘后调用。hook 不应 panic；库不额外捕获。
+- `TuiOptions` 只包含现有入口已经需要的字段，不引入产品类型。
+
+### 3. 验收
+
+- 现有测试不改，`cargo test --workspace` 绿。
+- 空 hooks 的路径与当前行为一致：至少覆盖一次非交互 run 和一次 TUI 启动/退出。
+- 二进制仍能独立运行，`--help`、`--version` 与当前一致。
+- niuse 的契约测试在 pin bump 后通过；没有 hook 被使用时，不应多出请求、事件或 prompt token。
+
+### 4. 回滚
+
+第 1 步（库目标）与第 2 步（hooks）分开提交。任一步出问题都能回到纯 bin，不影响已发布版本和事件日志。
+
+### 5. 不在这一步
+
+- 不迁移 niuse 的 renderer。
+- 不发布 crate、不改依赖版本策略。
+- 不改事件格式，不加第二份持久状态。
+- 不为了让 hook 好用而增加内核概念。
