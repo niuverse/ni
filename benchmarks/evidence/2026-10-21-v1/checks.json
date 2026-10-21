@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-21",
+  "cargo_test_workspace": {
+    "passed": 190,
+    "failed": 0,
+    "ignored": 0,
+    "log_sha256": "ab7487a2af88e23b2ecd9250618f5c2072c293c990ebe2191174a7721cc16bcb"
+  },
+  "cargo_fmt_all_check": "passed",
+  "cargo_clippy_workspace_all_targets_deny_warnings": "passed",
+  "python_runner_tests": {
+    "passed": 5
+  },
+  "synthetic_validation": {
+    "cases": 8,
+    "mutants_rejected": 16
+  },
+  "external_validation": {
+    "stubs_failed": 4,
+    "upstream_examples_passed": 4
+  },
+  "real_terminal_acceptance": "not performed; M5/M6 gates remain open",
+  "gateway_binary_sha256": "a4ba6f4d9df5c919df80223bab566e56a82ac3a59a71d295e60727db9d7df924",
+  "host": {
+    "kernel": "6.17.0-40-generic",
+    "machine": "x86_64"
+  },
+  "dashboard_rebuild_and_check": "passed",
+  "git_diff_check": "passed",
+  "credential_pattern_scan": "no credential-like sk- strings in exported run files"
+}

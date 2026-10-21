@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "run": "followup-truncation-polyglot-py-transpose-niucode-enhanced-0",
+  "case": "polyglot-py-transpose",
+  "harness": "niucode",
+  "track": "enhanced",
+  "status": "passed",
+  "candidate_passed": true,
+  "resolved": true,
+  "exit_code": 0,
+  "seconds": 43.814,
+  "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210"
+}

@@ -1,0 +1,2 @@
+session: /home/galbot/Projects/niuverse/niucode/benchmarks/evidence/2026-10-21-truncation-fix/after/sessions/1792568941971-3215579-0.jsonl
+Error: model output truncated (finish_reason=length); task incomplete; review recorded output before continuing

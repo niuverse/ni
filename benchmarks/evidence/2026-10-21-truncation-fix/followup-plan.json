@@ -1,0 +1,16 @@
+{
+  "kind": "single-case follow-up, not a baseline replacement",
+  "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+  "image": "sha256:200c778ce008f2fe2e3c789c755012b04b0f335627d1f9ebf8213183f1192545",
+  "harness": "niucode",
+  "track": "enhanced",
+  "timeout": 900,
+  "journal": "/tmp/niucode-m7-campaign/billing.jsonl",
+  "previous_upper_cny": 14.219348,
+  "hashes": {
+    "adapter.py": "2617fdabb2f74b2ee7f38edd779cf3e07f331a8c8384316a229d5dafc51bf566",
+    "live.py": "3f5bf09800797ba1ba05a01b0cc015b9f645a1571fae4ca72066a4fd5317436a",
+    "bench.py": "37713b5da7f8c7e3750f2932ced62af9b321672e6a6fdcad6236cee0fb5aca9d",
+    "experiment.json": "46c85f6ddb5a181339043fb7ac1ce39e2ff347f33cb4edcec418169a4dad6360"
+  }
+}

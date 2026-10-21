@@ -1,0 +1,111 @@
+{
+  "experiment": {
+    "schema_version": 1,
+    "name": "niucode-small-repos-v1",
+    "status": "frozen-v1",
+    "budget_cny": 300,
+    "model": {
+      "provider": "deepseek",
+      "id": "deepseek-flash",
+      "thinking": "enabled",
+      "reasoning_effort": "high",
+      "max_output_tokens": 8192,
+      "context_budget": 64000,
+      "immutable_snapshot": false
+    },
+    "pricing": {
+      "date": "2026-10-21",
+      "currency": "CNY",
+      "input_uncached_per_million": 2,
+      "output_per_million": 8,
+      "policy": "peak rates; ignore discounts, missing usage retains full reservation",
+      "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+    },
+    "limits": {
+      "seconds_per_run": 900,
+      "requests_per_run": 40,
+      "memory": "4g",
+      "cpus": 2,
+      "pids": 256
+    },
+    "harnesses": {
+      "niucode": {
+        "source": "workspace snapshot"
+      },
+      "mini": {
+        "repo": "https://github.com/SWE-agent/mini-swe-agent",
+        "commit": "04d809ceab9df28f9adaed044884180159172930"
+      },
+      "dsh": {
+        "package": "@deepseek-ai/dsh",
+        "version": "0.2.1-rc.2",
+        "integrity": "sha512-tvY+yhfKRifthbqPe/OK0AYxM5ZkvqfYq/jMYgJcEUxiRRL1Vwra3Ti5TB6AXgSWQdiPHYh/Vp6SJa9yHwMNuw==",
+        "inspected_commit": "687f282e8625c6b8d11ff58211a90524be2e4317"
+      },
+      "pi": {
+        "package": "@earendil-works/pi-coding-agent",
+        "version": "1.3.0",
+        "integrity": "sha512-V/WoCjA2hQSe3QLWIUB24cTRdtEdeLiIzkDqU5RMXV6VWuD+KGZnzVBMhglwdnQTySkehZsjt8a3g6Jd2g4nnw==",
+        "inspected_commit": "16f5f0af4d85ca583d045ceb5ed6d646fcaf7761"
+      }
+    },
+    "tracks": {
+      "basic": "official coding tools, single agent, no extra skills/MCP/extensions",
+      "enhanced": "frozen common verify-change skill plus each harness native capabilities; optional delegation permitted; exact config and exposed tools recorded"
+    },
+    "cases": [
+      "py-config",
+      "py-pagination",
+      "rs-unicode",
+      "rs-scan",
+      "py-tasks",
+      "py-csv",
+      "rs-dry-run",
+      "rs-cache"
+    ],
+    "public_anchor": {
+      "dataset": "Aider-AI/polyglot-benchmark",
+      "revision": "7e0611e77b54e2dea774cdc0aa00cf9f7ed6144f",
+      "evaluation": "original Exercism tests; all Rust ignored tests included; tests visible to agents",
+      "status": "frozen",
+      "instances": [
+        "polyglot-py-grade-school",
+        "polyglot-py-transpose",
+        "polyglot-rs-word-count",
+        "polyglot-rs-variable-length-quantity"
+      ],
+      "selection": "two dependency-free exercises per language, selected before candidate runs; convenience subset, not representative",
+      "not_official_leaderboard_protocol": true
+    },
+    "reporting": {
+      "repeats_target": 3,
+      "publish_per_case": true,
+      "separate_tracks": true,
+      "no_overall_ranking_from_smoke": true
+    }
+  },
+  "adapter_sha256": "b66f5a55a99436b58f06342d0313b80e6068276a0347cd11606001302fd303c0",
+  "runner_sha256": "4afc444a013f1c29db3258728803fb76c640cebf3568da17357c2bf04db16992",
+  "grader_sha256": "37713b5da7f8c7e3750f2932ced62af9b321672e6a6fdcad6236cee0fb5aca9d",
+  "image": "sha256:fc06ad80f36132d36aafd3d3cec75ed4a7c28b89b3196341076d657c6924cf1f",
+  "cases": {
+    "polyglot-py-grade-school": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+    "polyglot-py-transpose": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+    "polyglot-rs-variable-length-quantity": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+    "polyglot-rs-word-count": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b"
+  },
+  "harnesses": [
+    "niucode",
+    "mini",
+    "dsh",
+    "pi"
+  ],
+  "tracks": [
+    "basic",
+    "enhanced"
+  ],
+  "repeats": 1,
+  "timeout": 900,
+  "smoke_only": false,
+  "suite": "polyglot"
+}

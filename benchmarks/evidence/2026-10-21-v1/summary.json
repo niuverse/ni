@@ -1,0 +1,3373 @@
+{
+  "schema_version": 1,
+  "cost_semantics": "peak-rate upper bound; not actual account debit",
+  "upper_cny": 14.219348,
+  "unknown_usage_requests": 0,
+  "plans": [
+    {
+      "file": "frozen-plan-polyglot.json",
+      "smoke_only": false,
+      "expected_runs": 32
+    },
+    {
+      "file": "frozen-plan-synthetic.json",
+      "smoke_only": false,
+      "expected_runs": 64
+    },
+    {
+      "file": "smoke-plan-0a45aeeb.json",
+      "smoke_only": true,
+      "expected_runs": 8
+    },
+    {
+      "file": "smoke-plan-1159f058.json",
+      "smoke_only": true,
+      "expected_runs": 8
+    },
+    {
+      "file": "smoke-plan-51e435c6.json",
+      "smoke_only": true,
+      "expected_runs": 2
+    },
+    {
+      "file": "smoke-plan-55635e30.json",
+      "smoke_only": true,
+      "expected_runs": 8
+    },
+    {
+      "file": "smoke-plan-80f9ae0e.json",
+      "smoke_only": true,
+      "expected_runs": 8
+    }
+  ],
+  "groups": [
+    {
+      "suite": "polyglot",
+      "harness": "niucode",
+      "track": "basic",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 7.4775,
+      "input_tokens": 68894,
+      "output_tokens": 4140,
+      "requests": 20,
+      "upper_cny": 0.170908
+    },
+    {
+      "suite": "polyglot",
+      "harness": "mini",
+      "track": "basic",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 20.977,
+      "input_tokens": 165438,
+      "output_tokens": 13888,
+      "requests": 26,
+      "upper_cny": 0.44198
+    },
+    {
+      "suite": "polyglot",
+      "harness": "dsh",
+      "track": "basic",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 16.746,
+      "input_tokens": 204254,
+      "output_tokens": 8350,
+      "requests": 28,
+      "upper_cny": 0.475308
+    },
+    {
+      "suite": "polyglot",
+      "harness": "pi",
+      "track": "basic",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 8.2345,
+      "input_tokens": 117143,
+      "output_tokens": 11653,
+      "requests": 23,
+      "upper_cny": 0.32751
+    },
+    {
+      "suite": "polyglot",
+      "harness": "niucode",
+      "track": "enhanced",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 3,
+      "statuses": {
+        "passed": 3,
+        "failed": 1
+      },
+      "median_seconds": 19.4895,
+      "input_tokens": 142016,
+      "output_tokens": 15568,
+      "requests": 29,
+      "upper_cny": 0.408576
+    },
+    {
+      "suite": "polyglot",
+      "harness": "mini",
+      "track": "enhanced",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 28.6695,
+      "input_tokens": 218713,
+      "output_tokens": 13792,
+      "requests": 29,
+      "upper_cny": 0.547762
+    },
+    {
+      "suite": "polyglot",
+      "harness": "dsh",
+      "track": "enhanced",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 19.049,
+      "input_tokens": 290240,
+      "output_tokens": 12972,
+      "requests": 31,
+      "upper_cny": 0.684256
+    },
+    {
+      "suite": "polyglot",
+      "harness": "pi",
+      "track": "enhanced",
+      "planned": 4,
+      "completed": 4,
+      "resolved": 4,
+      "statuses": {
+        "passed": 4
+      },
+      "median_seconds": 13.9965,
+      "input_tokens": 166731,
+      "output_tokens": 8339,
+      "requests": 29,
+      "upper_cny": 0.400174
+    },
+    {
+      "suite": "synthetic",
+      "harness": "niucode",
+      "track": "basic",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 19.951,
+      "input_tokens": 335852,
+      "output_tokens": 36999,
+      "requests": 64,
+      "upper_cny": 0.967696
+    },
+    {
+      "suite": "synthetic",
+      "harness": "mini",
+      "track": "basic",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 22.634500000000003,
+      "input_tokens": 347968,
+      "output_tokens": 39536,
+      "requests": 64,
+      "upper_cny": 1.012224
+    },
+    {
+      "suite": "synthetic",
+      "harness": "dsh",
+      "track": "basic",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 21.6895,
+      "input_tokens": 465386,
+      "output_tokens": 37462,
+      "requests": 66,
+      "upper_cny": 1.230468
+    },
+    {
+      "suite": "synthetic",
+      "harness": "pi",
+      "track": "basic",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 7,
+      "statuses": {
+        "passed": 7,
+        "failed": 1
+      },
+      "median_seconds": 12.069500000000001,
+      "input_tokens": 157076,
+      "output_tokens": 23948,
+      "requests": 45,
+      "upper_cny": 0.505736
+    },
+    {
+      "suite": "synthetic",
+      "harness": "niucode",
+      "track": "enhanced",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 25.773,
+      "input_tokens": 708552,
+      "output_tokens": 52056,
+      "requests": 102,
+      "upper_cny": 1.833552
+    },
+    {
+      "suite": "synthetic",
+      "harness": "mini",
+      "track": "enhanced",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 30.576500000000003,
+      "input_tokens": 315414,
+      "output_tokens": 40421,
+      "requests": 65,
+      "upper_cny": 0.954196
+    },
+    {
+      "suite": "synthetic",
+      "harness": "dsh",
+      "track": "enhanced",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 29.4495,
+      "input_tokens": 831513,
+      "output_tokens": 48869,
+      "requests": 88,
+      "upper_cny": 2.053978
+    },
+    {
+      "suite": "synthetic",
+      "harness": "pi",
+      "track": "enhanced",
+      "planned": 8,
+      "completed": 8,
+      "resolved": 8,
+      "statuses": {
+        "passed": 8
+      },
+      "median_seconds": 18.7535,
+      "input_tokens": 388255,
+      "output_tokens": 31263,
+      "requests": 72,
+      "upper_cny": 1.026614
+    }
+  ],
+  "runs": [
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-dsh-basic-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.405,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 74086,
+        "input_tokens": 34267,
+        "output_tokens": 694,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-dsh-enhanced-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.314,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 112960,
+        "input_tokens": 48580,
+        "output_tokens": 1975,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-mini-basic-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.742,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-mini-enhanced-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.847,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-niucode-basic-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 6.952,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 23798,
+        "input_tokens": 7919,
+        "output_tokens": 995,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "glob": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-niucode-enhanced-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 9.751,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 38928,
+        "input_tokens": 13836,
+        "output_tokens": 1407,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "glob": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-pi-basic-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 5.806,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 23890,
+        "input_tokens": 10365,
+        "output_tokens": 395,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-0a45aeeb-smoke-pi-enhanced-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 10.311,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 53348,
+        "input_tokens": 20666,
+        "output_tokens": 1502,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-dsh-basic-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.551,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 59146,
+        "input_tokens": 27081,
+        "output_tokens": 623,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-dsh-enhanced-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 24.692,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 158494,
+        "input_tokens": 67379,
+        "output_tokens": 2967,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10,
+        "glob": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-mini-basic-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 16.132,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 44284,
+        "input_tokens": 16078,
+        "output_tokens": 1516,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-mini-enhanced-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 15.815,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 48160,
+        "input_tokens": 18216,
+        "output_tokens": 1466,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-niucode-basic-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 7.794,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 29080,
+        "input_tokens": 10516,
+        "output_tokens": 1006,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "glob": 1,
+        "read": 4,
+        "write": 1,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-niucode-enhanced-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.516,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 44850,
+        "input_tokens": 15885,
+        "output_tokens": 1635,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "glob": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-pi-basic-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 5.613,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 24510,
+        "input_tokens": 10563,
+        "output_tokens": 423,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-1159f058-smoke-pi-enhanced-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 8.97,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 42980,
+        "input_tokens": 17462,
+        "output_tokens": 1007,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-51e435c6-smoke-mini-basic-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 252.686,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-51e435c6-smoke-mini-enhanced-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 125,
+      "seconds": 0.052,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-dsh-basic-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.558,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-dsh-enhanced-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.588,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-mini-basic-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.556,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-mini-enhanced-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.557,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-niucode-basic-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.558,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-niucode-enhanced-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.545,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-pi-basic-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "basic",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.602,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-55635e30-smoke-pi-enhanced-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "harness_error",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 1,
+      "seconds": 0.477,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {},
+      "observed_parent_tool_calls": {}
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-dsh-basic-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 12.478,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 60284,
+        "input_tokens": 27186,
+        "output_tokens": 739,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "glob": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-dsh-enhanced-0",
+      "case": "smoke",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 13.848,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 92172,
+        "input_tokens": 40842,
+        "output_tokens": 1311,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-mini-basic-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 12.621,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 34198,
+        "input_tokens": 13119,
+        "output_tokens": 995,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-mini-enhanced-0",
+      "case": "smoke",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.888,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 57636,
+        "input_tokens": 20222,
+        "output_tokens": 2149,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-niucode-basic-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 8.275,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 29970,
+        "input_tokens": 11365,
+        "output_tokens": 905,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "grep": 1,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-niucode-enhanced-0",
+      "case": "smoke",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 12.153,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 49940,
+        "input_tokens": 17746,
+        "output_tokens": 1806,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-pi-basic-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 6.221,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 25274,
+        "input_tokens": 10681,
+        "output_tokens": 489,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "smoke-80f9ae0e-smoke-pi-enhanced-0",
+      "case": "smoke",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 9.855,
+      "case_sha256": "53f659d5eb41ef8ed8a40ed9a0686fe1f26ad08151d3f833bad92d8c2b909dc8",
+      "billing": {
+        "upper_micro_cny": 50422,
+        "input_tokens": 20691,
+        "output_tokens": 1130,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-dsh-basic-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.761,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 82644,
+        "input_tokens": 38426,
+        "output_tokens": 724,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-dsh-enhanced-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 16.124,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 133218,
+        "input_tokens": 59921,
+        "output_tokens": 1672,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "read": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-mini-basic-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 12.536,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 49156,
+        "input_tokens": 20478,
+        "output_tokens": 1025,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-mini-enhanced-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.302,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 70564,
+        "input_tokens": 30398,
+        "output_tokens": 1221,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-niucode-basic-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 7.163,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 40876,
+        "input_tokens": 17350,
+        "output_tokens": 772,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 2,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-niucode-enhanced-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.298,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 80362,
+        "input_tokens": 33441,
+        "output_tokens": 1685,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "glob": 1,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-pi-basic-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 5.888,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 45670,
+        "input_tokens": 20755,
+        "output_tokens": 520,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-grade-school-pi-enhanced-0",
+      "case": "polyglot-py-grade-school",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 9.076,
+      "case_sha256": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+      "billing": {
+        "upper_micro_cny": 78080,
+        "input_tokens": 35400,
+        "output_tokens": 910,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-dsh-basic-0",
+      "case": "polyglot-py-transpose",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 32.512,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 156462,
+        "input_tokens": 60319,
+        "output_tokens": 4478,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 3,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-dsh-enhanced-0",
+      "case": "polyglot-py-transpose",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 41.896,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 218574,
+        "input_tokens": 81299,
+        "output_tokens": 6997,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "glob": 1,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-mini-basic-0",
+      "case": "polyglot-py-transpose",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 51.192,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 212054,
+        "input_tokens": 74711,
+        "output_tokens": 7829,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-mini-enhanced-0",
+      "case": "polyglot-py-transpose",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 34.46,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 128936,
+        "input_tokens": 44220,
+        "output_tokens": 5062,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-niucode-basic-0",
+      "case": "polyglot-py-transpose",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 11.034,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 37958,
+        "input_tokens": 12635,
+        "output_tokens": 1586,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 2,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-niucode-enhanced-0",
+      "case": "polyglot-py-transpose",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "failed",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 0,
+      "seconds": 42.832,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 79752,
+        "input_tokens": 6552,
+        "output_tokens": 8331,
+        "requests": 3,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 1,
+        "read": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-pi-basic-0",
+      "case": "polyglot-py-transpose",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 58.353,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 177206,
+        "input_tokens": 51895,
+        "output_tokens": 9177,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-py-transpose-pi-enhanced-0",
+      "case": "polyglot-py-transpose",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 31.857,
+      "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+      "billing": {
+        "upper_micro_cny": 147298,
+        "input_tokens": 55617,
+        "output_tokens": 4508,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-dsh-basic-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 19.517,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 154006,
+        "input_tokens": 68067,
+        "output_tokens": 2234,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 4,
+        "write": 1,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-dsh-enhanced-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.218,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 201246,
+        "input_tokens": 89995,
+        "output_tokens": 2657,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 4,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-mini-basic-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.075,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 103960,
+        "input_tokens": 39764,
+        "output_tokens": 3054,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-mini-enhanced-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 32.313,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 211702,
+        "input_tokens": 87171,
+        "output_tokens": 4670,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-niucode-basic-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 7.792,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 48294,
+        "input_tokens": 20135,
+        "output_tokens": 1003,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-niucode-enhanced-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 20.914,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 134854,
+        "input_tokens": 54903,
+        "output_tokens": 3131,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-pi-basic-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 8.856,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 58554,
+        "input_tokens": 24365,
+        "output_tokens": 1228,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-variable-length-quantity-pi-enhanced-0",
+      "case": "polyglot-rs-variable-length-quantity",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.966,
+      "case_sha256": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+      "billing": {
+        "upper_micro_cny": 91094,
+        "input_tokens": 39575,
+        "output_tokens": 1493,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-dsh-basic-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 13.975,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 82196,
+        "input_tokens": 37442,
+        "output_tokens": 914,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 4,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-dsh-enhanced-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 16.88,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 131218,
+        "input_tokens": 59025,
+        "output_tokens": 1646,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-mini-basic-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.879,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 76810,
+        "input_tokens": 30485,
+        "output_tokens": 1980,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-mini-enhanced-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 25.026,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 136560,
+        "input_tokens": 56924,
+        "output_tokens": 2839,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-niucode-basic-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 6.868,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 43780,
+        "input_tokens": 18774,
+        "output_tokens": 779,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 4,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-niucode-enhanced-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.065,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 113608,
+        "input_tokens": 47120,
+        "output_tokens": 2421,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "write": 1,
+        "read": 1,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-pi-basic-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 7.613,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 46080,
+        "input_tokens": 20128,
+        "output_tokens": 728,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-polyglot-rs-word-count-pi-enhanced-0",
+      "case": "polyglot-rs-word-count",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 13.027,
+      "case_sha256": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+      "billing": {
+        "upper_micro_cny": 83702,
+        "input_tokens": 36139,
+        "output_tokens": 1428,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-dsh-basic-0",
+      "case": "py-config",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.567,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 80920,
+        "input_tokens": 29780,
+        "output_tokens": 2670,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-dsh-enhanced-0",
+      "case": "py-config",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 20.275,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 106582,
+        "input_tokens": 43035,
+        "output_tokens": 2564,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-mini-basic-0",
+      "case": "py-config",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.551,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 64370,
+        "input_tokens": 20213,
+        "output_tokens": 2993,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-mini-enhanced-0",
+      "case": "py-config",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.617,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 84830,
+        "input_tokens": 29379,
+        "output_tokens": 3259,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-niucode-basic-0",
+      "case": "py-config",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 25.188,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 113764,
+        "input_tokens": 36074,
+        "output_tokens": 5202,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-niucode-enhanced-0",
+      "case": "py-config",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 24.445,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 115412,
+        "input_tokens": 41998,
+        "output_tokens": 3927,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10,
+        "write": 2,
+        "read": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-pi-basic-0",
+      "case": "py-config",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 13.326,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 59684,
+        "input_tokens": 21486,
+        "output_tokens": 2089,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-config-pi-enhanced-0",
+      "case": "py-config",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 13.762,
+      "case_sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "billing": {
+        "upper_micro_cny": 71212,
+        "input_tokens": 27622,
+        "output_tokens": 1996,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-dsh-basic-0",
+      "case": "py-csv",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 70.061,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 348602,
+        "input_tokens": 122477,
+        "output_tokens": 12956,
+        "requests": 11,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 5,
+        "write": 1,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-dsh-enhanced-0",
+      "case": "py-csv",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 89.775,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 535314,
+        "input_tokens": 199429,
+        "output_tokens": 17057,
+        "requests": 14,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 12
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-mini-basic-0",
+      "case": "py-csv",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 88.449,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 410772,
+        "input_tokens": 144030,
+        "output_tokens": 15339,
+        "requests": 12,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 12
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-mini-enhanced-0",
+      "case": "py-csv",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 71.25,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 248100,
+        "input_tokens": 74414,
+        "output_tokens": 12409,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-niucode-basic-0",
+      "case": "py-csv",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 42.93,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 240942,
+        "input_tokens": 88375,
+        "output_tokens": 8024,
+        "requests": 11,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "glob": 1,
+        "read": 5,
+        "write": 3,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-niucode-enhanced-0",
+      "case": "py-csv",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 88.815,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 639958,
+        "input_tokens": 249291,
+        "output_tokens": 17672,
+        "requests": 19,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 12,
+        "write": 3,
+        "read": 3,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-pi-basic-0",
+      "case": "py-csv",
+      "harness": "pi",
+      "track": "basic",
+      "status": "failed",
+      "candidate_passed": false,
+      "resolved": false,
+      "exit_code": 0,
+      "seconds": 44.632,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 79450,
+        "input_tokens": 6133,
+        "output_tokens": 8398,
+        "requests": 3,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-csv-pi-enhanced-0",
+      "case": "py-csv",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 60.734,
+      "case_sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "billing": {
+        "upper_micro_cny": 345280,
+        "input_tokens": 129976,
+        "output_tokens": 10666,
+        "requests": 15,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 14,
+        "read": 4,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-dsh-basic-0",
+      "case": "py-pagination",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.137,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 78344,
+        "input_tokens": 30080,
+        "output_tokens": 2273,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-dsh-enhanced-0",
+      "case": "py-pagination",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 22.285,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 132638,
+        "input_tokens": 54183,
+        "output_tokens": 3034,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "glob": 1,
+        "read": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-mini-basic-0",
+      "case": "py-pagination",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 22.042,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 61128,
+        "input_tokens": 20804,
+        "output_tokens": 2440,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-mini-enhanced-0",
+      "case": "py-pagination",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 30.486,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 94204,
+        "input_tokens": 30374,
+        "output_tokens": 4182,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-niucode-basic-0",
+      "case": "py-pagination",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.085,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 98312,
+        "input_tokens": 34080,
+        "output_tokens": 3769,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-niucode-enhanced-0",
+      "case": "py-pagination",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 45.242,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 354836,
+        "input_tokens": 142946,
+        "output_tokens": 8618,
+        "requests": 18,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11,
+        "glob": 1,
+        "read": 6,
+        "write": 2,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-pi-basic-0",
+      "case": "py-pagination",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 10.813,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 32318,
+        "input_tokens": 9695,
+        "output_tokens": 1616,
+        "requests": 4,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-pagination-pi-enhanced-0",
+      "case": "py-pagination",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 16.665,
+      "case_sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "billing": {
+        "upper_micro_cny": 60690,
+        "input_tokens": 18697,
+        "output_tokens": 2912,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-dsh-basic-0",
+      "case": "py-tasks",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 20.203,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 84788,
+        "input_tokens": 31762,
+        "output_tokens": 2658,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 2,
+        "read": 5,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-dsh-enhanced-0",
+      "case": "py-tasks",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 19.838,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 124408,
+        "input_tokens": 52832,
+        "output_tokens": 2343,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-mini-basic-0",
+      "case": "py-tasks",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.227,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 69064,
+        "input_tokens": 22464,
+        "output_tokens": 3017,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-mini-enhanced-0",
+      "case": "py-tasks",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.938,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 74766,
+        "input_tokens": 26603,
+        "output_tokens": 2695,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-niucode-basic-0",
+      "case": "py-tasks",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.475,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 57772,
+        "input_tokens": 19534,
+        "output_tokens": 2338,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "glob": 1,
+        "read": 5,
+        "write": 3
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-niucode-enhanced-0",
+      "case": "py-tasks",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.846,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 121438,
+        "input_tokens": 45579,
+        "output_tokens": 3785,
+        "requests": 11,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 5,
+        "glob": 1,
+        "read": 6,
+        "write": 1,
+        "edit": 3
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-pi-basic-0",
+      "case": "py-tasks",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 9.4,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 40238,
+        "input_tokens": 16307,
+        "output_tokens": 953,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-py-tasks-pi-enhanced-0",
+      "case": "py-tasks",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 16.595,
+      "case_sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "billing": {
+        "upper_micro_cny": 70472,
+        "input_tokens": 25816,
+        "output_tokens": 2355,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-dsh-basic-0",
+      "case": "rs-cache",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.176,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 136928,
+        "input_tokens": 56656,
+        "output_tokens": 2952,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "glob": 1,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-dsh-enhanced-0",
+      "case": "rs-cache",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 44.443,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 351782,
+        "input_tokens": 156011,
+        "output_tokens": 4970,
+        "requests": 17,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8,
+        "edit": 4,
+        "read": 2,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-mini-basic-0",
+      "case": "rs-cache",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.09,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 71230,
+        "input_tokens": 25063,
+        "output_tokens": 2638,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-mini-enhanced-0",
+      "case": "rs-cache",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 23.422,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 85138,
+        "input_tokens": 29521,
+        "output_tokens": 3262,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-niucode-basic-0",
+      "case": "rs-cache",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.875,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 62188,
+        "input_tokens": 20002,
+        "output_tokens": 2773,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-niucode-enhanced-0",
+      "case": "rs-cache",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 19.893,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 97270,
+        "input_tokens": 34743,
+        "output_tokens": 3473,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-pi-basic-0",
+      "case": "rs-cache",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 8.854,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 33126,
+        "input_tokens": 12387,
+        "output_tokens": 1044,
+        "requests": 5,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-cache-pi-enhanced-0",
+      "case": "rs-cache",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 20.842,
+      "case_sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "billing": {
+        "upper_micro_cny": 127764,
+        "input_tokens": 49730,
+        "output_tokens": 3538,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-dsh-basic-0",
+      "case": "rs-dry-run",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 38.848,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 184014,
+        "input_tokens": 66203,
+        "output_tokens": 6451,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 5,
+        "write": 3
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-dsh-enhanced-0",
+      "case": "rs-dry-run",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 36.614,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 228720,
+        "input_tokens": 89124,
+        "output_tokens": 6309,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10,
+        "read": 5,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-mini-basic-0",
+      "case": "rs-dry-run",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 44.674,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 176992,
+        "input_tokens": 59556,
+        "output_tokens": 7235,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-mini-enhanced-0",
+      "case": "rs-dry-run",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 36.015,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 145878,
+        "input_tokens": 49611,
+        "output_tokens": 5832,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 12
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-niucode-basic-0",
+      "case": "rs-dry-run",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.817,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 62844,
+        "input_tokens": 19094,
+        "output_tokens": 3082,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-niucode-enhanced-0",
+      "case": "rs-dry-run",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 27.101,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 155554,
+        "input_tokens": 57113,
+        "output_tokens": 5166,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "glob": 1,
+        "read": 5,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-pi-basic-0",
+      "case": "rs-dry-run",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 25.896,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 97266,
+        "input_tokens": 31649,
+        "output_tokens": 4246,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-dry-run-pi-enhanced-0",
+      "case": "rs-dry-run",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 26.939,
+      "case_sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "billing": {
+        "upper_micro_cny": 145154,
+        "input_tokens": 55777,
+        "output_tokens": 4200,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-dsh-basic-0",
+      "case": "rs-scan",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 38.042,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 195496,
+        "input_tokens": 76300,
+        "output_tokens": 5362,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 6,
+        "read": 2,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-dsh-enhanced-0",
+      "case": "rs-scan",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 63.224,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 443316,
+        "input_tokens": 181686,
+        "output_tokens": 9993,
+        "requests": 16,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11,
+        "read": 5,
+        "edit": 1,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-mini-basic-0",
+      "case": "rs-scan",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 30.06,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 101734,
+        "input_tokens": 34555,
+        "output_tokens": 4078,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-mini-enhanced-0",
+      "case": "rs-scan",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 32.047,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 109198,
+        "input_tokens": 36903,
+        "output_tokens": 4424,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 11
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-niucode-basic-0",
+      "case": "rs-scan",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 52.105,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 284062,
+        "input_tokens": 102671,
+        "output_tokens": 9840,
+        "requests": 12,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8,
+        "read": 7,
+        "write": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-niucode-enhanced-0",
+      "case": "rs-scan",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 36.077,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 232770,
+        "input_tokens": 92197,
+        "output_tokens": 6047,
+        "requests": 14,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10,
+        "glob": 1,
+        "read": 5,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-pi-basic-0",
+      "case": "rs-scan",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 30.612,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 139560,
+        "input_tokens": 50368,
+        "output_tokens": 4853,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-scan-pi-enhanced-0",
+      "case": "rs-scan",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 25.933,
+      "case_sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "billing": {
+        "upper_micro_cny": 129148,
+        "input_tokens": 49734,
+        "output_tokens": 3710,
+        "requests": 10,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 10,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-dsh-basic-0",
+      "case": "rs-unicode",
+      "harness": "dsh",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 18.24,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 121376,
+        "input_tokens": 52128,
+        "output_tokens": 2140,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "read": 5,
+        "edit": 2
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-dsh-enhanced-0",
+      "case": "rs-unicode",
+      "harness": "dsh",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 20.265,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 131218,
+        "input_tokens": 55213,
+        "output_tokens": 2599,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "read": 5,
+        "edit": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-mini-basic-0",
+      "case": "rs-unicode",
+      "harness": "mini",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 17.878,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 56934,
+        "input_tokens": 21283,
+        "output_tokens": 1796,
+        "requests": 7,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-mini-enhanced-0",
+      "case": "rs-unicode",
+      "harness": "mini",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 30.667,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 112082,
+        "input_tokens": 38609,
+        "output_tokens": 4358,
+        "requests": 9,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 9
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-niucode-basic-0",
+      "case": "rs-unicode",
+      "harness": "niucode",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.024,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 47812,
+        "input_tokens": 16022,
+        "output_tokens": 1971,
+        "requests": 6,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 4,
+        "grep": 1,
+        "read": 5,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-niucode-enhanced-0",
+      "case": "rs-unicode",
+      "harness": "niucode",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 21.911,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 116314,
+        "input_tokens": 44685,
+        "output_tokens": 3368,
+        "requests": 11,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 8,
+        "glob": 1,
+        "read": 5,
+        "write": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-pi-basic-0",
+      "case": "rs-unicode",
+      "harness": "pi",
+      "track": "basic",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 6.958,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 24094,
+        "input_tokens": 9051,
+        "output_tokens": 749,
+        "requests": 4,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 3
+      }
+    },
+    {
+      "schema_version": 1,
+      "run": "test-rs-unicode-pi-enhanced-0",
+      "case": "rs-unicode",
+      "harness": "pi",
+      "track": "enhanced",
+      "status": "passed",
+      "candidate_passed": true,
+      "resolved": true,
+      "exit_code": 0,
+      "seconds": 14.977,
+      "case_sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "billing": {
+        "upper_micro_cny": 76894,
+        "input_tokens": 30903,
+        "output_tokens": 1886,
+        "requests": 8,
+        "unknown_usage": 0
+      },
+      "observed_parent_tool_calls": {
+        "bash": 7,
+        "edit": 1
+      }
+    }
+  ],
+  "billing_without_result": []
+}

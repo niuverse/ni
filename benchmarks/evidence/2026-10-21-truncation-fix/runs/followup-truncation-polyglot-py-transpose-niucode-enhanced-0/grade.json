@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "upstream_tests": {
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.164,
+    "output_tail": "............\n----------------------------------------------------------------------\nRan 12 tests in 0.000s\n\nOK\n",
+    "output_bytes": 111
+  },
+  "status": "passed"
+}

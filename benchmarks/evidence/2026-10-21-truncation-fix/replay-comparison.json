@@ -1,0 +1,19 @@
+{
+  "case_sha256": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+  "source_console_sha256": "7018b50ca1652ff2e96586713f619a432a39d5a6695d2af1b6b417897dc63a4a",
+  "caveat": "Final response and usage copied from original failed run; finish_reason=length is injected because v1 did not record it. This is a deterministic regression reconstruction, not an exact wire replay.",
+  "runs": {
+    "before": {
+      "exit_code": 0,
+      "last_event": "done",
+      "candidate_passed": false,
+      "binary_sha256": "3fb1fe2eaea01a2ad88cab955650d08115ee15798b449862953c5d2f30c3cd73"
+    },
+    "after": {
+      "exit_code": 1,
+      "last_event": "error",
+      "candidate_passed": false,
+      "binary_sha256": "7ffb4cf4e513e6e68c998a73567d852818040ed90db9e8fda4ddc2bd369a5f14"
+    }
+  }
+}

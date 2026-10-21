@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "expected_formal": 96,
+  "completed_formal": 96,
+  "cases": {
+    "polyglot-py-grade-school": "c132fc0b24a8270b2bab549fe6965d01d73c8a731b290a7ef6f7a1e5c24eb768",
+    "polyglot-py-transpose": "ce859941b3b4d711cb69b75a93c5377f97ab3957ac893350c1bd56174b3b0210",
+    "polyglot-rs-variable-length-quantity": "903e20fcd61c26a049431d63a303aaa343332e864fe9c25aab22e0049fe36b1e",
+    "polyglot-rs-word-count": "1a325ea80676a77157d48773e422c6d2859e566221f038e8d19a29bc80688d2b",
+    "py-config": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+    "py-csv": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+    "py-pagination": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+    "py-tasks": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+    "rs-cache": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+    "rs-dry-run": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+    "rs-scan": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+    "rs-unicode": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977"
+  },
+  "upper_cny": 14.219348,
+  "unknown_usage_requests": 0,
+  "errors": []
+}

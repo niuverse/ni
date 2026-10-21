@@ -1,0 +1,26 @@
+def transpose(text):
+    """Transpose ``text``: rows become columns and columns become rows.
+
+    Every input row keeps its characters in their original columns, so shorter
+    rows are implicitly padded with spaces on the right.  The padding is not
+    written out, though: an output row stops right after the last input row
+    that actually reaches that column.  Genuine spaces from the input (even in
+    a row consisting only of spaces) are kept, so no character is lost.
+    """
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+    width = max(len(line) for line in lines)
+
+    rows = []
+    for column in range(width):
+        characters = [
+            line[column] if column < len(line) else " " for line in lines
+        ]
+        # Index of the last row with a real character in this column; trailing
+        # entries beyond it are padding and are dropped.
+        last = max(index for index, line in enumerate(lines) if len(line) > column)
+        rows.append("".join(characters[: last + 1]))
+
+    return "\n".join(rows)

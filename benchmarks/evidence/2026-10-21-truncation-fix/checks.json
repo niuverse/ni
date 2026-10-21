@@ -1,0 +1,24 @@
+{
+  "rust_tests": 195,
+  "python_tests": 5,
+  "cargo_fmt": "passed",
+  "cargo_clippy": "passed",
+  "dashboard_check": "passed",
+  "baseline_unchanged_files": 20,
+  "baseline_image_unchanged": "sha256:fc06ad80f36132d36aafd3d3cec75ed4a7c28b89b3196341076d657c6924cf1f",
+  "live_finish_reasons": [
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "tool_calls",
+    "stop"
+  ],
+  "gateway_stopped": true
+}

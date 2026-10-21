@@ -1,0 +1,606 @@
+{
+  "schema_version": 1,
+  "kind": "case_validation",
+  "results": [
+    {
+      "case": "py-config",
+      "sha256": "477fcd161fc36f6e0c4911a489f763c10efb6810567e82bdda6bfad6ad232317",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.065,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 1,
+          "timeout": false,
+          "seconds": 0.064,
+          "output_tail": ".F..\n======================================================================\nFAIL: test_falsey (__main__.Acceptance.test_falsey)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-config/judge.py\", line 6, in test_falsey\n    self.assertEqual(resolve({'x':9},{'x':8},{'x':'7'},{'x':value}),{'x':value})\nAssertionError: {'x': 7} != {'x': False}\n- {'x': 7}\n+ {'x': False}\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nFAILED (failures=1)\n",
+          "output_bytes": 605
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.065,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.065,
+          "output_tail": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nOK\n",
+          "output_bytes": 102
+        }
+      },
+      "mutants": {
+        "truthy-cli": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.114,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.065,
+            "output_tail": ".F..\n======================================================================\nFAIL: test_falsey (__main__.Acceptance.test_falsey)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-config/judge.py\", line 6, in test_falsey\n    self.assertEqual(resolve({'x':9},{'x':8},{'x':'7'},{'x':value}),{'x':value})\nAssertionError: {'x': 7} != {'x': False}\n- {'x': 7}\n+ {'x': False}\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nFAILED (failures=1)\n",
+            "output_bytes": 605
+          }
+        },
+        "mutates-input": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.064,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.064,
+            "output_tail": "...F\n======================================================================\nFAIL: test_mutation (__main__.Acceptance.test_mutation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-config/judge.py\", line 12, in test_mutation\n    resolve(*args); self.assertEqual(args,before)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: [{'x': 1, 'y': 2, 'z': 3, 'q': False}, {'y': 2}, {'z': '3'}, {'q': False}] != [{'x': 1}, {'y': 2}, {'z': '3'}, {'q': False}]\n\nFirst differing element 0:\n{'x': 1, 'y': 2, 'z': 3, 'q': False}\n{'x': 1}\n\n- [{'q': False, 'x': 1, 'y': 2, 'z': 3}, {'y': 2}, {'z': '3'}, {'q': False}]\n+ [{'x': 1}, {'y': 2}, {'z': '3'}, {'q': False}]\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nFAILED (failures=1)\n",
+            "output_bytes": 920
+          }
+        }
+      }
+    },
+    {
+      "case": "py-csv",
+      "sha256": "aaafa96f37ebf2d3bb0255bda29bf9dfb83cd9c95004cf1acb5f816f138aea0d",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.064,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 1,
+          "timeout": false,
+          "seconds": 0.065,
+          "output_tail": "EEE\n======================================================================\nERROR: test_exact (__main__.Acceptance.test_exact)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-csv/judge.py\", line 5, in test_exact\n    r=summary.summarize('team,amount\\n\"a,b\",0.1\\nz,-2\\n\"a,b\",0.2\\n','team','amount')\n      ^^^^^^^^^^^^^^^^^\nAttributeError: module 'summary' has no attribute 'summarize'\n\n======================================================================\nERROR: test_invalid (__main__.Acceptance.test_invalid)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-csv/judge.py\", line 14, in test_invalid\n    with self.assertRaises(ValueError): summary.summarize(f'team,amount\\na,{value}\\n','team','amount')\n                                        ^^^^^^^^^^^^^^^^^\nAttributeError: module 'summary' has no attribute 'summarize'\n\n======================================================================\nERROR: test_missing (__main__.Acceptance.test_missing)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-csv/judge.py\", line 9, in test_missing\n    with self.assertRaises(ValueError): summary.summarize(text,'team','amount')\n                                        ^^^^^^^^^^^^^^^^^\nAttributeError: module 'summary' has no attribute 'summarize'\n\n----------------------------------------------------------------------\nRan 3 tests in 0.001s\n\nFAILED (errors=3)\n",
+          "output_bytes": 1722
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.065,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.064,
+          "output_tail": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n",
+          "output_bytes": 101
+        }
+      },
+      "mutants": {
+        "zero-on-error": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.065,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.064,
+            "output_tail": "..F\n======================================================================\nFAIL: test_missing (__main__.Acceptance.test_missing)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-csv/judge.py\", line 9, in test_missing\n    with self.assertRaises(ValueError): summary.summarize(text,'team','amount')\nAssertionError: ValueError not raised\n\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nFAILED (failures=1)\n",
+            "output_bytes": 574
+          }
+        },
+        "nonfinite": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.064,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.032,
+            "output_tail": ".F.\n======================================================================\nFAIL: test_invalid (__main__.Acceptance.test_invalid)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-csv/judge.py\", line 14, in test_invalid\n    with self.assertRaises(ValueError): summary.summarize(f'team,amount\\na,{value}\\n','team','amount')\nAssertionError: ValueError not raised\n\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nFAILED (failures=1)\n",
+            "output_bytes": 598
+          }
+        }
+      }
+    },
+    {
+      "case": "py-pagination",
+      "sha256": "6861284fa2eb198faeccd9511e86dd8e69b1575826bedc079fb27e257e07e47b",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.032,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 1,
+          "timeout": false,
+          "seconds": 0.615,
+          "output_tail": "EF.F\n======================================================================\nERROR: test_cycle (__main__.Acceptance.test_cycle)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 18, in test_cycle\n    with self.assertRaises(ValueError): collect(get,'a')\n                                        ^^^^^^^^^^^^^^^^\n  File \"/tmp/niucode-case-7m7bvoej/original/client.py\", line 4, in collect\n    page=fetch(url)\n         ^^^^^^^^^^\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 16, in get\n    if len(calls)>2: raise RuntimeError('refetched cycle')\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: refetched cycle\n\n======================================================================\nFAIL: test_empty_and_duplicates (__main__.Acceptance.test_empty_and_duplicates)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 10, in test_empty_and_duplicates\n    self.assertEqual(collect(get,'a'),[{'id':2,'v':'first'},{'id':1}])\nAssertionError: Lists differ: [{'id': 2, 'v': 'first'}] != [{'id': 2, 'v': 'first'}, {'id': 1}]\n\nSecond list contains 1 additional elements.\nFirst extra element 1:\n{'id': 1}\n\n- [{'id': 2, 'v': 'first'}]\n+ [{'id': 2, 'v': 'first'}, {'id': 1}]\n?                         +++++++++++\n\n\n======================================================================\nFAIL: test_http (__main__.Acceptance.test_http)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 31, in test_http\n    try: self.assertEqual(collect(fetch,f'http://127.0.0.1:{server.server_port}/first'),[{'id':'ok'}])\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: [] != [{'id': 'ok'}]\n\nSecond list contains 1 additional elements.\nFirst extra element 0:\n{'id': 'ok'}\n\n- []\n+ [{'id': 'ok'}]\n\n----------------------------------------------------------------------\nRan 4 tests in 0.513s\n\nFAILED (failures=2, errors=1)\n",
+          "output_bytes": 2387
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.064,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.617,
+          "output_tail": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.513s\n\nOK\n",
+          "output_bytes": 102
+        }
+      },
+      "mutants": {
+        "empty-stop": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.065,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.616,
+            "output_tail": ".F.F\n======================================================================\nFAIL: test_empty_and_duplicates (__main__.Acceptance.test_empty_and_duplicates)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 10, in test_empty_and_duplicates\n    self.assertEqual(collect(get,'a'),[{'id':2,'v':'first'},{'id':1}])\nAssertionError: Lists differ: [{'id': 2, 'v': 'first'}] != [{'id': 2, 'v': 'first'}, {'id': 1}]\n\nSecond list contains 1 additional elements.\nFirst extra element 1:\n{'id': 1}\n\n- [{'id': 2, 'v': 'first'}]\n+ [{'id': 2, 'v': 'first'}, {'id': 1}]\n?                         +++++++++++\n\n\n======================================================================\nFAIL: test_http (__main__.Acceptance.test_http)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 31, in test_http\n    try: self.assertEqual(collect(fetch,f'http://127.0.0.1:{server.server_port}/first'),[{'id':'ok'}])\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: [] != [{'id': 'ok'}]\n\nSecond list contains 1 additional elements.\nFirst extra element 0:\n{'id': 'ok'}\n\n- []\n+ [{'id': 'ok'}]\n\n----------------------------------------------------------------------\nRan 4 tests in 0.515s\n\nFAILED (failures=2)\n",
+            "output_bytes": 1554
+          }
+        },
+        "duplicates": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.065,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.616,
+            "output_tail": ".F..\n======================================================================\nFAIL: test_empty_and_duplicates (__main__.Acceptance.test_empty_and_duplicates)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-pagination/judge.py\", line 10, in test_empty_and_duplicates\n    self.assertEqual(collect(get,'a'),[{'id':2,'v':'first'},{'id':1}])\nAssertionError: Lists differ: [{'id': 2, 'v': 'first'}, {'id': 2, 'v': 'last'}, {'id': 1}] != [{'id': 2, 'v': 'first'}, {'id': 1}]\n\nFirst differing element 1:\n{'id': 2, 'v': 'last'}\n{'id': 1}\n\nFirst list contains 1 additional elements.\nFirst extra element 2:\n{'id': 1}\n\n- [{'id': 2, 'v': 'first'}, {'id': 2, 'v': 'last'}, {'id': 1}]\n?                                  ------------------------\n\n+ [{'id': 2, 'v': 'first'}, {'id': 1}]\n\n----------------------------------------------------------------------\nRan 4 tests in 0.513s\n\nFAILED (failures=1)\n",
+            "output_bytes": 1008
+          }
+        }
+      }
+    },
+    {
+      "case": "py-tasks",
+      "sha256": "69795703cb54ca250fbac6249c9bf255d721128260bbda854b1c7f4f0d7c7f93",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.066,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 1,
+          "timeout": false,
+          "seconds": 0.115,
+          "output_tail": "E\n======================================================================\nERROR: test_cli (__main__.Acceptance.test_cli)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-tasks/judge.py\", line 10, in test_cli\n    self.assertEqual(json.loads(run('--json').stdout),tasks)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/json/__init__.py\", line 346, in loads\n    return _default_decoder.decode(s)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/json/decoder.py\", line 337, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/json/decoder.py\", line 355, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n\n----------------------------------------------------------------------\nRan 1 test in 0.048s\n\nFAILED (errors=1)\n",
+          "output_bytes": 1085
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.064,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+          "output_bytes": 98
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.216,
+          "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.126s\n\nOK\n",
+          "output_bytes": 98
+        }
+      },
+      "mutants": {
+        "no-filter": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.065,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.166,
+            "output_tail": "F\n======================================================================\nFAIL: test_cli (__main__.Acceptance.test_cli)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-tasks/judge.py\", line 11, in test_cli\n    self.assertEqual(json.loads(run('--json','--status','open').stdout),[tasks[1]])\nAssertionError: Lists differ: [{'id': 2, 'status': 'done', 'title': '中文'}, {'id[33 chars]'x'}] != [{'id': 1, 'status': 'open', 'title': 'x'}]\n\nFirst differing element 0:\n{'id': 2, 'status': 'done', 'title': '中文'}\n{'id': 1, 'status': 'open', 'title': 'x'}\n\nFirst list contains 1 additional elements.\nFirst extra element 1:\n{'id': 1, 'status': 'open', 'title': 'x'}\n\n- [{'id': 2, 'status': 'done', 'title': '中文'},\n-  {'id': 1, 'status': 'open', 'title': 'x'}]\n? ^\n\n+ [{'id': 1, 'status': 'open', 'title': 'x'}]\n? ^\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.074s\n\nFAILED (failures=1)\n",
+            "output_bytes": 1054
+          }
+        },
+        "reordered": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.032,
+            "output_tail": ".\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n",
+            "output_bytes": 98
+          },
+          "acceptance": {
+            "exit_code": 1,
+            "timeout": false,
+            "seconds": 0.064,
+            "output_tail": "F\n======================================================================\nFAIL: test_cli (__main__.Acceptance.test_cli)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/galbot/Projects/niuverse/niucode/benchmarks/cases/py-tasks/judge.py\", line 9, in test_cli\n    self.assertEqual(run().stdout,'2 [done] 中文\\n1 [open] x\\n')\nAssertionError: '1 [open] x\\n2 [done] 中文\\n' != '2 [done] 中文\\n1 [open] x\\n'\n+ 2 [done] 中文\n  1 [open] x\n- 2 [done] 中文\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.022s\n\nFAILED (failures=1)\n",
+            "output_bytes": 643
+          }
+        }
+      }
+    },
+    {
+      "case": "rs-cache",
+      "sha256": "d99caf96bc34bf9257f722a1677f3e8bd2bbe30989a1b96c152e99c27532c672",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.315,
+          "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 101,
+          "timeout": false,
+          "seconds": 0.115,
+          "output_tail": "error[E0599]: no method named `insert_ttl` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:3:30\n  |\n3 |     let mut c=Cache::new();c.insert_ttl(\"x\".into(),\"one\".into(),10,5);\n  |                              ^^^^^^^^^^\n  |\nhelp: there is a method `insert` with a similar name, but with different arguments\n --> src/cache.rs:6:5\n  |\n6 |     pub fn insert(&mut self,key:String,value:String) {self.values.insert(key,value);}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:4:18\n  |\n4 |     assert_eq!(c.get_at(\"x\",14),Some(\"one\"));assert_eq!(c.get_at(\"x\",15),None);assert_eq!(c.get(\"x\"),Some(\"one\"));\n  |                  ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:4:59\n  |\n4 |     assert_eq!(c.get_at(\"x\",14),Some(\"one\"));assert_eq!(c.get_at(\"x\",15),None);assert_eq!(c.get(\"x\"),Some(\"one\"));\n  |                                                           ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:5:58\n  |\n5 |     c.insert(\"x\".into(),\"permanent\".into());assert_eq!(c.get_at(\"x\",100),Some(\"permanent\"));\n  |                                                          ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `insert_ttl` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:6:7\n  |\n6 |     c.insert_ttl(\"x\".into(),\"two\".into(),100,2);assert_eq!(c.get_at(\"x\",101),Some(\"two\"));assert_eq!(c.get_at(\"x\",102),None);\n  |       ^^^^^^^^^^\n  |\nhelp: there is a method `insert` with a similar name, but with different arguments\n --> src/cache.rs:6:5\n  |\n6 |     pub fn insert(&mut self,key:String,value:String) {self.values.insert(key,value);}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:6:62\n  |\n6 |     c.insert_ttl(\"x\".into(),\"two\".into(),100,2);assert_eq!(c.get_at(\"x\",101),Some(\"two\"));assert_eq!(c.get_at(\"x\",102),None);\n  |                                                              ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:6:104\n  |\n6 |     c.insert_ttl(\"x\".into(),\"two\".into(),100,2);assert_eq!(c.get_at(\"x\",101),Some(\"two\"));assert_eq!(c.get_at(\"x\",102),None);\n  |                                                                                                        ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n --> tests/benchmark_acceptance.rs:7:18\n  |\n7 |     assert_eq!(c.get_at(\"missing\",0),None);\n  |                  ^^^^^^\n  |\nhelp: there is a method `get` with a similar name, but with different arguments\n --> src/cache.rs:7:5\n  |\n7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `insert_ttl` found for struct `Cache` in the current scope\n  --> tests/benchmark_acceptance.rs:10:30\n   |\n10 |     let mut c=Cache::new();c.insert_ttl(\"z\".into(),\"v\".into(),4,0);assert_eq!(c.get_at(\"z\",4),None);\n   |                              ^^^^^^^^^^\n   |\nhelp: there is a method `insert` with a similar name, but with different arguments\n  --> src/cache.rs:6:5\n   |\n 6 |     pub fn insert(&mut self,key:String,value:String) {self.values.insert(key,value);}\n   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n  --> tests/benchmark_acceptance.rs:10:81\n   |\n10 |     let mut c=Cache::new();c.insert_ttl(\"z\".into(),\"v\".into(),4,0);assert_eq!(c.get_at(\"z\",4),None);\n   |                                                                                 ^^^^^^\n   |\nhelp: there is a method `get` with a similar name, but with different arguments\n  --> src/cache.rs:7:5\n   |\n 7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `insert_ttl` found for struct `Cache` in the current scope\n  --> tests/benchmark_acceptance.rs:11:7\n   |\n11 |     c.insert_ttl(\"s\".into(),\"v\".into(),u64::MAX-2,8);assert_eq!(c.get_at(\"s\",u64::MAX-1),Some(\"v\"));assert_eq!(c.get_at(\"s\",u64::MAX...\n   |       ^^^^^^^^^^\n   |\nhelp: there is a method `insert` with a similar name, but with different arguments\n  --> src/cache.rs:6:5\n   |\n 6 |     pub fn insert(&mut self,key:String,value:String) {self.values.insert(key,value);}\n   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n  --> tests/benchmark_acceptance.rs:11:67\n   |\n11 |     c.insert_ttl(\"s\".into(),\"v\".into(),u64::MAX-2,8);assert_eq!(c.get_at(\"s\",u64::MAX-1),Some(\"v\"));assert_eq!(c.get_at(\"s\",u64::MAX...\n   |                                                                   ^^^^^^\n   |\nhelp: there is a method `get` with a similar name, but with different arguments\n  --> src/cache.rs:7:5\n   |\n 7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror[E0599]: no method named `get_at` found for struct `Cache` in the current scope\n  --> tests/benchmark_acceptance.rs:11:114\n   |\n11 |     c.insert_ttl(\"s\".into(),\"v\".into(),u64::MAX-2,8);assert_eq!(c.get_at(\"s\",u64::MAX-1),Some(\"v\"));assert_eq!(c.get_at(\"s\",u64::MAX...\n   |                                                                                                                  ^^^^^^\n   |\nhelp: there is a method `get` with a similar name, but with different arguments\n  --> src/cache.rs:7:5\n   |\n 7 |     pub fn get(&self,key:&str)->Option<&str> {self.values.get(key).map(String::as_str)}\n   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nFor more information about this error, try `rustc --explain E0599`.\nerror: could not compile `rs-cache` (test \"benchmark_acceptance\") due to 13 previous errors\n",
+          "output_bytes": 7494
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.215,
+          "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.166,
+          "output_tail": "\nrunning 2 tests\n..\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 115
+        }
+      },
+      "mutants": {
+        "boundary": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.315,
+            "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.165,
+            "output_tail": "\nrunning 2 tests\nexpiry --- FAILED\nzero_overflow --- FAILED\n\nfailures:\n\n---- expiry stdout ----\n\nthread 'expiry' (3048502) panicked at tests/benchmark_acceptance.rs:4:46:\nassertion `left == right` failed\n  left: Some(\"one\")\n right: None\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- zero_overflow stdout ----\n\nthread 'zero_overflow' (3048503) panicked at tests/benchmark_acceptance.rs:10:68:\nassertion `left == right` failed\n  left: Some(\"v\")\n right: None\n\n\nfailures:\n    expiry\n    zero_overflow\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 699
+          }
+        },
+        "overflow": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.264,
+            "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.165,
+            "output_tail": "\nrunning 2 tests\n. 1/2\nzero_overflow --- FAILED\n\nfailures:\n\n---- zero_overflow stdout ----\n\nthread 'zero_overflow' (3048760) panicked at src/cache.rs:8:110:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    zero_overflow\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 458
+          }
+        }
+      }
+    },
+    {
+      "case": "rs-dry-run",
+      "sha256": "a56500a4941e784fa00fd5c572ee7527535de7da1ef851e8089c9e32f89402a3",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.315,
+          "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 101,
+          "timeout": false,
+          "seconds": 0.166,
+          "output_tail": "\nrunning 1 test\ncli_and_library --- FAILED\n\nfailures:\n\n---- cli_and_library stdout ----\n\nthread 'cli_and_library' (3049045) panicked at tests/benchmark_acceptance.rs:6:70:\nassertion failed: dry.status.success()\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    cli_and_library\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+          "output_bytes": 485
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.266,
+          "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.165,
+          "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 113
+        }
+      },
+      "mutants": {
+        "writes-dry-run": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.315,
+            "output_tail": "warning: unused variable: `dry_run`\n --> src/lib.rs:2:37\n  |\n2 | pub fn update(path:&Path,value:&str,dry_run:bool)->std::io::Result<String> {\n  |                                     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_dry_run`\n  |\n  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 685
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.216,
+            "output_tail": "warning: unused variable: `dry_run`\n --> src/lib.rs:2:37\n  |\n2 | pub fn update(path:&Path,value:&str,dry_run:bool)->std::io::Result<String> {\n  |                                     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_dry_run`\n  |\n  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\n\nrunning 1 test\ncli_and_library --- FAILED\n\nfailures:\n\n---- cli_and_library stdout ----\n\nthread 'cli_and_library' (3049630) panicked at tests/benchmark_acceptance.rs:7:71:\nassertion `left == right` failed\n  left: [110, 101, 119, 10]\n right: [111, 108, 100, 10]\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    cli_and_library\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 881
+          }
+        },
+        "ignores-flag": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.164,
+            "output_tail": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.216,
+            "output_tail": "\nrunning 1 test\ncli_and_library --- FAILED\n\nfailures:\n\n---- cli_and_library stdout ----\n\nthread 'cli_and_library' (3049942) panicked at tests/benchmark_acceptance.rs:7:71:\nassertion `left == right` failed\n  left: [110, 101, 119, 10]\n right: [111, 108, 100, 10]\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    cli_and_library\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 535
+          }
+        }
+      }
+    },
+    {
+      "case": "rs-scan",
+      "sha256": "2320f403aee5e494aabdd8ae987c3fb9eab76cd62a74992db348bb5d70e6e6c1",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.315,
+          "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 101,
+          "timeout": false,
+          "seconds": 0.166,
+          "output_tail": "\nrunning 2 tests\nboundaries --- FAILED\nsorted_tree --- FAILED\n\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3050269) panicked at tests/benchmark_acceptance.rs:6:88:\nassertion failed: !excluded(Path::new(p), &rules)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- sorted_tree stdout ----\n\nthread 'sorted_tree' (3050270) panicked at tests/benchmark_acceptance.rs:15:5:\nassertion `left == right` failed\n  left: [\"z.txt\"]\n right: [\"builder/a\", \"src/generated_extra/yes\", \"z.txt\"]\n\n\nfailures:\n    boundaries\n    sorted_tree\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+          "output_bytes": 735
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.265,
+          "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.165,
+          "output_tail": "\nrunning 2 tests\n..\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 115
+        }
+      },
+      "mutants": {
+        "exact-only": {
+          "passed": false,
+          "regression": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.265,
+            "output_tail": "\nrunning 1 test\ntests::exact --- FAILED\n\nfailures:\n\n---- tests::exact stdout ----\n\nthread 'tests::exact' (3050763) panicked at src/lib.rs:16:25:\nassertion failed: crate::rules::excluded(std::path::Path::new(\"build/x\"), &[\"build\".into()])\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    tests::exact\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--lib`\n",
+            "output_bytes": 487
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.166,
+            "output_tail": "\nrunning 2 tests\nboundaries --- FAILED\n.\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3050908) panicked at tests/benchmark_acceptance.rs:5:53:\nassertion failed: excluded(Path::new(p), &rules)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    boundaries\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 477
+          }
+        },
+        "empty-excludes": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.215,
+            "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.116,
+            "output_tail": "\nrunning 2 tests\nboundaries --- FAILED\n.\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3051223) panicked at tests/benchmark_acceptance.rs:6:88:\nassertion failed: !excluded(Path::new(p), &rules)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    boundaries\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 478
+          }
+        }
+      }
+    },
+    {
+      "case": "rs-unicode",
+      "sha256": "370b1ac78ee260dbedb4591faa8912f432517930574c559267197e79e9e58977",
+      "valid": true,
+      "seed": {
+        "passed": false,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.265,
+          "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 101,
+          "timeout": false,
+          "seconds": 0.165,
+          "output_tail": "\nrunning 2 tests\nboundaries --- FAILED\nfiltering --- FAILED\n\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3051537) panicked at src/lib.rs:3:69:\nend byte index 2 is not a char boundary; it is inside '中' (bytes 0..3 of string)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- filtering stdout ----\n\nthread 'filtering' (3051538) panicked at tests/benchmark_acceptance.rs:7:25:\nassertion `left == right` failed\n  left: [\"中…\", \"中…\"]\n right: [\"中文a…\", \"中文🙂\"]\n\n\nfailures:\n    boundaries\n    filtering\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+          "output_bytes": 731
+        }
+      },
+      "reference": {
+        "passed": true,
+        "regression": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.266,
+          "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 339
+        },
+        "acceptance": {
+          "exit_code": 0,
+          "timeout": false,
+          "seconds": 0.166,
+          "output_tail": "\nrunning 2 tests\n..\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "output_bytes": 115
+        }
+      },
+      "mutants": {
+        "always-ellipsis": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.265,
+            "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.116,
+            "output_tail": "\nrunning 2 tests\nboundaries --- FAILED\nfiltering --- FAILED\n\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3052137) panicked at tests/benchmark_acceptance.rs:4:9:\nassertion `left == right` failed\n  left: \"中文🙂…\"\n right: \"中文🙂\"\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- filtering stdout ----\n\nthread 'filtering' (3052138) panicked at tests/benchmark_acceptance.rs:7:25:\nassertion `left == right` failed\n  left: [\"中文a…\", \"中文🙂…\"]\n right: [\"中文a…\", \"中文🙂\"]\n\n\nfailures:\n    boundaries\n    filtering\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 755
+          }
+        },
+        "zero-empty": {
+          "passed": false,
+          "regression": {
+            "exit_code": 0,
+            "timeout": false,
+            "seconds": 0.366,
+            "output_tail": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+            "output_bytes": 339
+          },
+          "acceptance": {
+            "exit_code": 101,
+            "timeout": false,
+            "seconds": 0.166,
+            "output_tail": "\nrunning 2 tests\n. 1/2\nboundaries --- FAILED\n\nfailures:\n\n---- boundaries stdout ----\n\nthread 'boundaries' (3052442) panicked at tests/benchmark_acceptance.rs:4:9:\nassertion `left == right` failed\n  left: \"\"\n right: \"…\"\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    boundaries\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--test benchmark_acceptance`\n",
+            "output_bytes": 490
+          }
+        }
+      }
+    }
+  ]
+}
