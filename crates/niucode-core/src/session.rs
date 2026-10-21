@@ -278,6 +278,36 @@ mod tests {
     }
 
     #[test]
+    fn unknown_event_types_do_not_drop_readable_lines() {
+        let dir = temp_dir("unknown-event");
+        let path = dir.join("session.jsonl");
+        let good = serde_json::to_string(&Event::SessionEnd { ts: 1 }).expect("serialize");
+        let future = r#"{"type":"future_event","payload":42,"ts":2}"#;
+        fs::write(&path, format!("{good}\n{future}\n")).expect("write fixture");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.events.len(), 1);
+        assert_eq!(loaded.warnings.len(), 1);
+        assert!(loaded.warnings[0].starts_with("line 2:"));
+
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn unknown_fields_on_known_events_are_ignored() {
+        let dir = temp_dir("unknown-field");
+        let path = dir.join("session.jsonl");
+        let future = r#"{"type":"session_end","ts":1,"future_field":{"nested":true}}"#;
+        fs::write(&path, format!("{future}\n")).expect("write fixture");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.events.len(), 1);
+        assert!(loaded.warnings.is_empty());
+
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
     fn blank_lines_are_ignored() {
         let dir = temp_dir("blank");
         let path = dir.join("session.jsonl");
