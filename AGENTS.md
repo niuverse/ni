@@ -84,8 +84,8 @@ TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
 M4-004/M4-005/M4-006/M4-007/M4-008/M4-009/M4-010/M4-011/M4-012 are done.
 M5-001/M5-002/M5-004/M5-005 are done; M5-003 inline is review. Ghostty
-currently defaults to the stable linear editor because inline still overlaps
-there (M5-006); non-Ghostty terminals use inline. There is no project-local
+currently defaults to the stable linear editor; linear startup overlap was
+fixed by unifying startup output/flush; inline remains M5-006 backlog. There is no project-local
 `.niucode`; state lives in `~/.niucode/projects/<key>/`. skills discovery/trust is done (M5-007); tool metadata/LoopPhase and the
 interactive `/resume` picker are done.
 `/goal run` is available in TUI and headless via `exec --goal`. TUI mouse capture

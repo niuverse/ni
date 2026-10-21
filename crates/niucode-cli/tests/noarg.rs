@@ -50,7 +50,7 @@ fn bare_niucode_starts_the_tui() {
 
     assert!(output.status.success(), "stderr: {stderr}");
     assert!(stdout.contains("niucode ▸"), "stdout: {stdout:?}");
-    assert!(stderr.contains("niucode tui"), "stderr: {stderr:?}");
+    assert!(stdout.contains("niucode tui"), "stdout: {stdout:?}");
     assert!(!stderr.contains("status   M3"), "old banner still printed");
 
     fs::remove_dir_all(directory).expect("cleanup");

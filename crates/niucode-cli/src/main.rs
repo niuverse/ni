@@ -926,8 +926,8 @@ async fn run_tui(
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
 
-    let theme = Theme::detect_stderr();
-    eprintln!(
+    let theme = Theme::detect_stdout();
+    println!(
         "{} {}",
         theme.accent("niucode tui"),
         theme.dim(format!(
@@ -937,9 +937,9 @@ async fn run_tui(
         ))
     );
     if let Some(path) = &replay {
-        eprintln!("{}", theme.dim(format!("replay {}", path.display())));
+        println!("{}", theme.dim(format!("replay {}", path.display())));
     }
-    eprintln!(
+    println!(
         "{}",
         theme.dim(format!(
             "policy sandbox={} network={} approval={} backend={backend}",
@@ -948,28 +948,21 @@ async fn run_tui(
             approval_mode.as_str()
         ))
     );
-    eprintln!(
+    println!(
         "{}",
         theme.dim(format!(
             "context budget={context_budget} trigger=75% keep_recent={keep_recent_turns}"
         ))
     );
-    eprintln!(
+    println!(
         "{} {}",
         theme.dim("session"),
         theme.paint(Tone::Bright, session.path().display())
     );
-    eprintln!(
+    println!(
         "{} {}",
         theme.dim("workspace"),
-        theme.paint(
-            Tone::Bright,
-            format!(
-                "{} ({})",
-                workspace.project_dir.display(),
-                workspace.project_key
-            )
-        )
+        theme.paint(Tone::Bright, workspace.project_key.clone())
     );
 
     let result = tui::run(

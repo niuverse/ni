@@ -25,3 +25,4 @@ Ghostty 1.3.1 上 inline viewport 仍出现输入区/背景覆盖或错位；tmu
 ## 备注
 
 当前 Ghostty 默认 linear；`NIUCODE_TUI_INLINE=1` 可强制 inline 复现。
+2026-10-21：linear 的 startup 重叠已单独修复——启动信息统一走 stdout、显式 flush、workspace 只打印 project key；不再出现 prompt 覆盖 workspace 行。

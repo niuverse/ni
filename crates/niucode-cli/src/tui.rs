@@ -317,8 +317,8 @@ pub async fn run(
     reset_terminal_modes();
     let out = Theme::detect_stdout();
     let err = Theme::detect_stderr();
-    if std::io::stderr().is_terminal() {
-        print_banner(err);
+    if std::io::stdout().is_terminal() {
+        print_banner(out);
     }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
@@ -2636,15 +2636,16 @@ fn print_banner(theme: Theme) {
     let lines = banner_lines(width);
     let logo_lines = if width >= WIDE_BANNER { LOGO.len() } else { 1 };
 
-    eprintln!();
+    println!();
     for (index, line) in lines.iter().enumerate() {
         if index < logo_lines {
-            eprintln!("{}", theme.accent(line));
+            println!("{}", theme.accent(line));
         } else {
-            eprintln!("{}", theme.dim(line));
+            println!("{}", theme.dim(line));
         }
     }
-    eprintln!();
+    println!();
+    let _ = std::io::stdout().flush();
 }
 
 fn banner_lines(width: usize) -> Vec<String> {
