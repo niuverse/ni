@@ -1,5 +1,6 @@
 """Offline output/log-volume and cancellation regression; synthetic workspace only."""
 import hashlib
+import faulthandler
 import json
 import os
 from pathlib import Path
@@ -144,6 +145,8 @@ def bulk(binary, count=100):
 
 
 if __name__ == "__main__":
+    # Temporary CI diagnostic for the macOS PTY stall (M6-019).
+    faulthandler.dump_traceback_later(30, repeat=True)
     run(str(Path(sys.argv[1]).resolve()),int(sys.argv[2]) if len(sys.argv)>2 else 3)
     if len(sys.argv)<=2:
         bulk(str(Path(sys.argv[1]).resolve()))

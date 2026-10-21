@@ -425,11 +425,13 @@ async fn worker_profile_advertises_write_tools_and_records_profile() {
     fs::remove_dir_all(directory).expect("cleanup");
 }
 
+#[cfg(target_os = "linux")]
 struct ExploreProvider {
     calls: AtomicUsize,
     requests: Mutex<Vec<CompletionRequest>>,
 }
 
+#[cfg(target_os = "linux")]
 #[async_trait]
 impl Provider for ExploreProvider {
     fn name(&self) -> &str {
@@ -449,6 +451,7 @@ impl Provider for ExploreProvider {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn explore_profile_can_use_read_only_external_tools() {
     let directory = temp_dir("explore-ext");

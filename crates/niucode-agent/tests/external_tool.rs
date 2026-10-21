@@ -1,3 +1,6 @@
+// The external tool fixture starts a real sidecar through Linux/bubblewrap.
+#![cfg(target_os = "linux")]
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
