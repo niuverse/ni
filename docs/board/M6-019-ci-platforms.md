@@ -28,6 +28,10 @@ docs = ["adr-0025"]
 - 所有平台运行缺少 bwrap 的 CLI 回归：子进程使用空 PATH，必须记录挂载错误，
   不得注册/卸载未挂载扩展，其工具调用必须失败。不会修改测试宿主的 PATH。
 - 挂载成功断言附上 stderr 与会话日志，便于定位后续环境问题。
+- CLI、agent 与 subagent 的真实 sidecar 场景都限定到 Linux；其余 agent 回归保留跨平台执行。
+- PTY 测试使用独立会话中的 stdin 终端，不调用 `TIOCSCTTY`，以便 macOS 在子进程退出后
+  仍可读取并核对恢复的 termios。异常清理先关闭 PTY，再有界等待回收子进程。
+- CI 即时打印测试失败，并给测试步骤设置 5 分钟超时，避免一个挂起场景隐藏其他失败。
 
 ADR-0025 的强制隔离不变；不提供无沙箱降级，不修改 benchmark 冻结输入或证据。
 CI 的 macOS PTY 回归仍保留，不代替真实终端验收。
@@ -38,6 +42,11 @@ Ubuntu 的默认 AppArmor 策略允许创建 user namespace，却限制其中的
 见 [Ubuntu 24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/)
 和 [Ubuntu 的 userns 配置说明](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces)。
 CI 配置采用仅影响当前 VM 的 sysctl，不写系统持久配置。
+
+随后 [run 39578381513](https://github.com/niuverse/niucode/actions/runs/39578381513)
+暴露 macOS PTY 测试壳的问题：退出后 `tcgetattr(slave)` 返回 ENOTTY，volume 场景
+异常清理停在 `Terminal.close()` 的 `child.wait()`。临时 faulthandler 取得调用栈后移除，
+保留原有终端属性恢复、取消、详情和输出量断言。Linux 同轮全部检查通过。
 
 ## 验收
 

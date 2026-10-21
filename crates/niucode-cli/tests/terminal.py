@@ -33,12 +33,12 @@ class Terminal:
         else:
             env["NO_COLOR"] = "1"
         env["NIUCODE_TUI_INLINE" if inline else "NIUCODE_TUI_LINEAR"] = "1"
-        def controlling_terminal():
-            os.setsid()
-            fcntl.ioctl(self.slave, termios.TIOCSCTTY, 0)
+        # Keep the PTY on stdin without making it the child's controlling terminal.
+        # macOS revokes slave descriptors when the controlling session exits,
+        # preventing the parent from checking restored terminal attributes.
         self.child = subprocess.Popen([binary, "tui", "--cwd", str(root / "work"),
             "--session-dir", str(root / "sessions"), *args], stdin=self.slave,
-            stdout=self.slave, stderr=self.slave, env=env, preexec_fn=controlling_terminal)
+            stdout=self.slave, stderr=self.slave, env=env, start_new_session=True)
         self.transcript = bytearray()
         self.query_tail = b""
 
@@ -82,9 +82,10 @@ class Terminal:
     def close(self):
         if self.child.poll() is None:
             self.child.kill()
-        self.child.wait()
+        # Release the PTY before reaping: a dying child may be draining output.
         os.close(self.master)
         os.close(self.slave)
+        self.child.wait(timeout=5)
 
 
 def scenario(binary, inline, cancel):
