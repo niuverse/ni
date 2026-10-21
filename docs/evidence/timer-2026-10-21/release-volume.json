@@ -1,0 +1,19 @@
+{
+  "rounds": 100,
+  "files": 394,
+  "unknown": 130,
+  "first_round_bytes": 4379855,
+  "subsequent_round_bytes_max": 103322,
+  "old_snapshot_bytes_per_round": 8662982,
+  "reduction_percent": 98.81,
+  "capture_before_ms_median": 21.0,
+  "capture_before_ms_p95": 27,
+  "replay_cli_ms": 63.6,
+  "turn_ms_median": 190.78,
+  "turn_ms_p95": 251.2,
+  "cancel_to_idle_ms_p95": 195.72,
+  "cancel_task_finished_ms_p95": 52.04,
+  "rss_kib_first": 24660,
+  "rss_kib_last": 49328,
+  "rss_kib_peak": 49328
+}

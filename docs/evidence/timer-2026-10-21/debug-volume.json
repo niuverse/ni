@@ -1,0 +1,77 @@
+[
+  {
+    "attempt": 1,
+    "exit": 0,
+    "seconds": 76.492,
+    "binary_sha256": "10639a4d86df8664f422bf607261018a843a7cf8b200b7d6d19bc0ce719c4cba",
+    "metrics": {
+      "rounds": 100,
+      "files": 394,
+      "unknown": 130,
+      "first_round_bytes": 4379855,
+      "subsequent_round_bytes_max": 103322,
+      "old_snapshot_bytes_per_round": 8662982,
+      "reduction_percent": 98.81,
+      "capture_before_ms_median": 77.0,
+      "capture_before_ms_p95": 103,
+      "replay_cli_ms": 211.1,
+      "turn_ms_median": 628.06,
+      "turn_ms_p95": 896.66,
+      "cancel_to_idle_ms_p95": 521.97,
+      "cancel_task_finished_ms_p95": 126.72,
+      "rss_kib_first": 37156,
+      "rss_kib_last": 63724,
+      "rss_kib_peak": 63724
+    }
+  },
+  {
+    "attempt": 2,
+    "exit": 0,
+    "seconds": 74.141,
+    "binary_sha256": "7f2d5ce8e245cd11be2ea5b6919a73ca292e81e8fb62dfab0800b7fcf71864b0",
+    "metrics": {
+      "rounds": 100,
+      "files": 394,
+      "unknown": 130,
+      "first_round_bytes": 4379855,
+      "subsequent_round_bytes_max": 103322,
+      "old_snapshot_bytes_per_round": 8662982,
+      "reduction_percent": 98.81,
+      "capture_before_ms_median": 73.0,
+      "capture_before_ms_p95": 89,
+      "replay_cli_ms": 226.31,
+      "turn_ms_median": 630.54,
+      "turn_ms_p95": 910.57,
+      "cancel_to_idle_ms_p95": 522.37,
+      "cancel_task_finished_ms_p95": 119.9,
+      "rss_kib_first": 37228,
+      "rss_kib_last": 62304,
+      "rss_kib_peak": 62304
+    }
+  },
+  {
+    "attempt": 3,
+    "exit": 0,
+    "seconds": 73.092,
+    "binary_sha256": "7f2d5ce8e245cd11be2ea5b6919a73ca292e81e8fb62dfab0800b7fcf71864b0",
+    "metrics": {
+      "rounds": 100,
+      "files": 394,
+      "unknown": 130,
+      "first_round_bytes": 4379855,
+      "subsequent_round_bytes_max": 103322,
+      "old_snapshot_bytes_per_round": 8662982,
+      "reduction_percent": 98.81,
+      "capture_before_ms_median": 74.0,
+      "capture_before_ms_p95": 91,
+      "replay_cli_ms": 213.09,
+      "turn_ms_median": 611.07,
+      "turn_ms_p95": 881.65,
+      "cancel_to_idle_ms_p95": 528.85,
+      "cancel_task_finished_ms_p95": 126.39,
+      "rss_kib_first": 38472,
+      "rss_kib_last": 62680,
+      "rss_kib_peak": 62680
+    }
+  }
+]

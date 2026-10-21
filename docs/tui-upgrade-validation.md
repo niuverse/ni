@@ -82,4 +82,6 @@ M5-003、M5-006、M6-009 实机门槛保留。没有 DISPLAY/WAYLAND_DISPLAY 或
 fmt、clippy 和 benchmark 离线自检通过，但期间出现 debug 构建的间歇性定时器 panic。
 三次额外的 100 轮 debug 检查中两次失败、一次通过；不以通过的一次覆盖失败结果。
 堆栈、复现命令和待验证假设由 [M6-018](board/M6-018-debug-timer-panic.md) 跟踪。
-本发现不改写上文已有 release 构建的历史测量，也不表示当前已消除该问题。
+以上为首次发现时的状态，不改写已有 release 构建的历史测量。
+后续 M6-018 已通过独立复现定位到 Tokio 1.54.0 的 timer 移除竞态，并固定 1.53.3；
+回归和版本解除条件见 [定时器诊断记录](timer-regression.md)。

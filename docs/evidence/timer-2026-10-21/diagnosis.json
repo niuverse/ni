@@ -1,0 +1,45 @@
+{
+  "reproducer_sha256": "0d16ec6f9c33a7c688648e1131044be269f8c2f642988ee310dae82856d511c4",
+  "original_tokio": "1.54.0",
+  "original_debug": [
+    {
+      "attempt": 1,
+      "exit": -6,
+      "seconds": 1.13
+    },
+    {
+      "attempt": 2,
+      "exit": -6,
+      "seconds": 1.077
+    },
+    {
+      "attempt": 3,
+      "exit": -11,
+      "seconds": 1.123
+    }
+  ],
+  "original_release_exit": 134,
+  "diagnostic_patch": "In Sleep::reset_without_timer, call timer.cancel(this.driver) before this.timer.set(None). Applied only in a temporary dependency copy, never in the repository or Cargo registry.",
+  "patched_debug": [
+    {
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 5.001
+    },
+    {
+      "attempt": 2,
+      "exit": 0,
+      "seconds": 5.001
+    },
+    {
+      "attempt": 3,
+      "exit": 0,
+      "seconds": 5.003
+    }
+  ],
+  "replacement_tokio": "1.53.3",
+  "original_release_stdout_stderr": "original-release.txt",
+  "regression_test": "crates/niucode-cli/tests/timer.rs",
+  "regression_test_sha256": "d4be2a6bbba0391e05e82e5c7e8574467dcec412200000ed9a069ad19ac10cf1",
+  "root_cause_scope": "Independent reproduction and source inspection; not an upstream confirmation."
+}

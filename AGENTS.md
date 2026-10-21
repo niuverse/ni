@@ -109,10 +109,10 @@ reuse, and history-preserving approval views. Synthetic 100-turn and 30-minute P
 acceptance passed; see `docs/tui-upgrade-validation.md`. This does not close the
 real-terminal M6-009 or M5 Ghostty gates.
 
-M6-017 removes unused startup state and shares the PTY test launcher. Repeated
-debug runs exposed an intermittent Tokio timer panic, also reproduced before
-that cleanup; M6-018 tracks diagnosis. Passing release stress evidence does not
-close this new issue. Do not suppress the assertion or weaken the PTY tests.
+M6-017 removes unused startup state and shares the PTY test launcher. M6-018
+isolates the repeated-turn crash to Tokio 1.54.0 interval timer destruction and
+pins 1.53.3. Read `docs/timer-regression.md` before changing that pin; require an
+upstream fix and passing timer/PTY regressions, not suppressed assertions.
 
 M7 benchmark preparation lives in `benchmarks/` (ADR-0029). Four harnesses,
 DeepSeek, basic/enhanced tracks, eight synthetic cases and a separate four-task

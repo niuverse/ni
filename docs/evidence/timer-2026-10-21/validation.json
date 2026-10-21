@@ -1,0 +1,17 @@
+{
+  "workspace_tests": {
+    "passed": 210,
+    "failed": 0
+  },
+  "timer_test_debug": "passed after pin; process aborted before pin",
+  "timer_test_release": "passed",
+  "fmt": "passed",
+  "clippy": "passed with -D warnings",
+  "benchmark_unit_tests": 5,
+  "synthetic_cases": 8,
+  "polyglot_cases": 4,
+  "frozen_benchmark_files_unchanged": 58,
+  "debug_volume_runs_passed": 3,
+  "release_volume_runs_passed": 1,
+  "model_api_calls": 0
+}

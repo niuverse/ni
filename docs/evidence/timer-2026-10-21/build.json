@@ -1,0 +1,19 @@
+{
+  "base_commit": "ddbb8168759c31a7b7b1e2d91c716e61086ee1ab",
+  "changes": [
+    "Pin Tokio 1.53.3",
+    "Add standalone interval race regression"
+  ],
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "platform": "Linux-6.17.0-40-generic-x86_64-with-glibc2.39",
+  "release_sha256": "da8682313c0314ca9165496ef72f8c9bfc5d7ec3d4acf983313ac28e5af9264d",
+  "debug_sha256": "7f2d5ce8e245cd11be2ea5b6919a73ca292e81e8fb62dfab0800b7fcf71864b0",
+  "note": "The first debug volume run started before rebuilding a stale auth artifact from the previous isolated checkout; it has a separate binary hash. Later debug runs use the final build. No runtime source changed between these builds. Error logs replace the local Cargo directory with ${CARGO_HOME}.",
+  "fix_commit": "d10f8f1c8678b37af3ca0a7fcebcd9c0873e7086",
+  "installed": {
+    "installed": "/home/galbot/.local/bin/niucode",
+    "backup": "/home/galbot/.local/bin/niucode.bak-20261021-171816",
+    "previous_sha256": "2e6381508bf227d4b0253025f77311a84d9cf5718927e2e9f058e437e8ba8a35",
+    "installed_sha256": "da8682313c0314ca9165496ef72f8c9bfc5d7ec3d4acf983313ac28e5af9264d"
+  }
+}

@@ -40,5 +40,6 @@ docs = ["pairing-upgrade", "adr-0028"]
 100 轮大型 fixture、取消时延和独立 tmux 捕获见 `docs/tui-upgrade-validation.md`。
 这些补充不关闭本卡的真实终端/设备验收。
 
-后续 debug 重复轮次中发现间歇性定时器 panic，由 M6-018 跟踪；先前通过的
-release 压力记录不代表此问题已解决。
+后续 debug 重复轮次中发现间歇性定时器 panic，M6-018 已定位为 Tokio 1.54.0
+interval 的析构同步缺失，并固定 1.53.3。新的回归证据见 `docs/timer-regression.md`；
+先前通过的 release 压力记录仍只代表其原构建，不替代本卡的实机验收。

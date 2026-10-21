@@ -1294,6 +1294,17 @@
         "M6-018",
         "tui"
       ]
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "milestone",
+      "title": "M6-018：定位定时器竞态并固定可靠依赖版本",
+      "detail": "独立复现证明 Tokio 1.54.0 interval 移除缺少驱动同步，debug/release 均可失败；固定 1.53.3，增加真实多线程回归并保留前后证据。不修改原 benchmark 基线或真实终端 gate。",
+      "refs": [
+        "M6-018",
+        "timer-regression",
+        "tui"
+      ]
     }
   ]
 }
