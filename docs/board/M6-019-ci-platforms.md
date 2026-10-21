@@ -22,6 +22,8 @@ docs = ["adr-0025"]
 ## 修改
 
 - Linux CI 安装 bubblewrap，并在测试前实际创建隔离 namespace；依赖不满足时明确失败。
+- 仅在一次性 Ubuntu CI VM 中关闭 AppArmor 的 unprivileged userns 限制，使 bwrap
+  能配置 namespace；不关闭 bwrap 的网络/文件隔离，不修改开发机或产品行为。
 - 真实 sidecar 挂载、网络/文件隔离、worker pool 测试只在 Linux 执行，保留全部断言。
 - 所有平台运行缺少 bwrap 的 CLI 回归：子进程使用空 PATH，必须记录挂载错误，
   不得注册/卸载未挂载扩展，其工具调用必须失败。不会修改测试宿主的 PATH。
@@ -29,6 +31,13 @@ docs = ["adr-0025"]
 
 ADR-0025 的强制隔离不变；不提供无沙箱降级，不修改 benchmark 冻结输入或证据。
 CI 的 macOS PTY 回归仍保留，不代替真实终端验收。
+
+首次补齐依赖后，[run 39577692305](https://github.com/niuverse/niucode/actions/runs/39577692305)
+的 Linux 预检暴露 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。
+Ubuntu 的默认 AppArmor 策略允许创建 user namespace，却限制其中的 capabilities，
+见 [Ubuntu 24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/)
+和 [Ubuntu 的 userns 配置说明](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces)。
+CI 配置采用仅影响当前 VM 的 sysctl，不写系统持久配置。
 
 ## 验收
 

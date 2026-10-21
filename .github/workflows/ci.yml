@@ -21,7 +21,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev bubblewrap
       - name: Verify Linux sandbox support
         if: runner.os == 'Linux'
-        run: bwrap --ro-bind / / --unshare-pid --unshare-ipc --unshare-uts --unshare-net -- /usr/bin/true
+        run: |
+          # The disposable Ubuntu runner restricts capabilities inside user namespaces.
+          # Allow bwrap to construct them; the tests still enforce filesystem/network isolation.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-pid --unshare-ipc --unshare-uts --unshare-net -- /usr/bin/true
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
