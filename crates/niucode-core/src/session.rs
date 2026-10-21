@@ -39,9 +39,14 @@ impl SessionLog {
         let seq = SESSION_SEQ.fetch_add(1, Ordering::Relaxed);
         let id = format!("{}-{}-{}", now_ms(), std::process::id(), seq);
         let path = dir.join(format!("{id}.jsonl"));
-        let file = OpenOptions::new()
-            .create_new(true)
-            .append(true)
+        let mut options = OpenOptions::new();
+        options.create_new(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options
             .open(&path)
             .with_context(|| format!("create session file {}", path.display()))?;
 
@@ -232,6 +237,18 @@ mod tests {
         assert!(loaded.warnings.is_empty());
         assert_eq!(list(&dir).expect("list"), vec![log.path().to_path_buf()]);
 
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn created_session_files_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp_dir("private");
+        let log = SessionLog::create(&dir).expect("create log");
+        let mode = fs::metadata(log.path()).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         fs::remove_dir_all(dir).expect("cleanup");
     }
 
