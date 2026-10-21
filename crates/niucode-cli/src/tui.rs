@@ -1561,11 +1561,14 @@ async fn goal_after_turn(
 
 fn reset_terminal_modes() {
     let mut out = std::io::stdout();
+    // Do not send LeaveAlternateScreen here: the TUI never enters the
+    // alternate screen at startup. Ghostty (and some terminals) restore a
+    // saved cursor position on 1049l, which makes the banner and prompt paint
+    // over earlier scrollback instead of continuing at the bottom.
     let _ = execute!(
         out,
         DisableMouseCapture,
         DisableBracketedPaste,
-        LeaveAlternateScreen,
         Show,
         crossterm::style::ResetColor
     );
