@@ -51,7 +51,6 @@ impl Theme {
         }
     }
 
-    #[cfg(test)]
     pub fn plain() -> Self {
         Self { ansi: false }
     }
@@ -79,6 +78,142 @@ impl Theme {
             Tone::Magenta => "1;35",
         };
         format!("\x1b[{code}m{text}\x1b[0m")
+    }
+
+    /// Build spans only after sanitization; model-provided ANSI is never trusted.
+    pub fn row(self, text: &str, code: bool) -> ratatui::text::Line<'static> {
+        use ratatui::{
+            style::{Color, Modifier, Style},
+            text::Span,
+        };
+        let text = crate::text_layout::clean_text(text);
+        let style = |tone: Tone| {
+            if !self.ansi {
+                return Style::default();
+            }
+            match tone {
+                Tone::Accent => Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+                Tone::Bright => Style::default().add_modifier(Modifier::BOLD),
+                Tone::Success => Style::default().fg(Color::Green),
+                Tone::Danger => Style::default().fg(Color::Red),
+                Tone::Warning => Style::default().fg(Color::Yellow),
+                Tone::Muted => Style::default().add_modifier(Modifier::DIM),
+                Tone::Magenta => Style::default().fg(Color::Magenta),
+            }
+        };
+        let trimmed = text.trim_start();
+        let tone = if trimmed.contains("│ - ")
+            || trimmed.starts_with("✗")
+            || trimmed.starts_with('-') && !trimmed.starts_with("- ")
+        {
+            Some(Tone::Danger)
+        } else if trimmed.contains("│ + ") || trimmed.starts_with("✓") || trimmed.starts_with('+')
+        {
+            Some(Tone::Success)
+        } else if trimmed.starts_with('!') {
+            Some(Tone::Warning)
+        } else if trimmed.starts_with('#') || trimmed.starts_with("@@") || trimmed.starts_with('▎')
+        {
+            Some(Tone::Accent)
+        } else if trimmed.starts_with("```") {
+            Some(Tone::Muted)
+        } else {
+            None
+        };
+        if let Some(tone) = tone {
+            return vec![Span::styled(text, style(tone))].into();
+        }
+        if let Some((prefix, rest)) = text.split_once('▸') {
+            return vec![
+                Span::styled(format!("{prefix}▸"), style(Tone::Accent)),
+                Span::raw(rest.to_owned()),
+            ]
+            .into();
+        }
+        if code {
+            let spans: Vec<_> = text
+                .split_inclusive(|c: char| !c.is_alphanumeric() && c != '_')
+                .map(|token| {
+                    let word = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+                    let tone = if matches!(
+                        word,
+                        "fn" | "pub"
+                            | "let"
+                            | "mut"
+                            | "impl"
+                            | "use"
+                            | "struct"
+                            | "enum"
+                            | "match"
+                            | "if"
+                            | "else"
+                            | "return"
+                            | "async"
+                            | "await"
+                            | "def"
+                            | "class"
+                            | "import"
+                            | "from"
+                            | "const"
+                            | "function"
+                            | "for"
+                            | "while"
+                    ) {
+                        Tone::Magenta
+                    } else if !word.is_empty() && word.chars().all(|c| c.is_ascii_digit()) {
+                        Tone::Warning
+                    } else {
+                        Tone::Bright
+                    };
+                    Span::styled(token.to_owned(), style(tone))
+                })
+                .collect();
+            return spans.into();
+        }
+        let mut inline = false;
+        let spans: Vec<_> = text
+            .split_inclusive('`')
+            .map(|part| {
+                let tone = if inline || part.ends_with('`') && part == "`" {
+                    Some(Tone::Accent)
+                } else {
+                    None
+                };
+                if part.ends_with('`') {
+                    inline = !inline;
+                }
+                Span::styled(part.to_owned(), tone.map_or(Style::default(), style))
+            })
+            .collect();
+        spans.into()
+    }
+
+    /// The same spans feed linear ANSI and ratatui, so highlighting cannot
+    /// change width or leak terminal control characters between renderers.
+    pub fn render_row(self, text: &str, code: bool) -> String {
+        use ratatui::style::{Color, Modifier};
+        let row = self.row(text, code);
+        let mut output = String::new();
+        for span in row.spans {
+            if self.ansi {
+                let code = match span.style.fg {
+                    Some(Color::Cyan) => "36",
+                    Some(Color::Green) => "32",
+                    Some(Color::Red) => "31",
+                    Some(Color::Yellow) => "33",
+                    Some(Color::Magenta) => "35",
+                    _ if span.style.add_modifier.contains(Modifier::BOLD) => "1",
+                    _ if span.style.add_modifier.contains(Modifier::DIM) => "2",
+                    _ => "0",
+                };
+                output.push_str(&format!("\x1b[{code}m{}\x1b[0m", span.content));
+            } else {
+                output.push_str(&span.content);
+            }
+        }
+        output
     }
 
     pub fn dim(self, text: impl Display) -> String {
@@ -121,5 +256,33 @@ mod tests {
             assert!(!symbol.contains('\n'));
             assert!(!symbol.is_empty());
         }
+    }
+    #[test]
+    fn highlighted_code_and_markdown_preserve_text_and_sanitize_controls() {
+        let theme = Theme::ansi_forced();
+        for (text, code) in [
+            ("# Heading", false),
+            ("Use `cargo test` now", false),
+            ("fn main() { let x = 42; }", true),
+            ("+ new line", false),
+        ] {
+            let row = theme.row(text, code);
+            assert_eq!(
+                row.spans
+                    .iter()
+                    .map(|s| s.content.as_ref())
+                    .collect::<String>(),
+                text
+            );
+            assert_eq!(Theme::plain().render_row(text, code), text);
+            assert!(theme.render_row(text, code).contains("\x1b["));
+        }
+        assert_eq!(
+            theme.row("fn main()", true).spans[0].style.fg,
+            Some(ratatui::style::Color::Magenta)
+        );
+        let malicious = "\x1b]52;c;data\x07";
+        assert!(!theme.render_row(malicious, false).contains("\x1b]52"));
+        assert!(!Theme::plain().render_row(malicious, false).contains('\x1b'));
     }
 }

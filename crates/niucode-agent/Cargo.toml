@@ -7,6 +7,8 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 futures-util.workspace = true
+ignore.workspace = true
+similar.workspace = true
 niucode-core = { path = "../niucode-core" }
 niucode-extension = { path = "../niucode-extension" }
 niucode-provider = { path = "../niucode-provider" }
@@ -15,4 +17,5 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 async-trait.workspace = true

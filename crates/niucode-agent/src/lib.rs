@@ -16,9 +16,16 @@ use niucode_provider::{ChatMessage, CompletionRequest, Provider, ProviderError, 
 use niucode_tools::{ChangePreview, SandboxPolicy, Toolbox};
 use serde_json::{json, Value};
 
+mod changes;
 mod context;
 mod instructions;
+mod runtime;
 mod subagent;
+pub use changes::{task_review, task_review_by_id, CommandCheck, ReviewedFile, TaskReview};
+pub use runtime::{
+    pending_inputs, run_interactive, runtime_channel, Cancelled, PendingInput, RuntimeClient,
+    RuntimeCommand, RuntimeEndpoint, RuntimeEvent,
+};
 
 const MAX_PROVIDER_RETRIES: usize = 3;
 const MAX_TOOL_OUTPUT_BYTES: usize = 1_048_576;
@@ -128,7 +135,7 @@ impl AgentConfig {
             plan_mode: false,
             goal: None,
             extension_host: None,
-            write_lock: None,
+            write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
             read_roots: Vec::new(),
             worktree_root: None,
@@ -223,6 +230,18 @@ pub async fn run_with_history(
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
+    let mut io = runtime::RunIo::callbacks(approver, observer);
+    runtime::execute_task(provider, session, config, prompt, history, &mut io).await
+}
+
+async fn run_engine(
+    provider: &dyn Provider,
+    session: &SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    io: &mut runtime::RunIo<'_>,
+) -> Result<RunOutcome> {
     let toolbox = Toolbox::with_policy_and_roots(
         &config.working_dir,
         config.sandbox,
@@ -242,7 +261,7 @@ pub async fn run_with_history(
     };
     let loaded_instructions = instructions::load(&config.working_dir);
     for warning in &loaded_instructions.warnings {
-        observer(AgentEvent::Warning(warning.clone()));
+        io.observe(AgentEvent::Warning(warning.clone())).await?;
     }
     let mut system_prompt = compose_system_prompt(&config.system_prompt, &loaded_instructions.text);
     if let Some(goal) = &config.goal {
@@ -262,7 +281,7 @@ pub async fn run_with_history(
         );
     }
 
-    observer(AgentEvent::Phase(LoopPhase::Project));
+    io.observe(AgentEvent::Phase(LoopPhase::Project)).await?;
     let mut messages = Vec::with_capacity(history.len() + 2);
     messages.push(ChatMessage::system(system_prompt.clone()));
     messages.extend(history);
@@ -275,10 +294,6 @@ pub async fn run_with_history(
             ts: now_ms(),
         })?;
     }
-    session.append(&Event::UserMessage {
-        text: prompt.to_string(),
-        ts: now_ms(),
-    })?;
 
     let mut total_usage = Usage::default();
     let mut compaction_warned = false;
@@ -289,6 +304,8 @@ pub async fn run_with_history(
         config.max_steps
     };
     for turns in 1..=turn_limit {
+        io.inject(session, &mut messages).await?;
+        io.observe(AgentEvent::Phase(LoopPhase::Request)).await?;
         match maybe_compact(
             session,
             config,
@@ -299,12 +316,12 @@ pub async fn run_with_history(
         )? {
             Some(AgentEvent::Warning(message)) if !compaction_warned => {
                 compaction_warned = true;
-                observer(AgentEvent::Warning(message));
+                io.observe(AgentEvent::Warning(message)).await?;
             }
             Some(AgentEvent::Warning(_)) => {}
             Some(event) => {
                 compaction_warned = false;
-                observer(event);
+                io.observe(event).await?;
             }
             None => {}
         }
@@ -314,8 +331,8 @@ pub async fn run_with_history(
         request.tools = tools.clone();
 
         let mut attempt = 0_usize;
-        let (text, reasoning, pending, usage) = loop {
-            let mut stream = match provider.stream(request.clone()).await {
+        let (text, reasoning, pending, usage, finish_reason) = loop {
+            let mut stream = match io.wait(session, provider.stream(request.clone())).await? {
                 Ok(stream) => stream,
                 Err(error) => {
                     if error.is_context_overflow() && attempt == 0 {
@@ -331,11 +348,12 @@ pub async fn run_with_history(
                             &tools,
                             true,
                         )? {
-                            observer(AgentEvent::Compaction {
+                            io.observe(AgentEvent::Compaction {
                                 replaced_events,
                                 before_tokens,
                                 after_tokens,
-                            });
+                            })
+                            .await?;
                             request.messages = messages.clone();
                             attempt += 1;
                             continue;
@@ -343,7 +361,8 @@ pub async fn run_with_history(
                     }
                     if error.is_retryable() && attempt < MAX_PROVIDER_RETRIES {
                         attempt += 1;
-                        tokio::time::sleep(retry_delay(&error, attempt)).await;
+                        io.wait(session, tokio::time::sleep(retry_delay(&error, attempt)))
+                            .await?;
                         continue;
                     }
                     return Err(error.into());
@@ -356,17 +375,19 @@ pub async fn run_with_history(
             let mut usage = None;
             let mut emitted = false;
             let mut stream_error = None;
+            let mut finish_reason = None;
 
-            while let Some(event) = stream.next().await {
+            while let Some(event) = io.wait(session, stream.next()).await? {
                 match event {
                     Ok(StreamEvent::TextDelta(delta)) => {
                         emitted = true;
-                        observer(AgentEvent::TextDelta(delta.clone()));
+                        io.observe(AgentEvent::TextDelta(delta.clone())).await?;
                         text.push_str(&delta);
                     }
                     Ok(StreamEvent::ReasoningDelta(delta)) => {
                         emitted = true;
-                        observer(AgentEvent::ReasoningDelta(delta.clone()));
+                        io.observe(AgentEvent::ReasoningDelta(delta.clone()))
+                            .await?;
                         reasoning.push_str(&delta);
                     }
                     Ok(StreamEvent::ToolCallDelta(delta)) => {
@@ -384,7 +405,12 @@ pub async fn run_with_history(
                         emitted = true;
                         usage = Some(value);
                     }
-                    Ok(StreamEvent::Done { .. }) => emitted = true,
+                    Ok(StreamEvent::Done {
+                        finish_reason: reason,
+                    }) => {
+                        emitted = true;
+                        finish_reason = reason;
+                    }
                     Err(error) => {
                         stream_error = Some(error);
                         break;
@@ -401,11 +427,12 @@ pub async fn run_with_history(
                     }) =
                         maybe_compact(session, config, &system_prompt, &mut messages, &tools, true)?
                     {
-                        observer(AgentEvent::Compaction {
+                        io.observe(AgentEvent::Compaction {
                             replaced_events,
                             before_tokens,
                             after_tokens,
-                        });
+                        })
+                        .await?;
                         request.messages = messages.clone();
                         attempt += 1;
                         continue;
@@ -413,16 +440,24 @@ pub async fn run_with_history(
                 }
                 if !emitted && error.is_retryable() && attempt < MAX_PROVIDER_RETRIES {
                     attempt += 1;
-                    tokio::time::sleep(retry_delay(&error, attempt)).await;
+                    io.wait(session, tokio::time::sleep(retry_delay(&error, attempt)))
+                        .await?;
                     continue;
                 }
                 return Err(error.into());
             }
 
-            break (text, reasoning, pending, usage);
+            break (text, reasoning, pending, usage, finish_reason);
         };
 
-        let tool_calls = assemble_tool_calls(pending)?;
+        // A length-limited response is incomplete even when its tool arguments
+        // happen to parse. Preserve the response and usage, but dispatch nothing.
+        let truncated = finish_reason.as_deref() == Some("length");
+        let tool_calls = if truncated {
+            Vec::new()
+        } else {
+            assemble_tool_calls(pending)?
+        };
 
         session.append(&Event::AssistantMessage {
             text: text.clone(),
@@ -435,9 +470,15 @@ pub async fn run_with_history(
         add_usage(&mut total_usage, &turn_usage);
         session.append(&Event::TurnEnd {
             usage: turn_usage.clone(),
+            finish_reason,
             ts: now_ms(),
         })?;
-        observer(AgentEvent::TurnEnd { usage: turn_usage });
+        io.observe(AgentEvent::TurnEnd { usage: turn_usage })
+            .await?;
+
+        if truncated {
+            bail!("model output truncated (finish_reason=length); task incomplete; review recorded output before continuing");
+        }
 
         messages.push(ChatMessage::assistant(
             non_empty(text.clone()),
@@ -445,7 +486,7 @@ pub async fn run_with_history(
             tool_calls.clone(),
         ));
 
-        if tool_calls.is_empty() {
+        if tool_calls.is_empty() && !io.inject(session, &mut messages).await? {
             session.append(&Event::SessionEnd { ts: now_ms() })?;
             return Ok(RunOutcome {
                 turns,
@@ -455,26 +496,17 @@ pub async fn run_with_history(
         }
 
         for call in tool_calls {
-            observer(AgentEvent::ToolCall {
+            io.observe(AgentEvent::ToolCall {
                 name: call.name.clone(),
                 input: call.input.clone(),
-            });
+            })
+            .await?;
 
             let available = config
                 .allowed_tools
                 .as_ref()
                 .is_none_or(|allowed| allowed.iter().any(|name| name == &call.name));
-            // W1: one workspace, one write lock. The guard is held through the
-            // tool call (including approval) so parent and Worker never race.
-            let _write_guard = if matches!(call.name.as_str(), "write" | "edit" | "bash") {
-                match &config.write_lock {
-                    Some(lock) => Some(lock.lock().await),
-                    None => None,
-                }
-            } else {
-                None
-            };
-            observer(AgentEvent::Phase(LoopPhase::Tool));
+            io.observe(AgentEvent::Phase(LoopPhase::Tool)).await?;
             let scope_allowed = write_in_scope(config, &call);
             let mut result = if !available {
                 niucode_tools::ToolResult {
@@ -490,39 +522,30 @@ pub async fn run_with_history(
                     ),
                 }
             } else if call.name == "subagent" {
-                subagent::run_tool(provider, session, config, &call).await
+                io.wait(
+                    session,
+                    subagent::run_tool(provider, session, config, &call),
+                )
+                .await?
             } else if let Some(host) = config
                 .extension_host
                 .as_ref()
                 .filter(|host| host.has_tool(&call.name))
             {
-                // M4-002 external tools are local, read-only sidecars. Risk
-                // metadata and per-call approval arrive with the capability
-                // profile work.
-                host.execute(&call.name, &call.input).await
-            } else if requires_approval(&call.name) && config.approval == ApprovalMode::Ask {
-                let request = ApprovalRequest {
-                    tool: call.name.clone(),
-                    summary: approval_summary(&call),
-                    preview: matches!(call.name.as_str(), "write" | "edit")
-                        .then(|| toolbox.preview(&call.name, &call.input)),
-                };
-                let allowed = approver(&request);
-                session.append(&Event::Approval {
-                    tool: call.name.clone(),
-                    allowed,
-                    ts: now_ms(),
-                })?;
-                if allowed {
-                    toolbox.execute(&call.name, &call.input).await
-                } else {
-                    niucode_tools::ToolResult {
-                        ok: false,
-                        output: "approval denied by user".into(),
+                let _guard = if !host.read_only_tools().contains(&call.name) {
+                    match &config.write_lock {
+                        Some(lock) => Some(io.wait(session, lock.lock()).await?),
+                        None => None,
                     }
-                }
+                } else {
+                    None
+                };
+                io.wait(session, host.execute(&call.name, &call.input))
+                    .await?
             } else {
-                toolbox.execute(&call.name, &call.input).await
+                execute_builtin(session, config, io, &toolbox, &call)
+                    .await?
+                    .result
             };
 
             result.output = cap_tool_output(result.output);
@@ -533,12 +556,13 @@ pub async fn run_with_history(
                 ts: now_ms(),
             })?;
 
-            observer(AgentEvent::ToolResult {
+            io.observe(AgentEvent::ToolResult {
                 name: call.name.clone(),
                 ok: result.ok,
                 summary: summary(&result.output),
                 output: result.output.clone(),
-            });
+            })
+            .await?;
 
             messages.push(ChatMessage::tool(call.id, result.output));
         }
@@ -569,6 +593,80 @@ fn write_in_scope(config: &AgentConfig, call: &ToolCall) -> bool {
         let scope = scope.trim().trim_start_matches("./").trim_end_matches('/');
         !scope.is_empty() && (path == scope || path.starts_with(&format!("{scope}/")))
     })
+}
+
+async fn execute_builtin(
+    session: &SessionLog,
+    config: &AgentConfig,
+    io: &mut runtime::RunIo<'_>,
+    toolbox: &Toolbox,
+    call: &ToolCall,
+) -> Result<niucode_tools::RecordedToolResult> {
+    let prepared = if matches!(call.name.as_str(), "write" | "edit") {
+        match toolbox.prepare_mutation(&call.name, &call.input) {
+            Ok(prepared) => Some(prepared),
+            Err(error) => return Ok(niucode_tools::RecordedToolResult::failed(error)),
+        }
+    } else {
+        None
+    };
+    if requires_approval(&call.name) && config.approval == ApprovalMode::Ask {
+        let request = ApprovalRequest {
+            tool: call.name.clone(),
+            summary: approval_summary(call),
+            preview: prepared.as_ref().map(|p| p.preview().clone()),
+        };
+        let allowed = io.approve(session, &call.id, request).await?;
+        session.append(&Event::Approval {
+            tool: call.name.clone(),
+            allowed,
+            ts: now_ms(),
+        })?;
+        if !allowed {
+            return Ok(niucode_tools::RecordedToolResult::failed(anyhow::anyhow!(
+                "approval denied by user"
+            )));
+        }
+    }
+    // Waiting for a human never holds W1. Prepared contents are revalidated
+    // after acquiring it, so another writer cannot invalidate an approval silently.
+    let _guard = if requires_approval(&call.name) {
+        match &config.write_lock {
+            Some(lock) => Some(io.wait(session, lock.lock()).await?),
+            None => None,
+        }
+    } else {
+        None
+    };
+    let result = if let Some(prepared) = prepared {
+        toolbox.execute_prepared(prepared)
+    } else {
+        io.wait(session, toolbox.execute_recorded(&call.name, &call.input))
+            .await?
+    };
+    if result.evidence != niucode_core::ExecutionEvidence::default() {
+        session.append(&Event::ToolEvidence {
+            call_id: call.id.clone(),
+            evidence: result.evidence.clone(),
+            ts: now_ms(),
+        })?;
+        if result.evidence.process.is_some() {
+            // Keep W1 through the post-command snapshot; another internal writer
+            // must not make unchecked contents appear to belong to this command.
+            let snapshot = io
+                .wait(
+                    session,
+                    changes::capture(&config.working_dir, session.path(), false),
+                )
+                .await?;
+            session.append(&Event::CheckSnapshot {
+                call_id: call.id.clone(),
+                digest: changes::fingerprint(&snapshot),
+                ts: now_ms(),
+            })?;
+        }
+    }
+    Ok(result)
 }
 
 fn requires_approval(tool: &str) -> bool {
@@ -616,7 +714,7 @@ fn retry_delay(error: &ProviderError, attempt: usize) -> Duration {
 }
 
 fn maybe_compact(
-    session: &mut SessionLog,
+    session: &SessionLog,
     config: &AgentConfig,
     system_prompt: &str,
     messages: &mut Vec<ChatMessage>,
@@ -792,10 +890,14 @@ mod tests {
         assert_eq!(
             loaded.events.iter().map(Event::kind).collect::<Vec<_>>(),
             vec![
+                "task_started",
                 "user_message",
+                "task_snapshot",
                 "assistant_message",
                 "turn_end",
-                "session_end"
+                "session_end",
+                "task_snapshot",
+                "task_finished"
             ]
         );
 
@@ -899,6 +1001,7 @@ mod tests {
             },
             Event::TurnEnd {
                 usage: Usage::default(),
+                finish_reason: None,
                 ts: 4,
             },
         ];
@@ -938,7 +1041,7 @@ mod tests {
         assert!(history[1]
             .content
             .as_deref()
-            .is_some_and(|content| content.contains("cancelled")));
+            .is_some_and(|content| content.contains("outcome unknown")));
         assert_eq!(history[2].role, Role::User);
     }
 

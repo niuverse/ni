@@ -1,30 +1,17 @@
-//! Minimal readline-style editor for the linear TUI.
-//!
-//! rustyline can list completions on Tab, but it cannot refresh a menu on every
-//! keystroke. Slash commands are a small, deterministic set, so a focused editor
-//! gives us the `/i -> /init` menu without pulling a terminal UI framework in.
-
-use std::io::{stdout, IsTerminal, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
-
-use crossterm::cursor::{position, Hide, MoveLeft, MoveRight, MoveToColumn, MoveUp, Show};
-use crossterm::event::{
-    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-    Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+//! One editor state for linear and inline presentations, idle and running tasks.
+use crate::{
+    completion::{Completion, CompletionAction},
+    composer::{Composer, Edit},
+    slash::CommandRegistry,
+    terminal::TerminalSession,
+    theme::Theme,
 };
-use crossterm::execute;
-use crossterm::terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
-use crate::slash::{CommandRegistry, CommandSpec};
-use crate::theme::Theme;
-
-const MAX_MENU_ROWS: usize = 6;
-const MENU_NAME_WIDTH: usize = 10;
-const MENU_PREFIX_WIDTH: usize = 2;
 static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
-
-/// Number of mouse events delivered to the line editor in this process.
 pub fn mouse_events_seen() -> u64 {
     MOUSE_EVENTS.load(Ordering::Relaxed)
 }
@@ -32,955 +19,508 @@ pub fn mouse_events_seen() -> u64 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Input {
     Line(String),
+    Queue(String),
+    Details,
     Interrupted,
     Eof,
 }
 
-#[derive(Clone)]
-struct MenuItem {
-    insert: String,
-    name: String,
-    description: String,
-}
-
 pub struct LineEditor {
-    registry: CommandRegistry,
-    history: Vec<String>,
-    models: Vec<String>,
-    current_model: String,
-    permissions: Vec<(String, String)>,
-    skills: Vec<String>,
+    pub composer: Composer,
+    completion: Completion,
+    inline: bool,
+    selected: usize,
+    menu_focused: bool,
+    menu_open: bool,
+    menu_origin: Option<(u16, usize, usize)>,
+    notice: Option<String>,
+    clear_requested: bool,
 }
-
 impl LineEditor {
-    pub fn new(registry: CommandRegistry) -> Self {
+    pub fn new(registry: CommandRegistry, inline: bool) -> Self {
         Self {
-            registry,
-            history: Vec::new(),
-            models: Vec::new(),
-            current_model: String::new(),
-            permissions: Vec::new(),
-            skills: Vec::new(),
+            composer: Composer::default(),
+            completion: Completion::new(registry),
+            inline,
+            selected: 0,
+            menu_focused: false,
+            menu_open: true,
+            menu_origin: None,
+            notice: None,
+            clear_requested: false,
         }
     }
-
     pub fn set_models(&mut self, models: Vec<String>) {
-        self.models = models;
+        self.completion.models = models;
     }
-
     pub fn set_current_model(&mut self, model: impl Into<String>) {
-        self.current_model = model.into();
+        self.completion.current_model = model.into();
     }
-
     pub fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
-        self.permissions = permissions;
+        self.completion.permissions = permissions;
     }
-
     pub fn set_skills(&mut self, skills: Vec<String>) {
-        self.skills = skills;
+        self.completion.skills = skills;
     }
-
+    pub fn set_cwd(&mut self, cwd: PathBuf) {
+        self.completion.set_cwd(cwd);
+    }
     pub fn clear_history(&mut self) {
-        self.history.clear();
+        self.composer.clear_history();
+        self.composer.clear();
     }
-
+    pub fn start(&self, theme: Theme) -> std::io::Result<TerminalSession> {
+        TerminalSession::enter(self.inline, theme.is_ansi())
+    }
     pub fn read_line(
         &mut self,
-        raw_prompt: &str,
-        styled_prompt: &str,
+        prompt: &str,
+        footer: &str,
         theme: Theme,
     ) -> std::io::Result<Input> {
-        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
-            return Err(std::io::Error::other("line editor requires a TTY"));
-        }
-
-        let history_index = self.history.len();
-        let mut state = State {
-            registry: &self.registry,
-            history: &mut self.history,
-            models: &self.models,
-            current_model: &self.current_model,
-            permissions: &self.permissions,
-            skills: &self.skills,
-            history_index,
-            chars: Vec::new(),
-            cursor: 0,
-            selected: 0,
-            menu_open: false,
-            scroll: 0,
-            history_search: None,
-            history_query: None,
-            prompt_row: None,
-            mouse_failed: false,
-            mouse_captured: false,
-            mouse_anchor: None,
-            menu_navigated: false,
-            raw_prompt,
-            styled_prompt,
-            theme,
-        };
-
-        let _guard = TerminalGuard::enter()?;
-        state.run(&mut stdout())
-    }
-}
-
-pub(crate) struct TerminalGuard;
-
-impl TerminalGuard {
-    pub(crate) fn enter() -> std::io::Result<Self> {
-        enable_raw_mode()?;
-        let mut out = stdout();
-        if let Err(error) = execute!(out, EnableBracketedPaste, Hide) {
-            let _ = disable_raw_mode();
-            return Err(error);
-        }
-        Ok(Self)
-    }
-}
-
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        let mut out = stdout();
-        let _ = execute!(out, DisableMouseCapture, DisableBracketedPaste, Show);
-        let _ = disable_raw_mode();
-    }
-}
-
-struct State<'a> {
-    registry: &'a CommandRegistry,
-    history: &'a mut Vec<String>,
-    models: &'a [String],
-    current_model: &'a str,
-    permissions: &'a [(String, String)],
-    skills: &'a [String],
-    history_index: usize,
-    chars: Vec<char>,
-    cursor: usize,
-    selected: usize,
-    menu_open: bool,
-    scroll: usize,
-    history_search: Option<usize>,
-    history_query: Option<String>,
-    prompt_row: Option<u16>,
-    mouse_failed: bool,
-    mouse_captured: bool,
-    mouse_anchor: Option<u16>,
-    menu_navigated: bool,
-    raw_prompt: &'a str,
-    styled_prompt: &'a str,
-    theme: Theme,
-}
-
-impl State<'_> {
-    fn run(&mut self, out: &mut impl Write) -> std::io::Result<Input> {
-        self.refresh_menu();
-        self.sync_mouse_capture(out)?;
-        self.render(out)?;
-
+        let mut terminal = self.start(theme)?;
         loop {
-            match event::read()? {
-                Event::Key(key) => {
-                    if key.kind == KeyEventKind::Release {
-                        continue;
+            self.draw(&mut terminal, prompt, footer, "")?;
+            if let Some(event) = terminal.poll(Duration::from_millis(50))? {
+                if let Some(input) = self.handle(event, terminal.size().0, prompt) {
+                    match &input {
+                        Input::Interrupted => self.composer.clear(),
+                        Input::Line(text) | Input::Queue(text) => {
+                            terminal.print(&format!("{prompt}{text}"))?
+                        }
+                        _ => {}
                     }
-                    if let Some(input) = self.handle_key(key, out)? {
-                        return Ok(input);
-                    }
-                    self.refresh_menu();
-                    self.sync_mouse_capture(out)?;
-                    self.render(out)?;
+                    terminal.finish()?;
+                    return Ok(input);
                 }
-                Event::Paste(text) => {
-                    let text = text.replace(['\r', '\n'], " ");
-                    self.insert(&text);
-                    self.refresh_menu();
-                    self.sync_mouse_capture(out)?;
-                    self.render(out)?;
-                }
-                Event::Mouse(mouse) => {
-                    MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
-                    let changed = self.handle_mouse(mouse)?;
-                    // If cursor-position support is missing, drop capture so
-                    // terminal text selection and drag keep working.
-                    self.sync_mouse_capture(out)?;
-                    if changed {
-                        self.refresh_menu();
-                        self.render(out)?;
-                    }
-                }
-                Event::Resize(_, _) => {
-                    self.prompt_row = None;
-                    self.mouse_captured = false;
-                    self.sync_mouse_capture(out)?;
-                    self.render(out)?;
-                }
-                _ => {}
             }
         }
     }
-
-    fn handle_key(
+    pub fn draw(
         &mut self,
-        key: event::KeyEvent,
-        out: &mut impl Write,
-    ) -> std::io::Result<Option<Input>> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let alt = key.modifiers.contains(KeyModifiers::ALT);
-
-        if ctrl {
-            return match key.code {
-                KeyCode::Char('c') => {
-                    self.clear_final(out, false)?;
-                    Ok(Some(Input::Interrupted))
-                }
-                KeyCode::Char('d') => {
-                    if self.chars.is_empty() {
-                        self.clear_final(out, false)?;
-                        Ok(Some(Input::Eof))
-                    } else {
-                        self.delete_at_cursor();
-                        Ok(None)
-                    }
-                }
-                KeyCode::Char('j') => self.enter(out),
-                KeyCode::Char('n') => {
-                    if self.menu_open {
-                        let visible = self.candidates().len().min(MAX_MENU_ROWS);
-                        self.selected = (self.selected + 1).min(visible.saturating_sub(1));
-                        self.menu_navigated = true;
-                    } else {
-                        self.history_down();
-                    }
-                    Ok(None)
-                }
-                KeyCode::Char('p') => {
-                    if self.menu_open {
-                        self.selected = self.selected.saturating_sub(1);
-                        self.menu_navigated = true;
-                    } else {
-                        self.history_up();
-                    }
-                    Ok(None)
-                }
-                KeyCode::Char('r') => {
-                    self.history_search_prev();
-                    Ok(None)
-                }
-                KeyCode::Left => {
-                    self.move_word_left();
-                    Ok(None)
-                }
-                KeyCode::Right => {
-                    self.move_word_right();
-                    Ok(None)
-                }
-                KeyCode::Char('a') => {
-                    self.cursor = 0;
-                    Ok(None)
-                }
-                KeyCode::Char('e') => {
-                    self.cursor = self.chars.len();
-                    Ok(None)
-                }
-                KeyCode::Char('u') => {
-                    self.chars.drain(..self.cursor);
-                    self.cursor = 0;
-                    Ok(None)
-                }
-                KeyCode::Char('k') => {
-                    self.chars.truncate(self.cursor);
-                    Ok(None)
-                }
-                KeyCode::Char('w') => {
-                    self.delete_word();
-                    Ok(None)
-                }
-                KeyCode::Char('l') => {
-                    execute!(out, Clear(ClearType::All), MoveToColumn(0))?;
-                    self.render(out)?;
-                    Ok(None)
-                }
-                _ => Ok(None),
-            };
+        terminal: &mut TerminalSession,
+        prompt: &str,
+        footer: &str,
+        output: &str,
+    ) -> std::io::Result<()> {
+        if std::mem::take(&mut self.clear_requested) {
+            terminal.clear_screen()?;
         }
-
-        if alt {
-            return match key.code {
-                KeyCode::Char('b') | KeyCode::Left => {
-                    self.move_word_left();
-                    Ok(None)
-                }
-                KeyCode::Char('f') | KeyCode::Right => {
-                    self.move_word_right();
-                    Ok(None)
-                }
-                _ => Ok(None),
-            };
-        }
-
-        match key.code {
-            KeyCode::Enter => self.enter(out),
-            KeyCode::Char('\n') => self.enter(out),
-            KeyCode::Tab => {
-                if self.menu_open {
-                    self.accept_selected();
-                } else {
-                    self.menu_open = !self.candidates().is_empty();
-                }
-                Ok(None)
-            }
-            KeyCode::Esc => {
-                self.menu_open = false;
-                Ok(None)
-            }
-            KeyCode::Up => {
-                if self.menu_open {
-                    self.selected = self.selected.saturating_sub(1);
-                    self.menu_navigated = true;
-                } else {
-                    self.history_up();
-                }
-                Ok(None)
-            }
-            KeyCode::Down => {
-                if self.menu_open {
-                    let visible = self.candidates().len().min(MAX_MENU_ROWS);
-                    self.selected = (self.selected + 1).min(visible.saturating_sub(1));
-                    self.menu_navigated = true;
-                } else {
-                    self.history_down();
-                }
-                Ok(None)
-            }
-            KeyCode::Left => {
-                self.cursor = self.cursor.saturating_sub(1);
-                Ok(None)
-            }
-            KeyCode::Right => {
-                self.cursor = (self.cursor + 1).min(self.chars.len());
-                Ok(None)
-            }
-            KeyCode::Home => {
-                self.cursor = 0;
-                Ok(None)
-            }
-            KeyCode::End => {
-                self.cursor = self.chars.len();
-                Ok(None)
-            }
-            KeyCode::Backspace => {
-                self.menu_navigated = false;
-                if self.cursor > 0 {
-                    self.cursor -= 1;
-                    self.chars.remove(self.cursor);
-                }
-                Ok(None)
-            }
-            KeyCode::Delete => {
-                self.menu_navigated = false;
-                self.delete_at_cursor();
-                Ok(None)
-            }
-            KeyCode::Char(c) => {
-                self.insert(&c.to_string());
-                Ok(None)
-            }
-            _ => Ok(None),
-        }
-    }
-
-    fn enter(&mut self, out: &mut impl Write) -> std::io::Result<Option<Input>> {
-        let line = self.line();
-        if self.menu_open
-            && !self.menu_navigated
-            && matches!(line.as_str(), "/model" | "/permissions")
-        {
-            self.menu_open = false;
-            self.remember(&line);
-            self.clear_final(out, true)?;
-            return Ok(Some(Input::Line(line)));
-        }
-        let candidates = self.candidates();
-        // If the typed line exactly matches any candidate (not just the
-        // highlighted one), submit it instead of replacing it with the first
-        // prefix match. This matters for /model openai/gpt-4o vs -mini.
-        let exact = candidates.iter().any(|item| item.insert.trim_end() == line);
-        if self.menu_open && !exact {
-            self.accept_selected();
-            Ok(None)
-        } else {
-            self.remember(&line);
-            self.clear_final(out, true)?;
-            Ok(Some(Input::Line(line)))
-        }
-    }
-
-    fn insert(&mut self, text: &str) {
-        self.menu_navigated = false;
-        for c in text.chars() {
-            self.chars.insert(self.cursor, c);
-            self.cursor += 1;
-        }
-        self.history_index = self.history.len();
-        self.history_search = None;
-        self.history_query = None;
-    }
-
-    fn delete_at_cursor(&mut self) {
-        if self.cursor < self.chars.len() {
-            self.chars.remove(self.cursor);
-        }
-    }
-
-    fn delete_word(&mut self) {
-        while self.cursor > 0 && self.chars[self.cursor - 1].is_whitespace() {
-            self.cursor -= 1;
-            self.chars.remove(self.cursor);
-        }
-        while self.cursor > 0 && !self.chars[self.cursor - 1].is_whitespace() {
-            self.cursor -= 1;
-            self.chars.remove(self.cursor);
-        }
-    }
-
-    fn line(&self) -> String {
-        self.chars.iter().collect()
-    }
-
-    fn candidates(&self) -> Vec<MenuItem> {
-        let line = self.line();
-        if let Some(items) = skill_candidates(self.skills, &line) {
-            return items;
-        }
-        if let Some(items) =
-            argument_candidates(self.models, self.current_model, self.permissions, &line)
-        {
-            return items;
-        }
-        command_candidates(self.registry, &line)
-            .into_iter()
-            .map(|spec| MenuItem {
-                insert: format!("{} ", spec.name),
-                name: spec.name.clone(),
-                description: spec.description.clone(),
-            })
-            .collect()
-    }
-
-    fn refresh_menu(&mut self) {
-        let count = self.candidates().len();
-        self.menu_open = count > 0;
-        if count == 0 {
-            self.selected = 0;
-        } else {
-            self.selected = self.selected.min(count.min(MAX_MENU_ROWS) - 1);
-        }
-    }
-
-    fn accept_selected(&mut self) {
-        let candidates = self.candidates();
-        let Some(item) = candidates.get(self.selected) else {
-            return;
-        };
-        self.chars = item.insert.chars().collect();
-        self.cursor = self.chars.len();
-        self.menu_open = false;
-        self.menu_navigated = false;
-        self.history_index = self.history.len();
-    }
-
-    fn move_word_left(&mut self) {
-        while self.cursor > 0 && self.chars[self.cursor - 1].is_whitespace() {
-            self.cursor -= 1;
-        }
-        while self.cursor > 0 && !self.chars[self.cursor - 1].is_whitespace() {
-            self.cursor -= 1;
-        }
-    }
-
-    fn move_word_right(&mut self) {
-        while self.cursor < self.chars.len() && self.chars[self.cursor].is_whitespace() {
-            self.cursor += 1;
-        }
-        while self.cursor < self.chars.len() && !self.chars[self.cursor].is_whitespace() {
-            self.cursor += 1;
-        }
-    }
-
-    fn history_search_prev(&mut self) {
-        let needle = self.history_query.clone().unwrap_or_else(|| self.line());
-        self.history_query = Some(needle.clone());
-        let start = self.history_search.unwrap_or(self.history.len());
-        for index in (0..start).rev() {
-            if self.history[index].contains(&needle) {
-                self.history_search = Some(index);
-                self.history_index = index;
-                self.set_line(&self.history[index].clone());
-                return;
-            }
-        }
-    }
-
-    fn remember(&mut self, line: &str) {
-        let line = line.trim();
-        if line.is_empty() {
-            return;
-        }
-        if self.history.last().map(String::as_str) != Some(line) {
-            self.history.push(line.to_string());
-        }
-        self.history_index = self.history.len();
-    }
-
-    fn history_up(&mut self) {
-        if self.history.is_empty() {
-            return;
-        }
-        if self.history_index == 0 {
-            return;
-        }
-        self.history_index -= 1;
-        self.history_search = None;
-        self.history_query = None;
-        self.set_line(&self.history[self.history_index].clone());
-    }
-
-    fn history_down(&mut self) {
-        if self.history.is_empty() || self.history_index >= self.history.len() {
-            return;
-        }
-        self.history_index += 1;
-        self.history_search = None;
-        self.history_query = None;
-        if self.history_index == self.history.len() {
-            self.set_line("");
-        } else {
-            self.set_line(&self.history[self.history_index].clone());
-        }
-    }
-
-    fn set_line(&mut self, line: &str) {
-        self.chars = line.chars().collect();
-        self.cursor = self.chars.len();
-    }
-
-    fn render(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        let (cols, rows) = terminal::size().unwrap_or((80, 24));
-        let cols = cols.max(20) as usize;
-        let prompt_width = UnicodeWidthStr::width(self.raw_prompt);
-        let available = cols.saturating_sub(prompt_width + 1).max(1);
-
-        let widths = self
-            .chars
-            .iter()
-            .map(|c| UnicodeWidthChar::width(*c).unwrap_or(0))
-            .collect::<Vec<_>>();
-        let cursor_col = widths[..self.cursor].iter().sum::<usize>();
-        if cursor_col < self.scroll {
-            self.scroll = cursor_col;
-        }
-        if cursor_col >= self.scroll + available {
-            self.scroll = cursor_col + 1 - available;
-        }
-
-        let prefix_width = usize::from(self.scroll > 0);
-        let visible_width = available.saturating_sub(prefix_width);
-        let mut visible = String::new();
-        let mut used = 0_usize;
-        let mut col = 0_usize;
-        for (index, c) in self.chars.iter().enumerate() {
-            let width = widths[index];
-            col += width;
-            if col <= self.scroll {
-                continue;
-            }
-            if used + width > visible_width {
-                break;
-            }
-            visible.push(*c);
-            used += width;
-        }
-        let screen_cursor = prefix_width + cursor_col.saturating_sub(self.scroll);
-
-        execute!(
-            out,
-            MoveToColumn(0),
-            Clear(ClearType::CurrentLine),
-            Clear(ClearType::FromCursorDown)
-        )?;
-        write!(out, "{}", self.styled_prompt)?;
-        if self.scroll > 0 {
-            write!(out, "…")?;
-        }
-        if self.chars.first() == Some(&'/') {
-            if let Some(space) = visible.find(char::is_whitespace) {
-                write!(
-                    out,
-                    "{}{}",
-                    self.theme.accent(&visible[..space]),
-                    &visible[space..]
-                )?;
-            } else {
-                write!(out, "{}", self.theme.accent(&visible))?;
-            }
-        } else {
-            write!(out, "{visible}")?;
-        }
-
-        let candidates = self.candidates();
+        self.completion.refresh();
+        let (width, height) = terminal.size();
+        let candidates = self
+            .completion
+            .candidates(self.composer.text(), self.composer.cursor());
+        self.selected = self.selected.min(candidates.len().saturating_sub(1));
         let menu_rows = if self.menu_open {
-            candidates.len().min(MAX_MENU_ROWS)
+            candidates.len().min(4).min(height.saturating_sub(3))
         } else {
             0
         };
-        for (index, spec) in candidates.iter().take(menu_rows).enumerate() {
-            write!(out, "\r\n")?;
-            let line = format!(
-                "{:<width$} {}",
-                spec.name,
-                spec.description,
-                width = MENU_NAME_WIDTH
+        let mut rows = Vec::new();
+        if !output.is_empty() {
+            let count = 3.min(height.saturating_sub(menu_rows + 3));
+            rows.extend(
+                crate::text_layout::wrap(output, width)
+                    .into_iter()
+                    .take(count),
             );
-            // The selected/normal prefix occupies two columns. Truncating to
-            // the full terminal width would wrap and desynchronise the cursor,
-            // leaving old menu rows behind when the user edits the input.
-            let line = truncate_columns(&line, cols.saturating_sub(MENU_PREFIX_WIDTH));
-            if index == self.selected {
-                if self.theme.is_ansi() {
-                    write!(out, "\x1b[7m▸ {line}\x1b[0m")?;
+        }
+        let output_rows = rows.len();
+        let input_rows = height
+            .saturating_sub(menu_rows + output_rows + 1)
+            .clamp(1, 6);
+        let layout = self.composer.layout(width, prompt);
+        let first = layout.cursor.0.saturating_sub(input_rows - 1);
+        rows.extend(layout.rows.iter().skip(first).take(input_rows).cloned());
+        let menu_start = rows.len();
+        let menu_offset = self.selected.saturating_sub(menu_rows.saturating_sub(1));
+        for (i, item) in candidates
+            .iter()
+            .enumerate()
+            .skip(menu_offset)
+            .take(menu_rows)
+        {
+            rows.push(format!(
+                "{} {}  {}",
+                if i == self.selected { "▸" } else { " " },
+                item.name,
+                item.description
+            ));
+        }
+        if rows.len() < height {
+            let notice = self
+                .notice
+                .as_deref()
+                .or(terminal.notice.as_deref())
+                .or(self.completion.notice.as_deref());
+            let hint = if menu_rows > 0 {
+                if candidates[self.selected].action == CompletionAction::Apply {
+                    if self.menu_focused
+                        || !matches!(self.composer.text().trim_end(), "/model" | "/permissions")
+                    {
+                        "↑↓ select · Enter apply · Esc cancel"
+                    } else {
+                        "↑↓ select · Enter open · Tab complete"
+                    }
                 } else {
-                    write!(out, "> {line}")?;
+                    "↑↓ select · Enter/Tab complete · Esc close"
                 }
             } else {
-                write!(out, "  {line}")?;
-            }
+                footer
+            };
+            rows.push(notice.unwrap_or(hint).into());
         }
-
-        if menu_rows > 0 {
-            if let Some(row) = self.prompt_row {
-                let rows = rows.max(1) as usize;
-                let overflow = (row as usize + menu_rows).saturating_sub(rows - 1);
-                self.prompt_row = Some(row.saturating_sub(overflow as u16));
-            }
-            execute!(out, MoveUp(menu_rows as u16))?;
-            execute!(out, MoveRight((prompt_width + screen_cursor) as u16))?;
-        } else {
-            let end = prompt_width + prefix_width + used;
-            let want = prompt_width + screen_cursor;
-            if end > want {
-                execute!(out, MoveLeft((end - want) as u16))?;
-            }
-        }
-        out.flush()
-    }
-
-    fn sync_mouse_capture(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        let want = self.menu_open;
-        if want == self.mouse_captured {
-            return Ok(());
-        }
-        if want {
-            // Query before enabling mouse reporting. Querying from inside a
-            // mouse event can race with crossterm's event reader and leave
-            // hover permanently disabled on some terminals.
-            if self.prompt_row.is_none() && !self.mouse_failed {
-                match position() {
-                    Ok((_, row)) => self.prompt_row = Some(row),
-                    Err(_) => self.mouse_failed = true,
-                }
-            }
-            if execute!(out, EnableMouseCapture).is_err() {
-                self.mouse_failed = true;
-                return Ok(());
-            }
-            self.mouse_anchor = None;
-        } else {
-            let _ = execute!(out, DisableMouseCapture);
-            self.mouse_anchor = None;
-        }
-        self.mouse_captured = want;
+        let selected = (menu_rows > 0).then_some(menu_start + self.selected - menu_offset);
+        let top = terminal.draw(
+            &rows,
+            (!self.menu_focused || menu_rows == 0)
+                .then_some((output_rows + layout.cursor.0 - first, layout.cursor.1)),
+            selected,
+            menu_rows > 0,
+        )?;
+        self.menu_origin = top
+            .filter(|_| menu_rows > 0)
+            .map(|top| (top + menu_start as u16, menu_offset, menu_rows));
         Ok(())
     }
-
-    fn handle_relative_mouse(&mut self, mouse: event::MouseEvent, rows: usize) -> bool {
-        match mouse.kind {
-            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
-                let anchor = *self.mouse_anchor.get_or_insert(mouse.row);
-                let delta = mouse.row as i32 - anchor as i32;
-                if delta == 0 {
-                    return false;
+    pub fn handle(&mut self, event: Event, width: usize, prompt: &str) -> Option<Input> {
+        let candidates = self
+            .completion
+            .candidates(self.composer.text(), self.composer.cursor());
+        let menu = self.menu_open && !candidates.is_empty();
+        match event {
+            Event::Paste(text) => {
+                self.insert(&text);
+                self.menu_open = false;
+            }
+            Event::Key(key) if key.kind != KeyEventKind::Release => {
+                let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+                let alt = key.modifiers.contains(KeyModifiers::ALT);
+                let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+                if ctrl
+                    || !matches!(
+                        key.code,
+                        KeyCode::Enter | KeyCode::Tab | KeyCode::Up | KeyCode::Down | KeyCode::Esc
+                    )
+                {
+                    self.menu_focused = false;
                 }
-                let next = (self.selected as i32 + delta).clamp(0, rows.saturating_sub(1) as i32);
-                self.mouse_anchor = Some(mouse.row);
-                if next as usize == self.selected {
-                    return false;
+                if ctrl {
+                    match key.code {
+                        KeyCode::Char('c') => return Some(Input::Interrupted),
+                        KeyCode::Char('d') if self.composer.text().is_empty() => {
+                            return Some(Input::Eof)
+                        }
+                        KeyCode::Char('d') => self.composer.edit(Edit::Delete),
+                        KeyCode::Char('l') => self.clear_requested = true,
+                        KeyCode::Char('j') => self.insert("\n"),
+                        KeyCode::Char('a') => self.composer.edit(Edit::Home),
+                        KeyCode::Char('e') => self.composer.edit(Edit::End),
+                        KeyCode::Char('u') => self.composer.edit(Edit::KillStart),
+                        KeyCode::Char('k') => self.composer.edit(Edit::KillEnd),
+                        KeyCode::Char('w') => self.composer.edit(Edit::DeleteWord),
+                        KeyCode::Char('z') => self.composer.edit(Edit::Undo),
+                        KeyCode::Char('y') => self.composer.edit(Edit::Redo),
+                        KeyCode::Char('r') => self.composer.search_history(),
+                        KeyCode::Char('p') => self.composer.history_move(-1),
+                        KeyCode::Char('n') => self.composer.history_move(1),
+                        KeyCode::Char('o') => return Some(Input::Details),
+                        KeyCode::Left => self.composer.edit(Edit::WordLeft),
+                        KeyCode::Right => self.composer.edit(Edit::WordRight),
+                        _ => {}
+                    }
+                    return None;
                 }
-                self.selected = next as usize;
-                self.menu_navigated = true;
-                true
-            }
-            MouseEventKind::Down(MouseButton::Left) => {
-                self.accept_selected();
-                true
-            }
-            MouseEventKind::ScrollDown => {
-                self.selected = (self.selected + 1).min(rows.saturating_sub(1));
-                self.menu_navigated = true;
-                true
-            }
-            MouseEventKind::ScrollUp => {
-                self.selected = self.selected.saturating_sub(1);
-                self.menu_navigated = true;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn handle_mouse(&mut self, mouse: event::MouseEvent) -> std::io::Result<bool> {
-        if !self.menu_open {
-            return Ok(false);
-        }
-        let rows = self.candidates().len().min(MAX_MENU_ROWS);
-        if rows == 0 {
-            return Ok(false);
-        }
-        let Some(prompt_row) = self.prompt_row else {
-            return Ok(self.handle_relative_mouse(mouse, rows));
-        };
-        let Some(index) = menu_index(mouse.row, prompt_row, rows) else {
-            return Ok(false);
-        };
-        match mouse.kind {
-            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
-                if self.selected != index {
-                    self.selected = index;
-                    self.menu_navigated = true;
-                    return Ok(true);
+                match key.code {
+                    KeyCode::Enter if shift => self.insert("\n"),
+                    KeyCode::Enter if alt => {
+                        if !self.composer.text().trim().is_empty() {
+                            return Some(Input::Queue(self.take()));
+                        }
+                    }
+                    KeyCode::Enter => {
+                        let line = self.composer.text();
+                        let exact = candidates
+                            .iter()
+                            .any(|c| c.insert.trim_end() == line[c.range.clone()].trim_end());
+                        if !candidates.is_empty()
+                            && matches!(line.trim_end(), "/model" | "/permissions")
+                            && !self.menu_focused
+                        {
+                            self.open_picker();
+                        } else if menu && (self.menu_focused || !exact) {
+                            return self.accept(true);
+                        } else if !line.trim().is_empty() {
+                            return Some(Input::Line(self.take()));
+                        }
+                    }
+                    KeyCode::Char('b') if alt => self.composer.edit(Edit::WordLeft),
+                    KeyCode::Char('f') if alt => self.composer.edit(Edit::WordRight),
+                    KeyCode::Char(c) if !alt && !c.is_control() => {
+                        self.insert(&c.to_string());
+                        self.menu_open = true;
+                    }
+                    KeyCode::Char('\n') => self.insert("\n"),
+                    KeyCode::Tab => {
+                        self.menu_open = true;
+                        self.accept(false);
+                    }
+                    KeyCode::Esc => {
+                        if self.menu_focused
+                            && candidates
+                                .iter()
+                                .any(|c| c.action == CompletionAction::Apply)
+                        {
+                            self.composer.clear();
+                        }
+                        self.menu_open = false;
+                        self.menu_focused = false;
+                    }
+                    KeyCode::Up if menu => {
+                        self.selected = self.selected.saturating_sub(1);
+                        self.menu_focused = true;
+                    }
+                    KeyCode::Down if menu => {
+                        self.selected = (self.selected + 1).min(candidates.len() - 1);
+                        self.menu_focused = true;
+                    }
+                    KeyCode::Up => self.composer.vertical(-1, width, prompt),
+                    KeyCode::Down => self.composer.vertical(1, width, prompt),
+                    KeyCode::Left => self.composer.edit(Edit::Left),
+                    KeyCode::Right => self.composer.edit(Edit::Right),
+                    KeyCode::Home => self.composer.edit(Edit::Home),
+                    KeyCode::End => self.composer.edit(Edit::End),
+                    KeyCode::Backspace => {
+                        self.composer.edit(Edit::Backspace);
+                        self.menu_open = true;
+                    }
+                    KeyCode::Delete => {
+                        self.composer.edit(Edit::Delete);
+                        self.menu_open = true;
+                    }
+                    _ => {}
                 }
-                Ok(false)
             }
-            MouseEventKind::Down(MouseButton::Left) => {
-                self.selected = index;
-                self.menu_navigated = true;
-                self.accept_selected();
-                Ok(true)
+            Event::Mouse(mouse) if menu => {
+                MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
+                if let Some((top, offset, rows)) = self.menu_origin {
+                    if mouse.row >= top && usize::from(mouse.row - top) < rows {
+                        let index = offset + usize::from(mouse.row - top);
+                        match mouse.kind {
+                            MouseEventKind::Moved => {
+                                self.selected = index;
+                                self.menu_focused = true;
+                            }
+                            MouseEventKind::Down(MouseButton::Left) => {
+                                self.selected = index;
+                                return self.accept(true);
+                            }
+                            MouseEventKind::ScrollUp => {
+                                self.selected = self.selected.saturating_sub(1);
+                                self.menu_focused = true;
+                            }
+                            MouseEventKind::ScrollDown => {
+                                self.selected = (self.selected + 1).min(candidates.len() - 1);
+                                self.menu_focused = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             }
-            MouseEventKind::ScrollDown => {
-                self.selected = (self.selected + 1).min(rows.saturating_sub(1));
-                Ok(true)
-            }
-            MouseEventKind::ScrollUp => {
-                self.selected = self.selected.saturating_sub(1);
-                Ok(true)
-            }
-            _ => Ok(false),
+            Event::Resize(_, _) => self.menu_origin = None,
+            _ => {}
         }
+        None
     }
-
-    fn clear_final(&mut self, out: &mut impl Write, keep_line: bool) -> std::io::Result<()> {
-        let line = self.line();
-        execute!(
-            out,
-            MoveToColumn(0),
-            Clear(ClearType::CurrentLine),
-            Clear(ClearType::FromCursorDown)
-        )?;
-        if keep_line {
-            write!(out, "{}", self.styled_prompt)?;
-            write!(out, "{line}")?;
+    fn take(&mut self) -> String {
+        self.menu_open = true;
+        self.selected = 0;
+        self.menu_focused = false;
+        self.notice = None;
+        self.composer.submit()
+    }
+    fn insert(&mut self, text: &str) {
+        self.notice = self.composer.insert(text).err().map(str::to_string);
+        self.selected = 0;
+        self.menu_focused = false;
+    }
+    fn open_picker(&mut self) {
+        self.menu_open = true;
+        self.menu_focused = true;
+        let items = self
+            .completion
+            .candidates(self.composer.text(), self.composer.cursor());
+        self.selected = items
+            .iter()
+            .position(|c| c.name == self.completion.current_model)
+            .unwrap_or(0);
+    }
+    /// Tab inserts text; Enter/click confirms settings immediately. Other
+    /// completions never execute a command as a side effect of accepting text.
+    fn accept(&mut self, confirm: bool) -> Option<Input> {
+        let items = self
+            .completion
+            .candidates(self.composer.text(), self.composer.cursor());
+        let item = items.get(self.selected)?;
+        if let Err(error) = self.composer.replace(item.range.clone(), &item.insert) {
+            self.notice = Some(error.into());
+            return None;
         }
-        write!(out, "\r\n")?;
-        out.flush()
-    }
-}
-
-fn skill_candidates(skills: &[String], line: &str) -> Option<Vec<MenuItem>> {
-    let at = line.rfind('$')?;
-    let before = &line[..at];
-    if !(at == 0 || before.chars().last().is_some_and(char::is_whitespace)) {
-        return None;
-    }
-    let prefix = &line[at + 1..];
-    if prefix.chars().any(char::is_whitespace) {
-        return None;
-    }
-    Some(
-        skills
-            .iter()
-            .filter(|skill| skill.starts_with(prefix))
-            .map(|skill| MenuItem {
-                insert: format!("{before}${skill} "),
-                name: format!("${skill}"),
-                description: "activate skill".into(),
-            })
-            .collect(),
-    )
-}
-
-fn argument_candidates(
-    models: &[String],
-    current_model: &str,
-    permissions: &[(String, String)],
-    line: &str,
-) -> Option<Vec<MenuItem>> {
-    let (command, argument) = if line == "/model" {
-        ("model", "")
-    } else if let Some(rest) = line.strip_prefix("/model ") {
-        ("model", rest)
-    } else if line == "/permissions" {
-        ("permissions", "")
-    } else {
-        let rest = line.strip_prefix("/permissions ")?;
-        ("permissions", rest)
-    };
-    if argument.chars().any(char::is_whitespace) {
-        return None;
-    }
-
-    let items = match command {
-        "model" => models
-            .iter()
-            .filter(|model| model.starts_with(argument))
-            .map(|model| MenuItem {
-                insert: format!("/model {model} "),
-                name: model.clone(),
-                description: if model == current_model {
-                    "current model · next turn".to_string()
-                } else {
-                    "switch model · next turn".to_string()
-                },
-            })
-            .collect(),
-        "permissions" => permissions
-            .iter()
-            .filter(|(name, _)| name.starts_with(argument))
-            .map(|(name, description)| MenuItem {
-                insert: format!("/permissions {name} "),
-                name: name.clone(),
-                description: description.clone(),
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
-    Some(items)
-}
-
-fn command_candidates<'a>(registry: &'a CommandRegistry, line: &str) -> Vec<&'a CommandSpec> {
-    if !line.starts_with('/') || line.chars().any(char::is_whitespace) {
-        return Vec::new();
-    }
-    registry.candidates(line)
-}
-
-fn menu_index(mouse_row: u16, prompt_row: u16, rows: usize) -> Option<usize> {
-    if mouse_row <= prompt_row || mouse_row > prompt_row + rows as u16 {
-        return None;
-    }
-    Some((mouse_row - prompt_row - 1) as usize)
-}
-
-fn truncate_columns(text: &str, columns: usize) -> String {
-    let mut out = String::new();
-    let mut used = 0_usize;
-    for c in text.chars() {
-        let width = UnicodeWidthChar::width(c).unwrap_or(0);
-        if used + width > columns {
-            break;
+        self.notice = None;
+        self.menu_open = false;
+        self.menu_focused = false;
+        self.selected = 0;
+        match item.action {
+            CompletionAction::OpenPicker => self.open_picker(),
+            CompletionAction::Apply if confirm => return Some(Input::Line(self.take())),
+            _ => {}
         }
-        out.push(c);
-        used += width;
+        None
     }
-    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn truncates_menu_lines_by_display_width() {
-        assert_eq!(truncate_columns("abcdef", 4), "abcd");
-        assert_eq!(truncate_columns("你好世界", 4), "你好");
+    use crossterm::event::KeyEvent;
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
+        Event::Key(KeyEvent::new(code, modifiers))
     }
-
     #[test]
-    fn menu_lines_leave_room_for_the_prefix() {
-        let line = format!("{:<10} {}", "/model", "description ".repeat(20));
-        let truncated = truncate_columns(&line, 40 - MENU_PREFIX_WIDTH);
-        assert!(
-            UnicodeWidthStr::width(truncated.as_str()) + MENU_PREFIX_WIDTH <= 40,
-            "menu line would wrap"
-        );
+    fn both_presentations_share_paste_newline_and_submission() {
+        for inline in [false, true] {
+            let mut e = LineEditor::new(CommandRegistry::builtin(), inline);
+            assert!(e
+                .handle(Event::Paste("中文\r\n/exit".into()), 20, "> ")
+                .is_none());
+            e.handle(key(KeyCode::Char('j'), KeyModifiers::CONTROL), 20, "> ");
+            assert_eq!(
+                e.handle(key(KeyCode::Enter, KeyModifiers::NONE), 20, "> "),
+                Some(Input::Line("中文\n/exit\n".into()))
+            );
+        }
     }
-
     #[test]
-    fn maps_mouse_rows_to_menu_candidates() {
-        assert_eq!(menu_index(11, 10, 6), Some(0));
-        assert_eq!(menu_index(16, 10, 6), Some(5));
-        assert_eq!(menu_index(10, 10, 6), None);
-        assert_eq!(menu_index(17, 10, 6), None);
-    }
-
-    #[test]
-    fn argument_candidates_filter_models_and_permissions() {
-        let models = vec![
-            "deepseek-flash".to_string(),
-            "deepseek-pro".to_string(),
-            "deepseek-reasoner".to_string(),
-        ];
-        let permissions = vec![
-            ("ask".to_string(), "workspace-write".to_string()),
-            ("review".to_string(), "workspace-write".to_string()),
-        ];
-        let items = argument_candidates(&models, "deepseek-flash", &permissions, "/model ")
-            .expect("model menu");
-        assert_eq!(items.len(), 3);
-        assert_eq!(items[1].insert, "/model deepseek-pro ");
-        assert!(items[0].description.contains("current"));
-
-        let partial = argument_candidates(&models, "deepseek-flash", &permissions, "/model d")
-            .expect("partial menu");
-        assert_eq!(partial.len(), 3);
-        let filtered =
-            argument_candidates(&models, "deepseek-flash", &permissions, "/model deepseek-p")
-                .expect("filtered menu");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].name, "deepseek-pro");
-
-        let perms = argument_candidates(&models, "deepseek-flash", &permissions, "/permissions r")
-            .expect("permission menu");
-        assert_eq!(perms.len(), 1);
-        assert_eq!(perms[0].insert, "/permissions review ");
-        assert!(
-            argument_candidates(&models, "deepseek-flash", &permissions, "/model pro max")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn opens_the_menu_for_slash_prefixes_only() {
-        let registry = CommandRegistry::builtin();
-        let init = command_candidates(&registry, "/i");
-        assert_eq!(init.len(), 1);
-        assert_eq!(init[0].name, "/init");
-
+    fn escape_closes_menu_and_cancel_preserves_running_draft() {
+        let mut e = LineEditor::new(CommandRegistry::builtin(), false);
+        e.composer.insert("/i").unwrap();
+        e.handle(key(KeyCode::Esc, KeyModifiers::NONE), 20, "> ");
+        assert!(!e.menu_open);
         assert_eq!(
-            command_candidates(&registry, "/").len(),
-            registry.all().len()
+            e.handle(key(KeyCode::Char('c'), KeyModifiers::CONTROL), 20, "> "),
+            Some(Input::Interrupted)
         );
-        assert!(command_candidates(&registry, "/goal all tests pass").is_empty());
-        assert!(command_candidates(&registry, "hello").is_empty());
+        assert_eq!(e.composer.text(), "/i");
     }
 
+    fn settings_editor(inline: bool, command: &str) -> LineEditor {
+        let mut editor = LineEditor::new(CommandRegistry::builtin(), inline);
+        editor.set_models(vec!["provider/first".into(), "provider/second".into()]);
+        editor.set_current_model("provider/first");
+        editor.set_permissions(vec![
+            ("ask".into(), "ask before writes".into()),
+            ("review".into(), "review changes".into()),
+        ]);
+        editor.composer.insert(command).unwrap();
+        editor
+    }
+    fn press(editor: &mut LineEditor, code: KeyCode) -> Option<Input> {
+        editor.handle(key(code, KeyModifiers::NONE), 80, "> ")
+    }
     #[test]
-    fn skill_candidates_insert_the_selected_skill() {
-        let skills = vec!["rust".to_string(), "review".to_string()];
-        let items = skill_candidates(&skills, "please use $ru").expect("skills");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].insert, "please use $rust ");
-        assert_eq!(items[0].name, "$rust");
-        assert!(skill_candidates(&skills, "no dollar").is_none());
+    fn settings_open_then_apply_with_one_confirmation_in_both_presentations() {
+        for inline in [false, true] {
+            for (command, value) in [("/model", "provider/second"), ("/permissions", "review")] {
+                let mut editor = settings_editor(inline, command);
+                assert_eq!(press(&mut editor, KeyCode::Enter), None);
+                assert!(editor.menu_focused);
+                assert_eq!(press(&mut editor, KeyCode::Down), None);
+                assert_eq!(
+                    press(&mut editor, KeyCode::Enter),
+                    Some(Input::Line(format!("{command} {value} ")))
+                );
+                assert!(editor.composer.text().is_empty());
+                assert!(!editor.menu_focused);
+            }
+        }
+    }
+    #[test]
+    fn settings_can_be_selected_directly_from_preview_or_clicked() {
+        for command in ["/model", "/permissions"] {
+            let mut editor = settings_editor(true, command);
+            press(&mut editor, KeyCode::Down);
+            let keyboard = press(&mut editor, KeyCode::Enter);
+            let mut editor = settings_editor(true, command);
+            editor.menu_origin = Some((10, 0, 2));
+            let clicked = editor.handle(
+                Event::Mouse(crossterm::event::MouseEvent {
+                    kind: MouseEventKind::Down(MouseButton::Left),
+                    column: 4,
+                    row: 11,
+                    modifiers: KeyModifiers::NONE,
+                }),
+                80,
+                "> ",
+            );
+            assert_eq!(clicked, keyboard);
+            assert!(matches!(clicked, Some(Input::Line(_))));
+        }
+    }
+    #[test]
+    fn slash_completion_opens_picker_and_escape_cancels_without_submission() {
+        for prefix in ["/mod", "/perm"] {
+            let mut editor = settings_editor(false, prefix);
+            assert_eq!(press(&mut editor, KeyCode::Enter), None);
+            assert!(editor.menu_open && editor.menu_focused);
+            assert_eq!(press(&mut editor, KeyCode::Esc), None);
+            assert!(editor.composer.text().is_empty());
+            assert_eq!(press(&mut editor, KeyCode::Enter), None);
+        }
+    }
+    #[test]
+    fn tab_only_fills_arguments_and_typing_returns_focus_to_input() {
+        let mut editor = settings_editor(false, "/model");
+        press(&mut editor, KeyCode::Down);
+        assert_eq!(press(&mut editor, KeyCode::Tab), None);
+        assert_eq!(editor.composer.text(), "/model provider/second ");
+        assert!(!editor.menu_focused);
+        assert_eq!(
+            press(&mut editor, KeyCode::Enter),
+            Some(Input::Line("/model provider/second ".into()))
+        );
+        editor.composer.insert("/permissions").unwrap();
+        press(&mut editor, KeyCode::Enter);
+        press(&mut editor, KeyCode::Char(' '));
+        assert!(!editor.menu_focused);
+        press(&mut editor, KeyCode::Char('r'));
+        assert_eq!(
+            press(&mut editor, KeyCode::Enter),
+            Some(Input::Line("/permissions review ".into()))
+        );
+    }
+    #[test]
+    fn pasted_settings_command_opens_picker_without_applying() {
+        let mut editor = settings_editor(false, "");
+        editor.handle(Event::Paste("/permissions".into()), 80, "> ");
+        assert!(!editor.menu_open);
+        assert_eq!(press(&mut editor, KeyCode::Enter), None);
+        assert!(editor.menu_open && editor.menu_focused);
+        assert_eq!(press(&mut editor, KeyCode::Esc), None);
+        assert!(editor.composer.text().is_empty());
+    }
+    #[test]
+    fn picker_starts_at_current_model_and_ordinary_completion_does_not_execute() {
+        let mut editor = settings_editor(false, "/model");
+        editor.set_current_model("provider/second");
+        press(&mut editor, KeyCode::Enter);
+        assert_eq!(
+            press(&mut editor, KeyCode::Enter),
+            Some(Input::Line("/model provider/second ".into()))
+        );
+        editor.composer.insert("/ex").unwrap();
+        assert_eq!(press(&mut editor, KeyCode::Enter), None);
+        assert_eq!(editor.composer.text(), "/exit ");
     }
 }

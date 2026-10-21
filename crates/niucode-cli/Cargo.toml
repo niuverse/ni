@@ -13,6 +13,7 @@ anyhow.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 futures-util.workspace = true
+ignore.workspace = true
 niucode-agent = { path = "../niucode-agent" }
 niucode-auth = { path = "../niucode-auth" }
 niucode-core = { path = "../niucode-core" }
@@ -27,3 +28,4 @@ similar.workspace = true
 toml.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
+unicode-segmentation.workspace = true

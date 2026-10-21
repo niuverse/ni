@@ -8,6 +8,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 
@@ -26,7 +27,7 @@ pub struct LoadedSession {
 pub struct SessionLog {
     id: String,
     path: PathBuf,
-    writer: BufWriter<File>,
+    writer: Mutex<Option<BufWriter<File>>>,
 }
 
 impl SessionLog {
@@ -47,7 +48,7 @@ impl SessionLog {
         Ok(Self {
             id,
             path,
-            writer: BufWriter::new(file),
+            writer: Mutex::new(Some(BufWriter::new(file))),
         })
     }
 
@@ -67,7 +68,7 @@ impl SessionLog {
         Ok(Self {
             id,
             path,
-            writer: BufWriter::new(file),
+            writer: Mutex::new(Some(BufWriter::new(file))),
         })
     }
 
@@ -80,12 +81,25 @@ impl SessionLog {
     }
 
     /// Append one event and flush it to disk.
-    pub fn append(&mut self, event: &Event) -> Result<()> {
-        serde_json::to_writer(&mut self.writer, event).context("serialize session event")?;
-        self.writer
-            .write_all(b"\n")
-            .context("write session event")?;
-        self.writer.flush().context("flush session event")?;
+    pub fn append(&self, event: &Event) -> Result<()> {
+        // One writer, one complete serialized append. The runtime can service
+        // control messages while an effect borrows the same log immutably.
+        let mut bytes = serde_json::to_vec(event).context("serialize session event")?;
+        bytes.push(b'\n');
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| anyhow::anyhow!("session writer poisoned"))?;
+        let active = writer
+            .as_mut()
+            .context("session writer stopped after an earlier append failure")?;
+        if let Err(error) = active.write_all(&bytes).and_then(|()| active.flush()) {
+            // Do not retry a possibly partial event, including in BufWriter::drop.
+            if let Some(failed) = writer.take() {
+                let _ = failed.into_parts();
+            }
+            return Err(error).context("append and flush session event");
+        }
         Ok(())
     }
 }
@@ -146,10 +160,27 @@ mod tests {
         dir
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failed_append_disables_writer_instead_of_retrying_partial_events() {
+        let log = SessionLog::open("/dev/full").unwrap();
+        let event = Event::SessionEnd { ts: 1 };
+        assert!(log
+            .append(&event)
+            .unwrap_err()
+            .to_string()
+            .contains("append and flush"));
+        assert!(log
+            .append(&event)
+            .unwrap_err()
+            .to_string()
+            .contains("stopped after an earlier"));
+    }
+
     #[test]
     fn round_trip_preserves_events() {
         let dir = temp_dir("roundtrip");
-        let mut log = SessionLog::create(&dir).expect("create log");
+        let log = SessionLog::create(&dir).expect("create log");
         let ts = now_ms();
 
         let events = vec![
@@ -181,6 +212,7 @@ mod tests {
                 ts,
             },
             Event::TurnEnd {
+                finish_reason: Some("tool_calls".into()),
                 usage: Usage {
                     input_tokens: 120,
                     output_tokens: 30,
@@ -225,7 +257,7 @@ mod tests {
     #[test]
     fn reopening_appends_to_the_same_session() {
         let dir = temp_dir("reopen");
-        let mut log = SessionLog::create(&dir).expect("create log");
+        let log = SessionLog::create(&dir).expect("create log");
         let path = log.path().to_path_buf();
         log.append(&Event::UserMessage {
             text: "first".into(),
@@ -234,7 +266,7 @@ mod tests {
         .expect("append");
         drop(log);
 
-        let mut reopened = SessionLog::open(&path).expect("reopen");
+        let reopened = SessionLog::open(&path).expect("reopen");
         reopened
             .append(&Event::SessionEnd { ts: 2 })
             .expect("append after reopen");

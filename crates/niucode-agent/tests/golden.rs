@@ -52,13 +52,17 @@ async fn golden_read_transcript_is_offline_and_stable() {
     assert_eq!(
         kinds,
         vec![
+            "task_started",
             "user_message",
+            "task_snapshot",
             "assistant_message",
             "turn_end",
             "tool_result",
             "assistant_message",
             "turn_end",
-            "session_end"
+            "session_end",
+            "task_snapshot",
+            "task_finished"
         ]
     );
 

@@ -215,8 +215,10 @@ impl Toolbox {
     /// with the eventual write; execution re-reads and re-validates.
     pub fn preview(&self, name: &str, input: &serde_json::Value) -> ChangePreview {
         match name {
-            "write" => self.preview_write(input),
-            "edit" => self.preview_edit(input),
+            "write" | "edit" => match self.prepare_mutation(name, input) {
+                Ok(prepared) => prepared.preview().clone(),
+                Err(error) => ChangePreview::note(format!("{error:#}")),
+            },
             "bash" => match input_string(input, "command") {
                 Ok(command) if !command.trim().is_empty() => ChangePreview::command(command),
                 Ok(_) => ChangePreview::note("command must not be empty"),
@@ -225,114 +227,6 @@ impl Toolbox {
             other => ChangePreview::note(format!("no preview for tool {other:?}")),
         }
     }
-
-    fn preview_write(&self, input: &serde_json::Value) -> ChangePreview {
-        let raw = match input_string(input, "path") {
-            Ok(raw) => raw,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let path = match self.resolve_for_write(raw) {
-            Ok(path) => path,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let content = match input_string(input, "content") {
-            Ok(content) => content,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let display = self.display_path(&path);
-        let mut warning = self.policy_warning();
-
-        if path.exists() {
-            let bytes = match std::fs::read(&path) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    return ChangePreview::note(format!("cannot read {display}: {error}"));
-                }
-            };
-            let old = match String::from_utf8(bytes) {
-                Ok(old) => old,
-                Err(_) => {
-                    return ChangePreview::note(format!(
-                        "{display}: existing file is not valid UTF-8; full diff unavailable"
-                    ));
-                }
-            };
-            if !self.is_observed(&path) {
-                warning = Some(format!(
-                    "read {display} before writing it; this call will be rejected"
-                ));
-            }
-            let file = FilePreview::from_text(display, &old, content, false);
-            return finish(ChangePreview::diff(vec![file]), warning);
-        }
-
-        let file = FilePreview::from_text(display, "", content, true);
-        finish(ChangePreview::diff(vec![file]), warning)
-    }
-
-    fn preview_edit(&self, input: &serde_json::Value) -> ChangePreview {
-        let raw = match input_string(input, "path") {
-            Ok(raw) => raw,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let path = match self.resolve_existing(raw) {
-            Ok(path) => path,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let display = self.display_path(&path);
-        let mut warning = self.policy_warning();
-        if !self.is_observed(&path) {
-            warning = Some(format!(
-                "read {display} before editing it; this call will be rejected"
-            ));
-        }
-
-        let old = match input_string(input, "old") {
-            Ok(old) => old,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        let new = match input_string(input, "new") {
-            Ok(new) => new,
-            Err(error) => return ChangePreview::note(format!("{error:#}")),
-        };
-        if old.is_empty() {
-            return finish(ChangePreview::note("old string must not be empty"), warning);
-        }
-
-        let text = match std::fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) => {
-                return ChangePreview::note(format!("cannot read {display}: {error}"));
-            }
-        };
-        match text.match_indices(old).count() {
-            0 => finish(
-                ChangePreview::note(format!("old string not found in {display}")),
-                warning,
-            ),
-            1 => {
-                let updated = text.replacen(old, new, 1);
-                let file = FilePreview::from_text(display, &text, &updated, false);
-                finish(ChangePreview::diff(vec![file]), warning)
-            }
-            count => finish(
-                ChangePreview::note(format!(
-                    "old string is not unique in {display} ({count} matches); include more context"
-                )),
-                warning,
-            ),
-        }
-    }
-
-    fn policy_warning(&self) -> Option<String> {
-        (self.policy.mode == crate::SandboxMode::ReadOnly)
-            .then(|| "sandbox is read-only; this change will be rejected".to_string())
-    }
-}
-
-fn finish(mut preview: ChangePreview, warning: Option<String>) -> ChangePreview {
-    preview.warning = warning;
-    preview
 }
 
 fn header_range(start: usize, end: usize) -> (usize, usize) {

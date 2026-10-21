@@ -19,18 +19,24 @@ use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
 use provider_factory::ProviderFactory;
 use serde_json::json;
 
-use crate::theme::{Theme, Tone};
+use crate::theme::Theme;
 
+mod completion;
+mod composer;
+mod details;
 mod diff;
 mod editor;
 mod goal;
 mod init;
-mod inline;
+mod live;
+mod presentation;
 mod provider_factory;
 mod review;
 mod session_ops;
 mod skills;
 mod slash;
+mod terminal;
+mod text_layout;
 mod theme;
 mod tui;
 mod workspace;
@@ -161,6 +167,9 @@ enum Command {
         /// Explicitly allow subagent profile=inherit
         #[arg(long)]
         allow_subagent_inheritance: bool,
+        /// Restrict advertised and executable tools (comma-separated names)
+        #[arg(long, value_delimiter = ',')]
+        tools: Option<Vec<String>>,
         /// Completion condition; run the evaluator loop until met/impossible
         #[arg(long)]
         goal: Option<String>,
@@ -316,6 +325,7 @@ async fn main() -> Result<()> {
             network,
             json,
             allow_subagent_inheritance,
+            tools,
             goal,
             max_goal_turns,
         }) => {
@@ -337,6 +347,7 @@ async fn main() -> Result<()> {
                 network,
                 json,
                 allow_subagent_inheritance,
+                tools,
                 goal,
                 max_goal_turns,
             )
@@ -650,7 +661,7 @@ fn run_session(command: SessionCommand) -> Result<()> {
                 Some(dir) => dir,
                 None => workspace::Workspace::discover(&std::env::current_dir()?)?.sessions,
             };
-            let mut log = SessionLog::create(&dir)?;
+            let log = SessionLog::create(&dir)?;
             log.append(&Event::SessionStart {
                 id: log.id().to_string(),
                 cwd: std::env::current_dir()?.display().to_string(),
@@ -820,7 +831,7 @@ async fn run_tui(
         context_budget
     };
     let preset = parse_provider(&preset)?;
-    let (provider, model, auth_source, provider_factory) = if let Some(path) = &replay {
+    let (provider, model, _auth_source, provider_factory) = if let Some(path) = &replay {
         let provider = ReplayProvider::load(path)?;
         let model = model.unwrap_or_else(|| "replay".into());
         (
@@ -886,7 +897,7 @@ async fn run_tui(
         (SessionLog::open(&path)?, history)
     } else {
         let session_dir = session_dir.unwrap_or_else(|| workspace.sessions.clone());
-        let mut session = SessionLog::create(&session_dir)?;
+        let session = SessionLog::create(&session_dir)?;
         session.append(&Event::SessionStart {
             id: session.id().to_string(),
             cwd: working_dir.display().to_string(),
@@ -927,38 +938,24 @@ async fn run_tui(
     agent_config.extension_host = extension_host.clone();
 
     let theme = Theme::detect_stdout();
-    println!(
-        "{} {}",
-        theme.accent("niucode tui"),
-        theme.dim(format!(
-            "· {} · model={model} · auth={auth_source} · cwd={}",
-            provider.name(),
-            working_dir.display()
-        ))
-    );
-    if let Some(path) = &replay {
-        println!("{}", theme.dim(format!("replay {}", path.display())));
+    let width = crossterm::terminal::size()
+        .map_or(80, |s| s.0 as usize)
+        .saturating_sub(1)
+        .max(1);
+    let project = working_dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    for line in presentation::startup(
+        &project,
+        &model,
+        policy.mode.as_str(),
+        policy.network.as_str(),
+        approval_mode.as_str(),
+        width,
+    ) {
+        println!("{}", theme.accent(line));
     }
-    println!(
-        "{}",
-        theme.dim(format!(
-            "policy sandbox={} network={} approval={} backend={backend}",
-            policy.mode.as_str(),
-            policy.network.as_str(),
-            approval_mode.as_str()
-        ))
-    );
-    println!(
-        "{}",
-        theme.dim(format!(
-            "context budget={context_budget} trigger=75% keep_recent={keep_recent_turns}"
-        ))
-    );
-    println!(
-        "{} {}",
-        theme.dim("session"),
-        theme.paint(Tone::Bright, session.path().display())
-    );
     let _ = std::io::stdout().flush();
 
     let result = tui::run(
@@ -1012,6 +1009,7 @@ async fn run_exec(
     network: String,
     json: bool,
     allow_subagent_inheritance: bool,
+    tools: Option<Vec<String>>,
     goal: Option<String>,
     max_goal_turns: usize,
 ) -> Result<i32> {
@@ -1147,7 +1145,7 @@ async fn run_exec(
         (SessionLog::open(&path)?, history)
     } else {
         let session_dir = session_dir.unwrap_or_else(|| workspace.sessions.clone());
-        let mut session = SessionLog::create(&session_dir)?;
+        let session = SessionLog::create(&session_dir)?;
         session.append(&Event::SessionStart {
             id: session.id().to_string(),
             cwd: working_dir.display().to_string(),
@@ -1202,6 +1200,7 @@ async fn run_exec(
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    agent_config.allowed_tools = tools;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);
         if !block.is_empty() {
@@ -1242,7 +1241,7 @@ async fn run_exec(
         }
         eprintln!(
             "\napproval required: {}",
-            diff::clean_text(&request.summary)
+            text_layout::clean_text(&request.summary)
         );
         if let Some(preview) = &request.preview {
             eprint!("{}", diff::render_plain(preview, 100));
@@ -1313,7 +1312,7 @@ async fn run_exec(
                     println!();
                     line_open = false;
                 }
-                eprintln!("warning: {}", diff::clean_text(&message));
+                eprintln!("warning: {}", text_layout::clean_text(&message));
             }
         }
     };
@@ -1390,7 +1389,7 @@ async fn run_exec(
                 eprintln!(
                     "goal: {} · {}",
                     verdict.status.as_str(),
-                    diff::clean_text(&verdict.reason)
+                    text_layout::clean_text(&verdict.reason)
                 );
             }
             match verdict.status {

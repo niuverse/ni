@@ -38,7 +38,7 @@ fn config(directory: &Path) -> AgentConfig {
 }
 
 fn start_session(directory: &Path) -> SessionLog {
-    let mut session = SessionLog::create(directory).expect("session");
+    let session = SessionLog::create(directory).expect("session");
     session
         .append(&Event::SessionStart {
             id: session.id().to_string(),

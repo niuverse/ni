@@ -89,6 +89,46 @@ impl Usage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ProcessOutcome {
+    Exited { code: i32 },
+    Signaled { signal: Option<i32> },
+    TimedOut,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileChange {
+    pub path: String,
+    pub before_digest: Option<String>,
+    pub after_digest: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ExecutionEvidence {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process: Option<ProcessOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<FileChange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileSnapshot {
+    pub path: String,
+    pub digest: Option<String>,
+    pub text: Option<String>,
+    pub mode: Option<u32>,
+    pub note: Option<String>,
+}
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceSnapshot {
+    pub files: Vec<FileSnapshot>,
+    pub complete: bool,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     SessionStart {
@@ -121,6 +161,9 @@ pub enum Event {
     TurnEnd {
         #[serde(default)]
         usage: Usage,
+        /// Provider termination reason, absent in older session logs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        finish_reason: Option<String>,
         ts: Timestamp,
     },
     Compaction {
@@ -256,6 +299,46 @@ pub enum Event {
         digest: String,
         ts: Timestamp,
     },
+    TaskSnapshot {
+        task_id: String,
+        phase: String,
+        snapshot: WorkspaceSnapshot,
+        ts: Timestamp,
+    },
+    CheckSnapshot {
+        call_id: String,
+        digest: Option<String>,
+        ts: Timestamp,
+    },
+    ToolEvidence {
+        call_id: String,
+        evidence: ExecutionEvidence,
+        ts: Timestamp,
+    },
+    /// Accepted input is durable even while a provider or tool is blocked.
+    InputSubmitted {
+        id: String,
+        text: String,
+        queued: bool,
+        ts: Timestamp,
+    },
+    /// The input was included at a safe model-request boundary.
+    InputApplied {
+        id: String,
+        text: String,
+        ts: Timestamp,
+    },
+    TaskStarted {
+        id: String,
+        #[serde(default)]
+        cwd: String,
+        ts: Timestamp,
+    },
+    TaskFinished {
+        id: String,
+        status: String,
+        ts: Timestamp,
+    },
     SessionEnd {
         ts: Timestamp,
     },
@@ -287,6 +370,13 @@ impl Event {
             Self::ExtensionError { .. } => "extension_error",
             Self::InitProposal { .. } => "init_proposal",
             Self::Instructions { .. } => "instructions",
+            Self::TaskSnapshot { .. } => "task_snapshot",
+            Self::CheckSnapshot { .. } => "check_snapshot",
+            Self::ToolEvidence { .. } => "tool_evidence",
+            Self::InputSubmitted { .. } => "input_submitted",
+            Self::InputApplied { .. } => "input_applied",
+            Self::TaskStarted { .. } => "task_started",
+            Self::TaskFinished { .. } => "task_finished",
             Self::SessionEnd { .. } => "session_end",
         }
     }
@@ -315,6 +405,13 @@ impl Event {
             | Self::ExtensionError { ts, .. }
             | Self::Instructions { ts, .. }
             | Self::InitProposal { ts, .. }
+            | Self::TaskSnapshot { ts, .. }
+            | Self::CheckSnapshot { ts, .. }
+            | Self::ToolEvidence { ts, .. }
+            | Self::InputSubmitted { ts, .. }
+            | Self::InputApplied { ts, .. }
+            | Self::TaskStarted { ts, .. }
+            | Self::TaskFinished { ts, .. }
             | Self::SessionEnd { ts } => *ts,
         }
     }
@@ -423,5 +520,22 @@ mod tests {
         };
         assert_eq!(event.kind(), "instructions");
         assert_eq!(event.ts(), 7);
+    }
+
+    #[test]
+    fn old_turn_end_logs_remain_readable_without_finish_reason() {
+        let old = serde_json::json!({"type": "turn_end", "usage": {}, "ts": 1});
+        let event: Event = serde_json::from_value(old).unwrap();
+        assert!(matches!(
+            &event,
+            Event::TurnEnd {
+                finish_reason: None,
+                ..
+            }
+        ));
+        assert!(serde_json::to_value(event)
+            .unwrap()
+            .get("finish_reason")
+            .is_none());
     }
 }

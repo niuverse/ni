@@ -13,7 +13,7 @@ use niucode_core::{load, now_ms, Event, EventId, SessionLog};
 use niucode_provider::ChatMessage;
 use niucode_tools::Toolbox;
 
-use crate::diff::clean_text;
+use crate::text_layout::clean_text;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplayTurn {
@@ -119,7 +119,7 @@ pub fn fork(source: &Path, at: &str, destination_dir: &Path) -> Result<ForkRepor
         );
     }
 
-    let mut destination = SessionLog::create(destination_dir)?;
+    let destination = SessionLog::create(destination_dir)?;
     for event in &loaded.events[..=index] {
         destination.append(event)?;
     }
@@ -224,7 +224,7 @@ mod tests {
     }
 
     fn write_session(directory: &Path, events: &[Event]) -> PathBuf {
-        let mut log = SessionLog::create(directory).expect("session");
+        let log = SessionLog::create(directory).expect("session");
         for event in events {
             log.append(event).expect("append");
         }
@@ -376,6 +376,7 @@ mod tests {
                 user("one"),
                 assistant("one answer"),
                 Event::TurnEnd {
+                    finish_reason: None,
                     usage: Usage {
                         input_tokens: 10,
                         cached_tokens: 5,

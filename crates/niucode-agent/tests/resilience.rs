@@ -32,7 +32,7 @@ fn config(directory: &Path) -> AgentConfig {
 }
 
 fn start_session(directory: &Path) -> SessionLog {
-    let mut session = SessionLog::create(directory).expect("session");
+    let session = SessionLog::create(directory).expect("session");
     session
         .append(&niucode_core::Event::SessionStart {
             id: session.id().to_string(),
@@ -111,4 +111,68 @@ async fn does_not_replay_a_stream_after_partial_output() {
     assert_eq!(provider.requests().len(), 1);
 
     fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[tokio::test]
+async fn generation_limit_never_completes_or_dispatches_truncated_tools() {
+    use niucode_agent::{AgentEvent, LoopPhase};
+    use niucode_core::{load, Event, Usage};
+    use niucode_provider::ToolCallDelta;
+
+    for arguments in [
+        None,
+        Some("{\"path\":"),
+        Some(r#"{"path":"unexpected","content":"bad"}"#),
+    ] {
+        let directory = temp_dir("length");
+        let mut events = vec![StreamEvent::ReasoningDelta("still thinking".into())];
+        if let Some(arguments) = arguments {
+            events.push(StreamEvent::TextDelta("partial answer".into()));
+            events.push(StreamEvent::ToolCallDelta(ToolCallDelta {
+                index: 0,
+                id: Some("write-1".into()),
+                name: Some("write".into()),
+                arguments: arguments.into(),
+            }));
+        }
+        events.push(StreamEvent::Done {
+            finish_reason: Some("length".into()),
+        });
+        // Usage may arrive after the finish reason; consume the whole stream.
+        events.push(StreamEvent::Usage(Usage {
+            output_tokens: 8192,
+            reasoning_tokens: 8192,
+            ..Usage::default()
+        }));
+        let provider = ScriptedProvider::new(events);
+        let mut session = start_session(&directory);
+        let mut observed = Vec::new();
+        let error = run(
+            &provider,
+            &mut session,
+            &config(&directory),
+            "implement",
+            &mut |_| true,
+            &mut |event| observed.push(event),
+        )
+        .await
+        .expect_err("length must fail");
+        assert!(error.to_string().contains("length"), "{error}");
+        assert_eq!(provider.requests().len(), 1, "no automatic retry");
+        assert!(!directory.join("unexpected").exists());
+        assert!(!observed.iter().any(|e| matches!(
+            e,
+            AgentEvent::ToolCall { .. } | AgentEvent::Phase(LoopPhase::Done)
+        )));
+        let log = load(session.path()).unwrap().events;
+        assert!(
+            matches!(log.last(), Some(Event::TaskFinished { status, .. }) if status == "error")
+        );
+        assert!(log.iter().any(|e| matches!(e, Event::TurnEnd { usage, finish_reason: Some(reason), .. } if usage.output_tokens == 8192 && reason == "length")));
+        assert!(log.iter().any(|e| matches!(e, Event::AssistantMessage { reasoning: Some(reasoning), tool_calls, .. } if reasoning == "still thinking" && tool_calls.is_empty())));
+        assert!(!log
+            .iter()
+            .any(|e| matches!(e, Event::SessionEnd { .. } | Event::ToolResult { .. })));
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

@@ -162,8 +162,14 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::Instructions { .. }
             | Event::Compaction { .. }
             | Event::InitProposal { .. }
+            | Event::TaskSnapshot { .. }
+            | Event::CheckSnapshot { .. }
+            | Event::ToolEvidence { .. }
+            | Event::InputSubmitted { .. }
+            | Event::TaskStarted { .. }
+            | Event::TaskFinished { .. }
             | Event::SessionEnd { .. } => {}
-            Event::UserMessage { text, .. } => {
+            Event::UserMessage { text, .. } | Event::InputApplied { text, .. } => {
                 flush_pending_tools(&mut messages, &mut pending_tools);
                 messages.push(ChatMessage::user(text.clone()));
             }
@@ -209,7 +215,11 @@ pub fn build_handoff(events: &[Event], keep_recent_turns: usize) -> Result<Hando
     let goal = prefix
         .iter()
         .find_map(|event| match event {
-            Event::UserMessage { text, .. } if !text.trim().is_empty() => Some(text.as_str()),
+            Event::UserMessage { text, .. } | Event::InputApplied { text, .. }
+                if !text.trim().is_empty() =>
+            {
+                Some(text.as_str())
+            }
             _ => None,
         })
         .ok_or_else(|| anyhow::anyhow!("no user message in the compacted range"))?;
@@ -294,7 +304,11 @@ pub fn build_handoff(events: &[Event], keep_recent_turns: usize) -> Result<Hando
     summary.push_str("## Goal\n");
     summary.push_str(one_line(goal, GOAL_CHARS).as_str());
     if let Some(previous) = prefix.iter().rev().find_map(|event| match event {
-        Event::UserMessage { text, .. } if text.as_str() != goal => Some(text.as_str()),
+        Event::UserMessage { text, .. } | Event::InputApplied { text, .. }
+            if text.as_str() != goal =>
+        {
+            Some(text.as_str())
+        }
         _ => None,
     }) {
         summary.push_str("\n\n## Previous request\n");
@@ -367,7 +381,13 @@ fn choose_cutoff(events: &[Event], keep_recent_turns: usize) -> Option<usize> {
     let user_indices: Vec<usize> = events
         .iter()
         .enumerate()
-        .filter_map(|(index, event)| matches!(event, Event::UserMessage { .. }).then_some(index))
+        .filter_map(|(index, event)| {
+            matches!(
+                event,
+                Event::UserMessage { .. } | Event::InputApplied { .. }
+            )
+            .then_some(index)
+        })
         .collect();
 
     if user_indices.len() > keep_recent_turns {
@@ -395,7 +415,7 @@ fn flush_pending_tools(messages: &mut Vec<ChatMessage>, pending: &mut Vec<String
     for call_id in pending.drain(..) {
         messages.push(ChatMessage::tool(
             call_id,
-            "cancelled before the tool produced a result".to_string(),
+            "tool outcome unknown: interrupted before a result was recorded; inspect the workspace before retrying".to_string(),
         ));
     }
 }
@@ -707,6 +727,7 @@ mod tests {
             user("request"),
             Event::TurnEnd {
                 usage: Usage::default(),
+                finish_reason: None,
                 ts: 3,
             },
             assistant("answer"),

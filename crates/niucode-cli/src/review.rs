@@ -5,6 +5,7 @@
 
 use std::io::{self, Write};
 
+use crate::text_layout::{clean_text, clip};
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::queue;
@@ -12,7 +13,7 @@ use crossterm::style::{Attribute, Print, ResetColor, SetAttribute};
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use niucode_agent::ApprovalRequest;
 use niucode_tools::ChangePreview;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
 
 use crate::diff::{self, file_starts, Row, RowKind};
 use crate::theme::{Theme, Tone};
@@ -181,7 +182,7 @@ impl<'a> ReviewState<'a> {
         }
         let title = format!(
             " approval · {} · +{} -{} ",
-            diff::clean_text(&self.request.summary),
+            clean_text(&self.request.summary),
             self.preview.added,
             self.preview.removed
         );
@@ -259,17 +260,8 @@ fn print_row(out: &mut impl Write, row: &Row, theme: Theme) -> io::Result<()> {
 }
 
 fn pad_to(text: &str, width: usize) -> String {
-    let mut padded = String::new();
-    let mut used = 0_usize;
-    for character in text.chars() {
-        let character_width = UnicodeWidthChar::width(character).unwrap_or(0);
-        if used + character_width > width {
-            break;
-        }
-        padded.push(character);
-        used += character_width;
-    }
-    padded.push_str(&" ".repeat(width.saturating_sub(used)));
+    let mut padded = clip(text, width);
+    padded.push_str(&" ".repeat(width.saturating_sub(padded.width())));
     padded
 }
 

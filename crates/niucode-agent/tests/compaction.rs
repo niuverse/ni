@@ -34,7 +34,7 @@ fn config(directory: &Path) -> AgentConfig {
 }
 
 fn start_session(directory: &Path) -> SessionLog {
-    let mut session = SessionLog::create(directory).expect("session");
+    let session = SessionLog::create(directory).expect("session");
     session
         .append(&Event::SessionStart {
             id: session.id().to_string(),
@@ -124,7 +124,15 @@ async fn compaction_preserves_a_replayable_projection_and_changes() {
         .collect::<Vec<_>>();
     assert_eq!(compactions.len(), 1, "one compaction event");
     let (summary, upto, before_tokens, after_tokens) = compactions[0];
-    assert_eq!(upto, 8, "cutoff is the second user message");
+    assert_eq!(
+        upto as usize,
+        loaded
+            .events
+            .iter()
+            .position(|e| matches!(e, Event::UserMessage { text, .. } if text == "second request"))
+            .unwrap(),
+        "cutoff is the second user message"
+    );
     assert!(before_tokens > after_tokens);
     assert!(summary.contains("# Session handoff"));
     assert!(summary.contains("first request"));
@@ -136,10 +144,10 @@ async fn compaction_preserves_a_replayable_projection_and_changes() {
     assert!(observed.iter().any(|event| matches!(
         event,
         AgentEvent::Compaction {
-            replaced_events: 8,
+            replaced_events,
             before_tokens: before,
             after_tokens: after,
-        } if before > after
+        } if before > after && *replaced_events == upto as usize
     )));
 
     let requests = provider.requests();

@@ -1,0 +1,446 @@
+//! TUI client for SessionRuntime. This loop alone owns the active terminal.
+use crate::{
+    details::Details,
+    diff::render_plain,
+    editor::{Input, LineEditor},
+    terminal::{DetailScreen, TerminalSession},
+    text_layout::wrap,
+    theme::Theme,
+};
+use anyhow::Result;
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use niucode_agent::{
+    run_interactive, runtime_channel, AgentConfig, AgentEvent, ApprovalRequest, RunOutcome,
+    RuntimeClient, RuntimeCommand, RuntimeEvent,
+};
+use niucode_core::SessionLog;
+use niucode_provider::{ChatMessage, Provider};
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+
+const BUFFER_BYTES: usize = 262_144;
+
+struct View {
+    screen: DetailScreen,
+    content: ViewContent,
+}
+enum ViewContent {
+    History(Details),
+    Approval {
+        id: String,
+        request: ApprovalRequest,
+        previous: Option<Box<Details>>,
+        lines: Vec<String>,
+        offset: usize,
+    },
+}
+enum ViewAction {
+    Stay,
+    Close,
+    Cancel,
+    Approve {
+        id: String,
+        allowed: bool,
+        session: bool,
+    },
+}
+impl View {
+    fn history(session: &SessionLog, width: usize) -> Result<Self> {
+        Ok(Self {
+            screen: DetailScreen::enter()?,
+            content: ViewContent::History(Details::open(session.path(), width)?),
+        })
+    }
+    fn approval(id: String, request: ApprovalRequest, width: usize) -> Result<Self> {
+        let lines = Self::approval_lines(&request, width);
+        Ok(Self {
+            screen: DetailScreen::enter()?,
+            content: ViewContent::Approval {
+                id,
+                request,
+                previous: None,
+                lines,
+                offset: 0,
+            },
+        })
+    }
+    fn show_approval(&mut self, id: String, request: ApprovalRequest, width: usize) {
+        let lines = Self::approval_lines(&request, width);
+        let old = std::mem::replace(
+            &mut self.content,
+            ViewContent::Approval {
+                id,
+                request,
+                lines,
+                offset: 0,
+                previous: None,
+            },
+        );
+        if let (ViewContent::History(history), ViewContent::Approval { previous, .. }) =
+            (old, &mut self.content)
+        {
+            *previous = Some(Box::new(history));
+        }
+    }
+    fn resume_history(&mut self, width: usize) -> Result<bool> {
+        if let ViewContent::Approval { previous, .. } = &mut self.content {
+            if let Some(mut history) = previous.take() {
+                history.refresh(width)?;
+                self.content = ViewContent::History(*history);
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    fn approval_lines(request: &ApprovalRequest, width: usize) -> Vec<String> {
+        let body = request
+            .preview
+            .as_ref()
+            .map(|p| render_plain(p, width))
+            .unwrap_or_else(|| request.summary.clone());
+        wrap(&body, width)
+    }
+    fn draw(&mut self) -> Result<()> {
+        match &self.content {
+            ViewContent::History(d) => self.screen.draw(&d.title, &d.lines, d.offset)?,
+            ViewContent::Approval {
+                request,
+                lines,
+                offset,
+                ..
+            } => self.screen.draw(
+                &format!(
+                    "a allow / d deny / s session · Ctrl-C cancel · {}",
+                    request.summary
+                ),
+                lines,
+                *offset,
+            )?,
+        }
+        Ok(())
+    }
+    fn scroll(&mut self, delta: isize) {
+        let (offset, count) = match &mut self.content {
+            ViewContent::History(d) => (&mut d.offset, d.lines.len()),
+            ViewContent::Approval { offset, lines, .. } => (offset, lines.len()),
+        };
+        *offset = offset
+            .saturating_add_signed(delta)
+            .min(count.saturating_sub(1));
+    }
+    fn handle(&mut self, event: Event, width: usize, height: usize) -> Result<ViewAction> {
+        match event {
+            Event::Key(key) if key.kind != KeyEventKind::Release => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+                    return Ok(ViewAction::Cancel);
+                }
+                if let ViewContent::Approval { id, .. } = &self.content {
+                    // Modified shortcuts must neither approve nor hide a pending request.
+                    if !key.modifiers.is_empty() {
+                        return Ok(ViewAction::Stay);
+                    }
+                    if matches!(
+                        key.code,
+                        KeyCode::Char('a' | 's' | 'd' | 'q') | KeyCode::Esc
+                    ) {
+                        return Ok(ViewAction::Approve {
+                            id: id.clone(),
+                            allowed: matches!(key.code, KeyCode::Char('a' | 's')),
+                            session: key.code == KeyCode::Char('s'),
+                        });
+                    }
+                }
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(ViewAction::Close),
+                    KeyCode::Up | KeyCode::Char('k') => self.scroll(-1),
+                    KeyCode::Down | KeyCode::Char('j') => self.scroll(1),
+                    KeyCode::PageUp => self.scroll(-(height.saturating_sub(2).max(1) as isize)),
+                    KeyCode::PageDown | KeyCode::Char(' ') => {
+                        self.scroll(height.saturating_sub(2).max(1) as isize)
+                    }
+                    KeyCode::Char('[' | ']') => {
+                        if let ViewContent::History(d) = &mut self.content {
+                            d.navigate(if key.code == KeyCode::Char('[') {
+                                -1
+                            } else {
+                                1
+                            })?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Event::Resize(_, _) => match &mut self.content {
+                ViewContent::History(d) => d.refresh(width)?,
+                ViewContent::Approval {
+                    request,
+                    lines,
+                    offset,
+                    ..
+                } => {
+                    *lines = Self::approval_lines(request, width);
+                    *offset = (*offset).min(lines.len().saturating_sub(1));
+                }
+            },
+            _ => {}
+        }
+        Ok(ViewAction::Stay)
+    }
+}
+
+struct Transcript {
+    pending: String,
+    deferred: VecDeque<String>,
+    bytes: usize,
+    omitted: bool,
+}
+impl Transcript {
+    fn new() -> Self {
+        Self {
+            pending: String::new(),
+            deferred: VecDeque::new(),
+            bytes: 0,
+            omitted: false,
+        }
+    }
+    fn print(&mut self, terminal: &mut TerminalSession, viewing: bool, text: String) -> Result<()> {
+        if !viewing {
+            terminal.print(&text)?;
+        } else if self.bytes + text.len() <= BUFFER_BYTES {
+            self.bytes += text.len();
+            self.deferred.push_back(text);
+        } else {
+            self.omitted = true;
+        }
+        Ok(())
+    }
+    fn delta(&mut self, terminal: &mut TerminalSession, viewing: bool, text: &str) -> Result<()> {
+        self.pending.push_str(text);
+        while let Some(index) = self.pending.find('\n') {
+            let rest = self.pending.split_off(index + 1);
+            let line = std::mem::replace(&mut self.pending, rest);
+            self.print(terminal, viewing, line.trim_end_matches('\n').into())?;
+        }
+        if self.pending.len() > 8192 {
+            self.flush(terminal, viewing)?;
+        }
+        Ok(())
+    }
+    fn flush(&mut self, terminal: &mut TerminalSession, viewing: bool) -> Result<()> {
+        if !self.pending.is_empty() {
+            let line = std::mem::take(&mut self.pending);
+            self.print(terminal, viewing, line)?;
+        }
+        Ok(())
+    }
+    fn resume(&mut self, terminal: &mut TerminalSession) -> Result<()> {
+        terminal.clear()?;
+        while let Some(line) = self.deferred.pop_front() {
+            terminal.print(&line)?;
+        }
+        self.bytes = 0;
+        if std::mem::take(&mut self.omitted) {
+            terminal.print(
+                "Some output arrived while viewing details; Ctrl-O opens the recorded history.",
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub async fn run(
+    provider: &dyn Provider,
+    session: &SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    editor: &mut LineEditor,
+    allow_session: &mut bool,
+) -> Result<RunOutcome> {
+    let (mut client, endpoint) = runtime_channel();
+    let mut terminal = editor.start(Theme::detect_stdout())?;
+    let run = run_interactive(provider, session, config, prompt, history, endpoint);
+    tokio::pin!(run);
+    let mut ticks = tokio::time::interval(Duration::from_millis(25));
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let started = Instant::now();
+    let input_run_id = niucode_core::now_ms();
+    let mut sequence = 0_u64;
+    let mut status = String::from("requesting");
+    let mut tools_completed = 0;
+    let mut transcript = Transcript::new();
+    let mut view: Option<View> = None;
+    let mut unacknowledged: Vec<(String, String)> = Vec::new();
+    let mut completed = None;
+    loop {
+        tokio::select! {
+            // Drain events before accepting completion so final output is not lost.
+            event = client.events.recv(), if !client.events.is_closed() || !client.events.is_empty() => {
+                if let Some(event) = event {
+                    match event {
+                        RuntimeEvent::Agent(AgentEvent::TextDelta(text)) => {
+                            status = "responding".into(); transcript.delta(&mut terminal, view.is_some(), &text)?;
+                        }
+                        RuntimeEvent::Agent(AgentEvent::ReasoningDelta(_)) => status = "thinking · Ctrl-O recorded details".into(),
+                        RuntimeEvent::Agent(AgentEvent::ToolCall { name, .. }) => {
+                            transcript.flush(&mut terminal, view.is_some())?;
+                            status = format!("running {name}");
+
+                        }
+                        RuntimeEvent::Agent(AgentEvent::ToolResult { name, ok, summary, .. }) => {
+                            tools_completed += 1;
+                            status = format!("{name} finished");
+                            if !ok {
+                                let message = crate::text_layout::clip(&crate::text_layout::clean_text(&format!("! {name}: {summary} · Ctrl-O details")), terminal.size().0);
+                                transcript.print(&mut terminal, view.is_some(), message)?;
+                            }
+                        }
+                        RuntimeEvent::Agent(AgentEvent::Warning(message)) | RuntimeEvent::Notice(message) => {
+                            transcript.print(&mut terminal, view.is_some(), format!("! {message}"))?;
+                        }
+                        RuntimeEvent::Agent(AgentEvent::Compaction { before_tokens, after_tokens, .. }) => {
+                            transcript.print(&mut terminal, view.is_some(), format!("⇣ context {before_tokens} → {after_tokens}"))?;
+                        }
+                        RuntimeEvent::Agent(AgentEvent::TurnEnd { .. }) => transcript.flush(&mut terminal, view.is_some())?,
+                        RuntimeEvent::Agent(AgentEvent::Phase(phase)) => status = phase.as_str().into(),
+                        RuntimeEvent::Input { id, queued, applied } => {
+                            if let Some(index) = unacknowledged.iter().position(|(pending, _)| pending == &id) {
+                                let (_, text) = unacknowledged.remove(index);
+                                transcript.print(&mut terminal, view.is_some(), format!("you ▸ {text}"))?;
+                            }
+                            status = if applied { "input received" } else if queued { "task queued" } else { "input pending" }.into();
+                            transcript.print(&mut terminal, view.is_some(), format!("↳ {status}"))?;
+                        }
+                        RuntimeEvent::InputRejected { id, reason } => {
+                            if let Some(index) = unacknowledged.iter().position(|(pending, _)| pending == &id) {
+                                let (_, text) = unacknowledged.remove(index);
+                                transcript.print(&mut terminal, view.is_some(), format!("! input rejected: {reason}\n{text}"))?;
+                                if editor.composer.text().is_empty() { editor.composer.insert(&text).map_err(anyhow::Error::msg)?; }
+                            }
+                        }
+                        RuntimeEvent::TaskDone { id, .. } => {
+                            transcript.flush(&mut terminal, view.is_some())?;
+                            if let Some(review) = niucode_agent::task_review_by_id(&niucode_core::load(session.path())?.events, &id) {
+                                let summary = crate::presentation::completion(&review, terminal.size().0);
+                                transcript.print(&mut terminal, view.is_some(), summary)?;
+                            }
+                        }
+                        RuntimeEvent::Approval { request_id, request, .. } => {
+                            if *allow_session {
+                                send(&client, RuntimeCommand::Approve { request_id, allowed: true })?;
+                            } else {
+                                if let Some(active) = &mut view {
+                                    active.show_approval(request_id, request, terminal.size().0);
+                                } else {
+                                    terminal.clear()?;
+                                    view = Some(View::approval(request_id, request, terminal.size().0)?);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            result = &mut run, if completed.is_none() => { completed = Some(result); }
+            _ = tokio::signal::ctrl_c() => client.cancel(),
+            _ = ticks.tick() => {
+                // Bound input work per tick. The level-triggered TTY backend requires a positive poll timeout; it does not poll at Duration::ZERO.
+                for _ in 0..32 {
+                    let Some(event) = terminal.poll(Duration::from_millis(1))? else { break; };
+                    if let Some(active) = &mut view {
+                        match active.handle(event,terminal.size().0,terminal.size().1)? {
+                            ViewAction::Stay => {},
+                            action => {
+                                let mut restored = false;
+                                match action {
+                                    ViewAction::Cancel => client.cancel(),
+                                    ViewAction::Approve { id, allowed, session } => {
+                                        *allow_session |= session;
+                                        send(&client,RuntimeCommand::Approve { request_id:id,allowed })?;
+                                        restored = active.resume_history(terminal.size().0)?;
+                                    }
+                                    _ => {}
+                                }
+                                if !restored { view.take(); transcript.resume(&mut terminal)?; }
+                            }
+                        }
+                    } else if let Some(input) = editor.handle(event, terminal.size().0, "niucode ▸ ") {
+                        let queued = matches!(&input, Input::Queue(_));
+                        match input {
+                            Input::Interrupted | Input::Eof => client.cancel(),
+                            Input::Details => { terminal.clear()?; view = Some(View::history(session, terminal.size().0)?); }
+                            Input::Line(text) | Input::Queue(text) => {
+                                // Local commands cannot silently become steering instructions.
+                                if text.starts_with('/') || unacknowledged.len() >= 32 {
+                                    transcript.print(&mut terminal, false, "Local commands are available after this task; Ctrl-O details, Ctrl-C cancel.".into())?;
+                                    editor.composer.insert(&text).map_err(anyhow::Error::msg)?;
+                                    continue;
+                                }
+                                sequence += 1;
+                                let id = format!("{input_run_id}-{sequence}");
+                                let command = RuntimeCommand::Submit { id: id.clone(), text: text.clone(), queued };
+                                if let Err(e) = send(&client, command) {
+                                    editor.composer.insert(&text).map_err(anyhow::Error::msg)?;
+                                    transcript.print(&mut terminal, false, e.to_string())?;
+                                } else { unacknowledged.push((id, text)); }
+                            }
+                        }
+                    }
+                }
+                if let Some(active) = &mut view { active.draw()?; }
+                else {
+                    let footer = crate::presentation::activity(&status, tools_completed, started.elapsed().as_millis(), Theme::detect_stdout().is_ansi(), terminal.size().0);
+                    editor.draw(&mut terminal, "niucode ▸ ", &footer, &transcript.pending)?;
+                }
+            }
+        }
+        if completed.is_some() && client.events.is_empty() {
+            break;
+        }
+    }
+    view.take();
+    transcript.resume(&mut terminal)?;
+    transcript.flush(&mut terminal, false)?;
+    for (id, text) in unacknowledged {
+        terminal.print(&format!(
+            "! input {id} was not acknowledged; preserved below:\n{text}"
+        ))?;
+        if editor.composer.text().is_empty() {
+            editor.composer.insert(&text).map_err(anyhow::Error::msg)?;
+        }
+    }
+    if completed.as_ref().is_some_and(Result::is_err) {
+        if let Some(review) =
+            niucode_agent::task_review(&niucode_core::load(session.path())?.events)
+        {
+            terminal.print(&crate::presentation::completion(&review, terminal.size().0))?;
+        }
+    }
+    terminal.finish()?;
+    completed.expect("completed before exit")
+}
+
+fn send(client: &RuntimeClient, command: RuntimeCommand) -> Result<()> {
+    client
+        .commands
+        .try_send(command)
+        .map_err(|e| anyhow::anyhow!("runtime command not accepted: {e}"))
+}
+
+pub fn show_details(session: &SessionLog) -> Result<()> {
+    let mut terminal = TerminalSession::enter(false, Theme::detect_stdout().is_ansi())?;
+    let mut view = View::history(session, terminal.size().0)?;
+    loop {
+        view.draw()?;
+        if let Some(event) = terminal.poll(Duration::from_millis(100))? {
+            if !matches!(
+                view.handle(event, terminal.size().0, terminal.size().1)?,
+                ViewAction::Stay
+            ) {
+                break;
+            }
+        }
+    }
+    drop(view);
+    terminal.finish()?;
+    Ok(())
+}

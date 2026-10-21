@@ -59,8 +59,14 @@ pub async fn evaluate(
             let mut stream = provider.stream(request).await?;
             let mut text = String::new();
             while let Some(event) = stream.next().await {
-                if let StreamEvent::TextDelta(delta) = event? {
-                    text.push_str(&delta);
+                match event? {
+                    StreamEvent::TextDelta(delta) => text.push_str(&delta),
+                    StreamEvent::Done {
+                        finish_reason: Some(reason),
+                    } if reason == "length" => {
+                        bail!("goal evaluator output truncated (finish_reason=length)");
+                    }
+                    _ => {}
                 }
             }
             Ok::<_, anyhow::Error>(text)
@@ -118,6 +124,21 @@ pub fn continue_prompt(goal: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn truncated_verdict_cannot_complete_a_goal_even_if_json_parses() {
+        let provider = niucode_provider::ScriptedProvider::new(vec![
+            StreamEvent::TextDelta(r#"{"status":"met","reason":"looks done"}"#.into()),
+            StreamEvent::Done {
+                finish_reason: Some("length".into()),
+            },
+        ]);
+        let error = evaluate(&provider, "test", "implement", "partial")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("finish_reason=length"));
+        assert_eq!(provider.requests().len(), 1);
+    }
 
     #[test]
     fn parses_plain_and_fenced_verdicts() {

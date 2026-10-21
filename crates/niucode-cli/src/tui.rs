@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use crossterm::cursor::{MoveTo, Show};
@@ -26,10 +26,9 @@ use niucode_provider::{ChatMessage, ModelSelection, Provider};
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
 use similar::TextDiff;
 
-use crate::diff::{clean_text, render_plain};
+use crate::diff::render_plain;
 use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
-use crate::inline::InlineEditor;
 use crate::provider_factory::{available_model_choices, provider_choices, ProviderFactory};
 use crate::review::{review_diff, ApprovalChoice};
 use crate::session_ops;
@@ -37,84 +36,12 @@ use crate::skills;
 use crate::slash::{
     self, Command as SlashCommand, CommandRegistry, GoalAction, Parsed as SlashParsed, PlanAction,
 };
+use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
 use crate::workspace::Workspace;
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
-const WIDE_BANNER: usize = 62;
-
-const LOGO: [&str; 6] = [
-    "███╗   ██╗██╗██╗   ██╗ ██████╗ ██████╗ ██████╗ ███████╗",
-    "████╗  ██║██║██║   ██║██╔════╝██╔═══██╗██╔══██╗██╔════╝",
-    "██╔██╗ ██║██║██║   ██║██║     ██║   ██║██║  ██║█████╗",
-    "██║╚██╗██║██║██║   ██║██║     ██║   ██║██║  ██║██╔══╝",
-    "██║ ╚████║██║╚██████╔╝╚██████╗╚██████╔╝██████╔╝███████╗",
-    "╚═╝  ╚═══╝╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝",
-];
-
-enum PromptEditor {
-    Linear(LineEditor),
-    Inline(InlineEditor),
-}
-
-impl PromptEditor {
-    fn read_line(
-        &mut self,
-        raw_prompt: &str,
-        styled_prompt: &str,
-        footer: &str,
-        theme: Theme,
-    ) -> std::io::Result<Input> {
-        match self {
-            Self::Linear(editor) => editor.read_line(raw_prompt, styled_prompt, theme),
-            Self::Inline(editor) => editor.read_line(raw_prompt, styled_prompt, footer, theme),
-        }
-    }
-
-    fn set_models(&mut self, models: Vec<String>) {
-        match self {
-            Self::Linear(editor) => editor.set_models(models),
-            Self::Inline(editor) => editor.set_models(models),
-        }
-    }
-
-    fn set_current_model(&mut self, model: impl Into<String>) {
-        match self {
-            Self::Linear(editor) => editor.set_current_model(model),
-            Self::Inline(editor) => editor.set_current_model(model),
-        }
-    }
-
-    fn set_cwd(&mut self, cwd: PathBuf) {
-        match self {
-            Self::Linear(_) => {}
-            Self::Inline(editor) => editor.set_cwd(cwd),
-        }
-    }
-
-    fn set_permissions(&mut self, permissions: Vec<(String, String)>) {
-        match self {
-            Self::Linear(editor) => editor.set_permissions(permissions),
-            Self::Inline(editor) => editor.set_permissions(permissions),
-        }
-    }
-
-    fn set_skills(&mut self, skills: Vec<String>) {
-        match self {
-            Self::Linear(editor) => editor.set_skills(skills),
-            Self::Inline(editor) => editor.set_skills(skills),
-        }
-    }
-
-    fn clear_history(&mut self) {
-        match self {
-            Self::Linear(editor) => editor.clear_history(),
-            Self::Inline(editor) => editor.clear_history(),
-        }
-    }
-}
-
 struct ToolEcho {
     name: String,
     summary: String,
@@ -317,24 +244,10 @@ pub async fn run(
     reset_terminal_modes();
     let out = Theme::detect_stdout();
     let err = Theme::detect_stderr();
-    if std::io::stdout().is_terminal() {
-        print_banner(out);
-    }
     let commands = CommandRegistry::builtin();
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         let inline = inline_tui_allowed();
-        if !inline && ghostty_terminal() {
-            eprintln!(
-                "{} {}",
-                out.dim("tui"),
-                out.dim("Ghostty: using stable linear TUI; NIUCODE_TUI_INLINE=1 forces inline.")
-            );
-        }
-        let mut editor = if inline {
-            PromptEditor::Inline(InlineEditor::new(commands.clone()))
-        } else {
-            PromptEditor::Linear(LineEditor::new(commands.clone()))
-        };
+        let mut editor = LineEditor::new(commands.clone(), inline);
         editor.set_models(niucode_model_choices(config, provider_factory));
         editor.set_current_model(format!("{}/{}", config.provider, config.model));
         editor.set_cwd(config.working_dir.clone());
@@ -360,24 +273,6 @@ pub async fn run(
     let mut allow_session = false;
     let mut last_tool: Option<ToolEcho> = None;
 
-    tokio::spawn(async {
-        let mut last: Option<Instant> = None;
-        loop {
-            if tokio::signal::ctrl_c().await.is_err() {
-                break;
-            }
-            let now = Instant::now();
-            if last
-                .map(|instant| now.duration_since(instant) < Duration::from_secs(2))
-                .unwrap_or(false)
-            {
-                eprintln!("\nforce exit");
-                std::process::exit(130);
-            }
-            last = Some(now);
-        }
-    });
-
     loop {
         let input = if let Some(prompt) = state.pending_prompt.take() {
             eprintln!(
@@ -392,29 +287,26 @@ pub async fn run(
             );
             prompt
         } else if let Some(editor) = &mut editor {
+            editor.set_current_model(current_selection(&state, config));
             println!();
             let mode = if state.plan_mode {
-                Some(("plan", Tone::Warning))
+                Some("plan")
             } else if state.goal_run {
-                Some(("goal", Tone::Success))
+                Some("goal")
             } else {
                 None
             };
             let raw_prompt = match mode {
-                Some((label, _)) => format!("niucode {} {label} ", theme::PROMPT),
+                Some(label) => format!("niucode {} {label} ", theme::PROMPT),
                 None => format!("niucode {} ", theme::PROMPT),
             };
-            let styled_prompt = match mode {
-                Some((label, tone)) => format!(
-                    "{} {} ",
-                    out.accent(format!("niucode {}", theme::PROMPT)),
-                    out.paint(tone, label)
-                ),
-                None => format!("{} ", out.accent(format!("niucode {}", theme::PROMPT))),
-            };
             let footer = editor_footer(&state, config);
-            match editor.read_line(&raw_prompt, &styled_prompt, &footer, out)? {
-                Input::Line(line) => line,
+            match editor.read_line(&raw_prompt, &footer, out)? {
+                Input::Line(line) | Input::Queue(line) => line,
+                Input::Details => {
+                    crate::live::show_details(session)?;
+                    continue;
+                }
                 Input::Interrupted => continue,
                 Input::Eof => break,
             }
@@ -496,167 +388,6 @@ pub async fn run(
         let mut pending_usage: Option<Usage> = None;
         let mut tools_pending = 0_usize;
 
-        let mut approver = |request: &ApprovalRequest| -> bool {
-            if allow_session {
-                eprintln!(
-                    "{} {}",
-                    err.paint(Tone::Success, theme::OK),
-                    err.dim(format!("auto-approved · {}", clean_text(&request.summary)))
-                );
-                return true;
-            }
-            match prompt_approval(request, out, err) {
-                ApprovalChoice::Allow => true,
-                ApprovalChoice::Deny => false,
-                ApprovalChoice::Session => {
-                    allow_session = true;
-                    true
-                }
-            }
-        };
-
-        let mut observer = |event: AgentEvent| match event {
-            AgentEvent::Phase(_) => {}
-            AgentEvent::TextDelta(delta) => {
-                if delta.is_empty() {
-                    return;
-                }
-                if !text_started {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
-                    }
-                    flush_usage(err, &mut pending_usage, turn_no);
-                    print!("{} ", out.accent(theme::ASSISTANT));
-                    text_started = true;
-                    thinking = false;
-                }
-                print!("{delta}");
-                let _ = std::io::stdout().flush();
-                line_open = !delta.ends_with('\n');
-            }
-            AgentEvent::ReasoningDelta(delta) => {
-                if delta.is_empty() {
-                    return;
-                }
-                if !thinking {
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    flush_usage(err, &mut pending_usage, turn_no);
-                    eprintln!("\r{}", err.dim(format!("{} thinking", theme::THINKING)));
-                    thinking = true;
-                }
-                eprint!("{}", err.dim(delta.replace('\u{1b}', "␛")));
-                let _ = std::io::stderr().flush();
-            }
-            AgentEvent::ToolCall { name, input } => {
-                if thinking {
-                    eprintln!();
-                    thinking = false;
-                }
-                if line_open {
-                    println!();
-                    line_open = false;
-                }
-                text_started = false;
-                thinking = false;
-                tools_pending += 1;
-                let detail = compact_json(&input);
-                let mut line = format!(
-                    "{} {}",
-                    err.paint(Tone::Magenta, theme::TOOL),
-                    err.paint(Tone::Bright, name)
-                );
-                if !detail.is_empty() {
-                    line.push(' ');
-                    line.push_str(&err.dim(detail));
-                }
-                eprintln!("{line}");
-            }
-            AgentEvent::ToolResult {
-                name,
-                ok,
-                summary,
-                output,
-            } => {
-                if thinking {
-                    eprintln!();
-                    thinking = false;
-                }
-                if line_open {
-                    println!();
-                    line_open = false;
-                }
-                text_started = false;
-                thinking = false;
-                render_tool_result(err, &name, ok, &summary, &output, &mut last_tool);
-                tools_pending = tools_pending.saturating_sub(1);
-                if tools_pending == 0 {
-                    flush_usage(err, &mut pending_usage, turn_no);
-                }
-            }
-            AgentEvent::TurnEnd { usage } => {
-                if thinking {
-                    eprintln!();
-                    thinking = false;
-                }
-                if line_open {
-                    println!();
-                    line_open = false;
-                }
-                text_started = false;
-                thinking = false;
-                turn_no += 1;
-                pending_usage = Some(usage);
-            }
-            AgentEvent::Compaction {
-                replaced_events,
-                before_tokens,
-                after_tokens,
-            } => {
-                if thinking {
-                    eprintln!();
-                    thinking = false;
-                }
-                if line_open {
-                    println!();
-                    line_open = false;
-                }
-                text_started = false;
-                flush_usage(err, &mut pending_usage, turn_no);
-                eprintln!(
-                    "{} {}",
-                    err.paint(Tone::Magenta, theme::COMPACT),
-                    err.dim(format!(
-                        "compacted · {replaced_events} events · ~{before_tokens} → ~{after_tokens} tokens"
-                    ))
-                );
-            }
-            AgentEvent::Warning(message) => {
-                if thinking {
-                    eprintln!();
-                    thinking = false;
-                }
-                if line_open {
-                    println!();
-                    line_open = false;
-                }
-                text_started = false;
-                flush_usage(err, &mut pending_usage, turn_no);
-                eprintln!(
-                    "{} {}",
-                    err.paint(Tone::Warning, theme::WARN),
-                    err.paint(Tone::Warning, clean_text(&message))
-                );
-            }
-        };
-
         if let Some(factory) = provider_factory {
             let selected = effective_provider(&state, config);
             if provider.name() != selected {
@@ -682,7 +413,179 @@ pub async fn run(
             }
         }
 
-        let result = {
+        let result = if let Some(editor) = &mut editor {
+            Some(
+                crate::live::run(
+                    provider.as_ref(),
+                    session,
+                    &run_config,
+                    prompt,
+                    history.clone(),
+                    editor,
+                    &mut allow_session,
+                )
+                .await,
+            )
+        } else {
+            let mut approver = |request: &ApprovalRequest| -> bool {
+                if allow_session {
+                    eprintln!(
+                        "{} {}",
+                        err.paint(Tone::Success, theme::OK),
+                        err.dim(format!("auto-approved · {}", clean_text(&request.summary)))
+                    );
+                    return true;
+                }
+                match prompt_approval(request, out, err) {
+                    ApprovalChoice::Allow => true,
+                    ApprovalChoice::Deny => false,
+                    ApprovalChoice::Session => {
+                        allow_session = true;
+                        true
+                    }
+                }
+            };
+
+            let mut observer = |event: AgentEvent| match event {
+                AgentEvent::Phase(_) => {}
+                AgentEvent::TextDelta(delta) => {
+                    if delta.is_empty() {
+                        return;
+                    }
+                    if !text_started {
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        if thinking {
+                            eprintln!();
+                            thinking = false;
+                        }
+                        flush_usage(err, &mut pending_usage, turn_no);
+                        print!("{} ", out.accent(theme::ASSISTANT));
+                        text_started = true;
+                        thinking = false;
+                    }
+                    print!("{delta}");
+                    let _ = std::io::stdout().flush();
+                    line_open = !delta.ends_with('\n');
+                }
+                AgentEvent::ReasoningDelta(delta) => {
+                    if delta.is_empty() {
+                        return;
+                    }
+                    if !thinking {
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        flush_usage(err, &mut pending_usage, turn_no);
+                        eprintln!("\r{}", err.dim(format!("{} thinking", theme::THINKING)));
+                        thinking = true;
+                    }
+                }
+                AgentEvent::ToolCall { name, input } => {
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    text_started = false;
+                    thinking = false;
+                    tools_pending += 1;
+                    let detail = compact_json(&input);
+                    let mut line = format!(
+                        "{} {}",
+                        err.paint(Tone::Magenta, theme::TOOL),
+                        err.paint(Tone::Bright, name)
+                    );
+                    if !detail.is_empty() {
+                        line.push(' ');
+                        line.push_str(&err.dim(detail));
+                    }
+                    eprintln!("{line}");
+                }
+                AgentEvent::ToolResult {
+                    name,
+                    ok,
+                    summary,
+                    output,
+                } => {
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    text_started = false;
+                    thinking = false;
+                    render_tool_result(err, &name, ok, &summary, &output, &mut last_tool);
+                    tools_pending = tools_pending.saturating_sub(1);
+                    if tools_pending == 0 {
+                        flush_usage(err, &mut pending_usage, turn_no);
+                    }
+                }
+                AgentEvent::TurnEnd { usage } => {
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    text_started = false;
+                    thinking = false;
+                    turn_no += 1;
+                    pending_usage = Some(usage);
+                }
+                AgentEvent::Compaction {
+                    replaced_events,
+                    before_tokens,
+                    after_tokens,
+                } => {
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    text_started = false;
+                    flush_usage(err, &mut pending_usage, turn_no);
+                    eprintln!(
+                    "{} {}",
+                    err.paint(Tone::Magenta, theme::COMPACT),
+                    err.dim(format!(
+                        "compacted · {replaced_events} events · ~{before_tokens} → ~{after_tokens} tokens"
+                    ))
+                );
+                }
+                AgentEvent::Warning(message) => {
+                    if thinking {
+                        eprintln!();
+                        thinking = false;
+                    }
+                    if line_open {
+                        println!();
+                        line_open = false;
+                    }
+                    text_started = false;
+                    flush_usage(err, &mut pending_usage, turn_no);
+                    eprintln!(
+                        "{} {}",
+                        err.paint(Tone::Warning, theme::WARN),
+                        err.paint(Tone::Warning, clean_text(&message))
+                    );
+                }
+            };
+
             let run = run_with_history(
                 provider.as_ref(),
                 session,
@@ -719,17 +622,19 @@ pub async fn run(
                 );
             }
             Some(Ok(outcome)) => {
-                eprintln!(
-                    "{} {}",
-                    err.paint(Tone::Success, theme::OK),
-                    err.dim(format!(
-                        "done · {} turns · in {} · out {} · cache {}%",
-                        outcome.turns,
-                        outcome.usage.input_tokens,
-                        outcome.usage.output_tokens,
-                        outcome.usage.cache_hit_percent()
-                    ))
-                );
+                if editor.is_none() {
+                    eprintln!(
+                        "{} {}",
+                        err.paint(Tone::Success, theme::OK),
+                        err.dim(format!(
+                            "done · {} turns · in {} · out {} · cache {}%",
+                            outcome.turns,
+                            outcome.usage.input_tokens,
+                            outcome.usage.output_tokens,
+                            outcome.usage.cache_hit_percent()
+                        ))
+                    );
+                }
                 history = project_history(&load(session.path())?.events)?;
                 if state.goal_run {
                     if let Err(error) = goal_after_turn(
@@ -757,18 +662,46 @@ pub async fn run(
                 state.goal_run = false;
                 state.pending_prompt = None;
                 let message = format!("{error:#}");
-                eprintln!(
-                    "{} {}",
-                    err.paint(Tone::Danger, theme::ERR),
-                    err.paint(Tone::Danger, &message)
-                );
-                if message.contains("max steps reached") || message.contains("safety turn cap") {
-                    let current = if config.max_steps == 0 {
-                        "unbounded (safety 256)".to_string()
-                    } else {
-                        config.max_steps.to_string()
-                    };
+                let cancelled = error.is::<niucode_agent::Cancelled>();
+                let tone = if cancelled {
+                    Tone::Warning
+                } else {
+                    Tone::Danger
+                };
+                // Live terminal guards have unwound here, including early I/O failures.
+                // Print each error cause once, without allowing an unbounded terminal dump.
+                if editor.is_some() {
+                    let width = terminal::size()
+                        .map_or(80, |s| s.0 as usize)
+                        .saturating_sub(1)
+                        .max(1);
                     eprintln!(
+                        "{}",
+                        err.paint(
+                            tone,
+                            crate::text_layout::clip(
+                                &clean_text(&format!(
+                                    "{} {message}",
+                                    if cancelled { theme::WARN } else { theme::ERR }
+                                )),
+                                width
+                            )
+                        )
+                    );
+                } else {
+                    eprintln!(
+                        "{} {}",
+                        err.paint(tone, if cancelled { theme::WARN } else { theme::ERR }),
+                        err.paint(tone, &message)
+                    );
+                    if message.contains("max steps reached") || message.contains("safety turn cap")
+                    {
+                        let current = if config.max_steps == 0 {
+                            "unbounded (safety 256)".to_string()
+                        } else {
+                            config.max_steps.to_string()
+                        };
+                        eprintln!(
                         "{}",
                         err.paint(
                             Tone::Warning,
@@ -777,6 +710,7 @@ pub async fn run(
                             )
                         )
                     );
+                    }
                 }
                 history = project_history(&load(session.path())?.events)?;
             }
@@ -808,7 +742,13 @@ async fn handle_command(
 ) -> Result<CommandOutcome> {
     match command {
         SlashCommand::Help => print_help(out, commands),
-        SlashCommand::Last => print_last(out, last_tool.as_ref()),
+        SlashCommand::Last => {
+            if std::io::stdout().is_terminal() {
+                crate::live::show_details(session)?;
+            } else {
+                print_last(out, last_tool.as_ref());
+            }
+        }
         SlashCommand::Init { apply } => {
             if apply {
                 run_init_apply(session, config, state, out, err).await?;
@@ -827,7 +767,7 @@ async fn handle_command(
             let model = state.model.clone();
             let provider = state.provider.clone();
             let permissions = state.permissions;
-            let mut fresh = new_session(session, config)?;
+            let fresh = new_session(session, config)?;
             if plan {
                 fresh.append(&Event::PlanMode {
                     active: true,
@@ -2262,7 +2202,7 @@ fn new_session(session: &SessionLog, config: &AgentConfig) -> Result<SessionLog>
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let mut new_session = SessionLog::create(directory)?;
+    let new_session = SessionLog::create(directory)?;
     new_session.append(&Event::SessionStart {
         id: new_session.id().to_string(),
         cwd: config.working_dir.display().to_string(),
@@ -2638,44 +2578,6 @@ fn human_bytes(bytes: usize) -> String {
     }
 }
 
-fn print_banner(theme: Theme) {
-    let width = terminal::size()
-        .map(|(columns, _)| columns as usize)
-        .unwrap_or(80)
-        .max(1);
-    let lines = banner_lines(width);
-    let logo_lines = if width >= WIDE_BANNER { LOGO.len() } else { 1 };
-
-    println!();
-    for (index, line) in lines.iter().enumerate() {
-        if index < logo_lines {
-            println!("{}", theme.accent(line));
-        } else {
-            println!("{}", theme.dim(line));
-        }
-    }
-    println!();
-    let _ = std::io::stdout().flush();
-}
-
-fn banner_lines(width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    if width >= WIDE_BANNER {
-        lines.extend(LOGO.iter().map(|line| (*line).to_string()));
-        lines.push(format!(
-            "minimal · observable · event-sourced · v{}",
-            env!("CARGO_PKG_VERSION")
-        ));
-    } else {
-        lines.push(format!(
-            "NIUCODE // minimal, observable coding agent · v{}",
-            env!("CARGO_PKG_VERSION")
-        ));
-    }
-    lines.push("native scrollback · :help commands · Ctrl-C cancels the turn".to_string());
-    lines
-}
-
 fn print_last(theme: Theme, last: Option<&ToolEcho>) {
     let Some(echo) = last else {
         eprintln!("{}", theme.dim("no tool output yet"));
@@ -2790,17 +2692,6 @@ mod tests {
         ]);
         assert!(state.plan_mode);
         assert!(state.goal.is_none());
-    }
-
-    #[test]
-    fn banner_switches_between_compact_and_logo() {
-        let compact = banner_lines(40);
-        assert_eq!(compact.len(), 2);
-        assert!(compact[0].contains("NIUCODE"));
-
-        let wide = banner_lines(100);
-        assert!(wide.len() > compact.len());
-        assert!(wide[0].contains("███"));
     }
 
     #[test]

@@ -4,8 +4,10 @@
 //! approval pager and the headless fallback both render those rows, so layout
 //! and line-number alignment are tested without a terminal.
 
+use crate::text_layout::{clean_text, wrap};
 use niucode_tools::{ChangePreview, FilePreview, LineKind, PreviewBody, PreviewLine};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 const MIN_WIDTH: usize = 40;
 const MIN_BODY_WIDTH: usize = 4;
@@ -160,7 +162,7 @@ fn render_line(line: &PreviewLine, old_width: usize, new_width: usize, width: us
         .saturating_sub(display_width(&prefix))
         .max(MIN_BODY_WIDTH);
     let cleaned = clean_text(&line.text);
-    let segments = wrap_text(&cleaned, body_width);
+    let segments = wrap(&cleaned, body_width);
     let kind = match line.kind {
         LineKind::Context => RowKind::Context,
         LineKind::Add => RowKind::Add,
@@ -214,7 +216,7 @@ fn wrap_prefixed(prefix: &str, text: &str, width: usize, kind: RowKind) -> Vec<R
     let cleaned = clean_text(text);
     let prefix_width = display_width(prefix);
     let body_width = width.saturating_sub(prefix_width).max(1);
-    wrap_text(&cleaned, body_width)
+    wrap(&cleaned, body_width)
         .into_iter()
         .enumerate()
         .map(|(index, segment)| Row {
@@ -228,53 +230,6 @@ fn wrap_prefixed(prefix: &str, text: &str, width: usize, kind: RowKind) -> Vec<R
         .collect()
 }
 
-/// Expand tabs, replace control characters, and keep escape sequences visible.
-pub fn clean_text(text: &str) -> String {
-    let mut cleaned = String::with_capacity(text.len());
-    let mut column = 0_usize;
-    for character in text.chars() {
-        match character {
-            '\t' => {
-                let spaces = 4 - (column % 4);
-                cleaned.extend(std::iter::repeat_n(' ', spaces));
-                column += spaces;
-            }
-            '\u{1b}' => {
-                cleaned.push('␛');
-                column += 1;
-            }
-            character if character.is_control() => {
-                cleaned.push('·');
-                column += 1;
-            }
-            character => {
-                cleaned.push(character);
-                column += char_width(character);
-            }
-        }
-    }
-    cleaned
-}
-
-fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    let width = width.max(1);
-    let mut rows = Vec::new();
-    let mut current = String::new();
-    let mut current_width = 0_usize;
-
-    for character in text.chars() {
-        let character_width = char_width(character);
-        if character_width > 0 && current_width + character_width > width && !current.is_empty() {
-            rows.push(std::mem::take(&mut current));
-            current_width = 0;
-        }
-        current.push(character);
-        current_width += character_width;
-    }
-    rows.push(current);
-    rows
-}
-
 fn fit_tail(text: &str, budget: usize) -> String {
     if display_width(text) <= budget {
         return text.to_string();
@@ -283,22 +238,18 @@ fn fit_tail(text: &str, budget: usize) -> String {
         return String::new();
     }
 
-    let mut tail = String::new();
-    let mut used = 0_usize;
-    for character in text.chars().rev() {
-        let width = char_width(character);
+    let mut tail = Vec::new();
+    let mut used = 0;
+    for grapheme in text.graphemes(true).rev() {
+        let width = grapheme.width();
         if used + width > budget.saturating_sub(1) {
             break;
         }
-        tail.push(character);
+        tail.push(grapheme);
         used += width;
     }
-    let tail: String = tail.chars().rev().collect();
-    format!("…{tail}")
-}
-
-fn char_width(character: char) -> usize {
-    UnicodeWidthChar::width(character).unwrap_or(0)
+    tail.reverse();
+    format!("…{}", tail.concat())
 }
 
 fn note(message: impl Into<String>) -> Row {
@@ -446,5 +397,34 @@ mod tests {
         assert_eq!(starts.len(), 2);
         assert_eq!(rows[starts[0]].text.split_whitespace().nth(1), Some("a.rs"));
         assert_eq!(rows[starts[1]].text.split_whitespace().nth(1), Some("b.rs"));
+    }
+
+    #[test]
+    fn preview_wraps_whole_emoji_and_combining_graphemes_under_the_gutter() {
+        let source = "👩‍💻e\u{301}中".repeat(40);
+        for width in [40, 41, 48, 79] {
+            let rows = preview("", &source, width);
+            let bodies: Vec<_> = rows
+                .iter()
+                .filter(|r| r.kind == RowKind::Add)
+                .map(|r| {
+                    r.text
+                        .split_once("│ ")
+                        .unwrap()
+                        .1
+                        .chars()
+                        .skip(2)
+                        .collect::<String>()
+                })
+                .collect();
+            assert_eq!(bodies.concat(), source);
+            assert!(rows.iter().all(|r| r.text.width() <= width));
+            for body in bodies {
+                assert!(body
+                    .graphemes(true)
+                    .all(|g| matches!(g, "👩‍💻" | "e\u{301}" | "中")));
+            }
+        }
+        assert_eq!(fit_tail("prefix👩‍💻e\u{301}", 4), "…👩‍💻e\u{301}");
     }
 }

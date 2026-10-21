@@ -6,6 +6,69 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
+#[test]
+fn exec_tool_allowlist_blocks_replayed_mutation() {
+    let directory = temp_dir("allowlist");
+    let work = directory.join("work");
+    fs::create_dir_all(&work).unwrap();
+    let replay = directory.join("fixture.json");
+    fs::write(
+        &replay,
+        serde_json::json!({
+            "schema_version": 1,
+            "turns": [
+                [
+                    {"type":"tool_call_delta","index":0,"id":"write-1","name":"write",
+                     "arguments":"{\"path\":\"forbidden.txt\",\"content\":\"unexpected\"}"},
+                    {"type":"done","finish_reason":"tool_calls"}
+                ],
+                [{"type":"text_delta","text":"finished"},{"type":"done","finish_reason":"stop"}]
+            ]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_niucode"))
+        .args([
+            "exec",
+            "try writing",
+            "--json",
+            "--tools",
+            "read,grep,glob",
+            "--replay",
+        ])
+        .arg(&replay)
+        .arg("--cwd")
+        .arg(&work)
+        .arg("--session-dir")
+        .arg(directory.join("sessions"))
+        .args([
+            "--approval",
+            "never",
+            "--sandbox",
+            "full-access",
+            "--network",
+            "on",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!work.join("forbidden.txt").exists());
+    let events: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(events
+        .iter()
+        .any(|v| v["type"] == "tool_result" && v["ok"] == false));
+    fs::remove_dir_all(directory).unwrap();
+}
+
 fn temp_dir(tag: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -129,4 +192,63 @@ fn exec_json_refuses_interactive_approval() {
     );
 
     fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[test]
+fn exec_json_reports_truncation_as_error_and_preserves_usage() {
+    let directory = temp_dir("length");
+    let fixture = directory.join("length.json");
+    fs::write(
+        &fixture,
+        serde_json::json!({
+            "schema_version": 1,
+            "turns": [[
+                {"type": "reasoning_delta", "text": "still working"},
+                {"type": "usage", "usage": {"input_tokens": 2969, "output_tokens": 8192,
+                    "cached_tokens": 1920, "reasoning_tokens": 8192}},
+                {"type": "done", "finish_reason": "length"}
+            ]]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_niucode"))
+        .args(["exec", "implement transpose", "--json", "--replay"])
+        .arg(&fixture)
+        .arg("--cwd")
+        .arg(&directory)
+        .arg("--session-dir")
+        .arg(directory.join("sessions"))
+        .args([
+            "--approval",
+            "never",
+            "--sandbox",
+            "full-access",
+            "--network",
+            "on",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let events: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(events.last().unwrap()["type"], "error");
+    assert!(events.last().unwrap()["message"]
+        .as_str()
+        .unwrap()
+        .contains("finish_reason=length"));
+    assert!(!events.iter().any(|e| e["type"] == "done"));
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "turn_end" && e["usage"]["output_tokens"] == 8192));
+    let session = events[0]["session"].as_str().unwrap();
+    let log = niucode_core::load(Path::new(session)).unwrap().events;
+    assert!(
+        matches!(log.last(), Some(niucode_core::Event::TaskFinished { status, .. }) if status == "error")
+    );
+    assert!(log.iter().any(|e| matches!(e, niucode_core::Event::TurnEnd { finish_reason: Some(reason), .. } if reason == "length")));
+    fs::remove_dir_all(directory).unwrap();
 }

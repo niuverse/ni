@@ -5,7 +5,6 @@
 //! directory; `write`/`edit` require the file to have been observed by `read`
 //! first.
 
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
@@ -18,12 +17,14 @@ use ignore::WalkBuilder;
 use niucode_provider::ToolSpec;
 use regex::Regex;
 use serde_json::{json, Value};
-use similar::TextDiff;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tokio::time::timeout;
 
+mod mutation;
 mod preview;
+pub use mutation::{digest, PreparedMutation};
+use niucode_core::{ExecutionEvidence, ProcessOutcome};
 
 pub use preview::{
     ChangePreview, FilePreview, LineKind, PreviewBody, PreviewHunk, PreviewLine,
@@ -109,9 +110,38 @@ pub fn sandbox_available() -> bool {
         .unwrap_or(false)
 }
 
+pub struct RecordedToolResult {
+    pub result: ToolResult,
+    pub evidence: ExecutionEvidence,
+}
+
+impl RecordedToolResult {
+    pub fn failed(error: anyhow::Error) -> Self {
+        Self::from_result(Err(error), ExecutionEvidence::default())
+    }
+    fn from_result(result: Result<String>, mut evidence: ExecutionEvidence) -> Self {
+        let result = match result {
+            Ok(output) => ToolResult {
+                ok: !matches!(evidence.process, Some(ProcessOutcome::TimedOut)),
+                output,
+            },
+            Err(error) => {
+                if let Some(conflict) = error.downcast_ref::<mutation::Conflict>() {
+                    evidence.conflict = Some(conflict.to_string());
+                }
+                ToolResult {
+                    ok: false,
+                    output: format!("error: {error:#}"),
+                }
+            }
+        };
+        Self { result, evidence }
+    }
+}
+
 pub struct Toolbox {
     cwd: PathBuf,
-    observed: Mutex<HashSet<PathBuf>>,
+    observed: Mutex<mutation::Observations>,
     policy: SandboxPolicy,
     allow_unsandboxed: bool,
     read_roots: Vec<PathBuf>,
@@ -149,7 +179,7 @@ impl Toolbox {
 
         Ok(Self {
             cwd,
-            observed: Mutex::new(HashSet::new()),
+            observed: Mutex::new(mutation::Observations::default()),
             policy,
             allow_unsandboxed,
             read_roots,
@@ -282,33 +312,47 @@ impl Toolbox {
     }
 
     pub async fn execute(&self, name: &str, input: &Value) -> ToolResult {
+        self.execute_recorded(name, input).await.result
+    }
+
+    pub async fn execute_recorded(&self, name: &str, input: &Value) -> RecordedToolResult {
+        let mut evidence = ExecutionEvidence::default();
         let result = match name {
             "read" => self.read(input),
-            "write" => self.write(input),
-            "edit" => self.edit(input),
+            "write" | "edit" => self.mutate(name, input).map(|(output, change)| {
+                evidence.change = Some(change);
+                output
+            }),
             "grep" => self.grep(input),
             "glob" => self.glob(input),
-            "bash" => self.bash(input).await,
+            "bash" => self.bash(input).await.map(|(output, process)| {
+                evidence.process = Some(process);
+                output
+            }),
             "subagent" => Err(anyhow::anyhow!(
                 "subagent is orchestrated by the agent loop"
             )),
             other => Err(anyhow::anyhow!("unknown tool {other:?}")),
         };
+        RecordedToolResult::from_result(result, evidence)
+    }
 
-        match result {
-            Ok(output) => ToolResult { ok: true, output },
-            Err(error) => ToolResult {
-                ok: false,
-                output: format!("error: {error:#}"),
-            },
-        }
+    pub fn execute_prepared(&self, prepared: PreparedMutation) -> RecordedToolResult {
+        let mut evidence = ExecutionEvidence::default();
+        let result = self.apply_mutation(prepared).map(|(output, change)| {
+            evidence.change = Some(change);
+            output
+        });
+        RecordedToolResult::from_result(result, evidence)
     }
 
     fn read(&self, input: &Value) -> Result<String> {
         let path = self.resolve_existing_read(input_string(input, "path")?)?;
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("read {}", self.display_path(&path)))?;
-        self.mark_observed(&path);
+        let mut file =
+            fs::File::open(&path).with_context(|| format!("read {}", self.display_path(&path)))?;
+        let metadata = file.metadata()?;
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut file, &mut text)?;
 
         let offset = input
             .get("offset")
@@ -345,92 +389,20 @@ impl Toolbox {
             ));
         }
 
+        self.observed
+            .lock()
+            .map_err(|_| anyhow::anyhow!("observation lock poisoned"))?
+            .record(
+                self.candidate(input_string(input, "path")?),
+                path.clone(),
+                &text,
+                &metadata,
+                start..start + shown,
+            );
         Ok(output)
     }
 
-    fn write(&self, input: &Value) -> Result<String> {
-        if self.policy.mode == SandboxMode::ReadOnly {
-            bail!("sandbox is read-only; cannot write files");
-        }
-        let path = self.resolve_for_write(input_string(input, "path")?)?;
-        let content = input_string(input, "content")?;
-
-        if path.exists() {
-            if path.is_dir() {
-                bail!("{} is a directory", self.display_path(&path));
-            }
-            if !self.is_observed(&path) {
-                bail!("read {} before writing it", self.display_path(&path));
-            }
-        }
-
-        let parent = path.parent().context("path has no parent")?;
-        if !parent.exists() {
-            bail!(
-                "parent directory does not exist: {}",
-                self.display_path(parent)
-            );
-        }
-
-        fs::write(&path, content).with_context(|| format!("write {}", self.display_path(&path)))?;
-        self.mark_observed(&path);
-
-        Ok(format!(
-            "wrote {} bytes to {}",
-            content.len(),
-            self.display_path(&path)
-        ))
-    }
-
-    fn edit(&self, input: &Value) -> Result<String> {
-        if self.policy.mode == SandboxMode::ReadOnly {
-            bail!("sandbox is read-only; cannot edit files");
-        }
-        let path = self.resolve_existing(input_string(input, "path")?)?;
-        if !self.is_observed(&path) {
-            bail!("read {} before editing it", self.display_path(&path));
-        }
-
-        let old = input_string(input, "old")?;
-        let new = input_string(input, "new")?;
-        if old.is_empty() {
-            bail!("old string must not be empty");
-        }
-
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("read {}", self.display_path(&path)))?;
-        let matches = text.match_indices(old).count();
-        match matches {
-            0 => bail!("old string not found in {}", self.display_path(&path)),
-            1 => {}
-            count => bail!(
-                "old string is not unique in {} ({count} matches); include more context",
-                self.display_path(&path)
-            ),
-        }
-
-        let updated = text.replacen(old, new, 1);
-        fs::write(&path, &updated)
-            .with_context(|| format!("write {}", self.display_path(&path)))?;
-        self.mark_observed(&path);
-
-        let diff = TextDiff::from_lines(&text, &updated)
-            .unified_diff()
-            .context_radius(3)
-            .header("before", "after")
-            .to_string();
-        let preview: String = diff.chars().take(4_000).collect();
-
-        Ok(format!(
-            "edited {} (replaced {} bytes with {} bytes)\n{}",
-            self.display_path(&path),
-            old.len(),
-            new.len(),
-            preview
-        ))
-    }
-
-    async fn bash(&self, input: &Value) -> Result<String> {
+    async fn bash(&self, input: &Value) -> Result<(String, ProcessOutcome)> {
         let command = input_string(input, "command")?;
         if command.trim().is_empty() {
             bail!("command must not be empty");
@@ -458,29 +430,44 @@ impl Toolbox {
 
         let stdout = child.stdout.take().context("take stdout")?;
         let stderr = child.stderr.take().context("take stderr")?;
-        let stdout_task = tokio::spawn(read_capped(stdout, BASH_CAPTURE_BYTES));
-        let stderr_task = tokio::spawn(read_capped(stderr, BASH_CAPTURE_BYTES));
-
-        let status = match timeout(Duration::from_secs(timeout_secs), child.wait()).await {
-            Ok(result) => result.context("wait for bash")?,
+        let capture = timeout(Duration::from_secs(timeout_secs), async {
+            tokio::try_join!(
+                async {
+                    let status = child.wait().await?;
+                    // Descendants must not keep output pipes or survive this call.
+                    kill_group(pid);
+                    Ok::<_, std::io::Error>(status)
+                },
+                read_capped(stdout, BASH_CAPTURE_BYTES),
+                read_capped(stderr, BASH_CAPTURE_BYTES),
+            )
+        })
+        .await;
+        let (status, (stdout, stdout_truncated), (stderr, stderr_truncated)) = match capture {
+            Ok(result) => result.context("capture bash output")?,
             Err(_) => {
                 kill_group(pid);
                 let _ = child.kill().await;
                 let _ = child.wait().await;
-                let _ = stdout_task.await;
-                let _ = stderr_task.await;
-                bail!("command timed out after {timeout_secs}s");
+                return Ok((
+                    format!("command timed out after {timeout_secs}s"),
+                    ProcessOutcome::TimedOut,
+                ));
             }
         };
-
-        let (stdout, stdout_truncated) = stdout_task
-            .await
-            .context("join stdout")?
-            .context("read stdout")?;
-        let (stderr, stderr_truncated) = stderr_task
-            .await
-            .context("join stderr")?
-            .context("read stderr")?;
+        let process = match status.code() {
+            Some(code) => ProcessOutcome::Exited { code },
+            None => {
+                #[cfg(unix)]
+                let signal = {
+                    use std::os::unix::process::ExitStatusExt;
+                    status.signal()
+                };
+                #[cfg(not(unix))]
+                let signal = None;
+                ProcessOutcome::Signaled { signal }
+            }
+        };
 
         let mut combined = String::new();
         if !stdout.is_empty() {
@@ -513,13 +500,16 @@ impl Toolbox {
             } else {
                 "full output"
             };
-            return Ok(format!(
-                "exit: {status}\n{body}\n... ({qualifier}: {})\n",
-                path.display()
+            return Ok((
+                format!(
+                    "exit: {status}\n{body}\n... ({qualifier}: {})\n",
+                    path.display()
+                ),
+                process,
             ));
         }
 
-        Ok(format!("exit: {status}\n{combined}"))
+        Ok((format!("exit: {status}\n{combined}"), process))
     }
 
     fn bash_command(&self, command: &str) -> Result<Command> {
@@ -698,17 +688,6 @@ impl Toolbox {
         Ok(paths.join("\n"))
     }
 
-    fn mark_observed(&self, path: &Path) {
-        self.observed
-            .lock()
-            .expect("observed lock")
-            .insert(path.to_path_buf());
-    }
-
-    fn is_observed(&self, path: &Path) -> bool {
-        self.observed.lock().expect("observed lock").contains(path)
-    }
-
     fn resolve_existing_read(&self, raw: &str) -> Result<PathBuf> {
         let candidate = self.candidate(raw);
         let canonical = candidate
@@ -781,12 +760,14 @@ impl Toolbox {
     }
 }
 
-struct ProcessGroupGuard {
+/// Kills a child process group on completion or cancellation.
+/// The child must be spawned with `process_group(0)` on Unix.
+pub struct ProcessGroupGuard {
     pid: u32,
 }
 
 impl ProcessGroupGuard {
-    fn new(pid: u32) -> Self {
+    pub fn new(pid: u32) -> Self {
         Self { pid }
     }
 }
@@ -943,7 +924,7 @@ mod tests {
             .execute("write", &json!({"path": "a.txt", "content": "new"}))
             .await;
         assert!(!rejected.ok);
-        assert!(rejected.output.contains("read a.txt"));
+        assert!(rejected.output.contains("read ") && rejected.output.contains("a.txt"));
 
         let read = tools.execute("read", &json!({"path": "a.txt"})).await;
         assert!(read.ok);

@@ -6,5 +6,8 @@
 pub mod event;
 pub mod session;
 
-pub use event::{now_ms, Event, EventId, Timestamp, ToolCall, Usage};
+pub use event::{
+    now_ms, Event, EventId, ExecutionEvidence, FileChange, FileSnapshot, ProcessOutcome, Timestamp,
+    ToolCall, Usage, WorkspaceSnapshot,
+};
 pub use session::{load, LoadedSession, SessionLog};

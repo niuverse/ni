@@ -1,8 +1,10 @@
 //! Read-only parallel subagents with independent session logs.
 
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::process::Command;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 
 use anyhow::{bail, Context, Result};
 use futures_util::future::join_all;
@@ -57,7 +59,7 @@ struct SubagentOutcome {
 /// Execute the `subagent` tool. Errors become an ordinary failed tool result.
 pub async fn run_tool(
     provider: &dyn Provider,
-    parent_session: &mut SessionLog,
+    parent_session: &SessionLog,
     parent_config: &AgentConfig,
     call: &ToolCall,
 ) -> ToolResult {
@@ -78,7 +80,7 @@ pub async fn run_tool(
 
 async fn run_tasks(
     provider: &dyn Provider,
-    parent_session: &mut SessionLog,
+    parent_session: &SessionLog,
     parent_config: &AgentConfig,
     call: &ToolCall,
 ) -> Result<Vec<SubagentOutcome>> {
@@ -106,23 +108,18 @@ async fn run_tasks(
         let id = format!("{}.{}", call.id, index + 1);
         let mut config = subagent_config(parent_config, &task);
         let worktree = if task.worktree {
-            match Worktree::create(parent_config, &id) {
+            match Worktree::create(parent_config, &id).await {
                 Some(worktree) => {
                     config.working_dir = worktree.path.clone();
                     config.write_lock = None;
                     Some(worktree)
                 }
-                None => {
-                    eprintln!(
-                        "warning: worktree unavailable; worker {id} uses the shared workspace"
-                    );
-                    None
-                }
+                None => None,
             }
         } else {
             None
         };
-        let mut session = SessionLog::create(&directory)?;
+        let session = SessionLog::create(&directory)?;
         session.append(&Event::SessionStart {
             id: id.clone(),
             cwd: parent_config.working_dir.display().to_string(),
@@ -154,6 +151,7 @@ async fn run_tasks(
 
     let futures = jobs.into_iter().map(
         |(id, task, mut session, session_path, config, worktree)| async move {
+            let fallback = task.worktree && worktree.is_none();
             let timeout_secs = task.timeout_secs;
             let result = tokio::time::timeout(
                 Duration::from_secs(timeout_secs),
@@ -190,14 +188,30 @@ async fn run_tasks(
                 }
             };
 
-            let patch = worktree.and_then(Worktree::finish);
+            let retained = worktree.as_ref().map(|tree| tree.path.clone());
+            let patch = match worktree {
+                Some(tree) => tree.finish().await,
+                None => None,
+            };
             let summary = match patch {
                 Some(patch) => format!(
                     "worktree patch: {}\n\n{}",
                     patch.display(),
                     summarize(&summary)
                 ),
-                None => summarize(&summary),
+                None => match retained.filter(|path| path.exists()) {
+                    Some(path) => format!(
+                        "worktree retained for inspection: {}\n{}",
+                        path.display(),
+                        summarize(&summary)
+                    ),
+                    None => summarize(&summary),
+                },
+            };
+            let summary = if fallback {
+                format!("worktree unavailable; shared workspace used\n{summary}")
+            } else {
+                summary
             };
             (id, task.prompt, session_path, ok, summary, turns, usage)
         },
@@ -232,66 +246,98 @@ struct Worktree {
 }
 
 impl Worktree {
-    fn create(parent: &AgentConfig, id: &str) -> Option<Self> {
+    async fn create(parent: &AgentConfig, id: &str) -> Option<Self> {
         let root = parent.worktree_root.as_ref()?;
-        std::fs::create_dir_all(root).ok()?;
-        let repo = git_output(&parent.working_dir, &["rev-parse", "--show-toplevel"])?;
-        let repo = PathBuf::from(repo.trim());
-        let path = root.join(format!("{}-{}", id.replace('/', "_"), std::process::id()));
-        let patch = root.join(format!("{}.patch", id.replace('/', "_")));
-        let _ = std::fs::remove_dir_all(&path);
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&repo)
-            .args(["worktree", "add", "--detach"])
-            .arg(&path)
-            .arg("HEAD")
-            .status()
-            .ok()?;
-        if !status.success() {
+        tokio::fs::create_dir_all(root).await.ok()?;
+        let repo = git_output(
+            &parent.working_dir,
+            &["rev-parse".as_ref(), "--show-toplevel".as_ref()],
+        )
+        .await?;
+        let repo = PathBuf::from(String::from_utf8(repo).ok()?.trim());
+        // Never remove a previous interrupted worker to reuse its name.
+        let name = format!(
+            "{}-{}-{}",
+            id.replace('/', "_"),
+            std::process::id(),
+            now_ms()
+        );
+        let path = root.join(&name);
+        if path.exists() {
             return None;
         }
+        let patch = root.join(format!("{name}.patch"));
+        git_output(
+            &repo,
+            &[
+                "worktree".as_ref(),
+                "add".as_ref(),
+                "--detach".as_ref(),
+                path.as_os_str(),
+                "HEAD".as_ref(),
+            ],
+        )
+        .await?;
         Some(Self { path, repo, patch })
     }
 
-    fn finish(self) -> Option<PathBuf> {
-        let _ = Command::new("git")
-            .arg("-C")
-            .arg(&self.path)
-            .args(["add", "-N", "."])
-            .status();
-        let diff = Command::new("git")
-            .arg("-C")
-            .arg(&self.path)
-            .args(["diff", "--binary", "--no-color"])
-            .output()
-            .ok()?;
-        let _ = Command::new("git")
-            .arg("-C")
-            .arg(&self.repo)
-            .args(["worktree", "remove", "--force"])
-            .arg(&self.path)
-            .status();
-        let _ = std::fs::remove_dir_all(&self.path);
-        if !diff.status.success() || diff.stdout.is_empty() {
-            return None;
+    async fn finish(self) -> Option<PathBuf> {
+        git_output(&self.path, &["add".as_ref(), "-N".as_ref(), ".".as_ref()]).await?;
+        let diff = git_output(
+            &self.path,
+            &["diff".as_ref(), "--binary".as_ref(), "--no-color".as_ref()],
+        )
+        .await?;
+        // Persist the patch before removing the worktree. Failure/cancellation
+        // leaves the directory available for inspection, never silently erased.
+        if !diff.is_empty() {
+            tokio::fs::write(&self.patch, &diff).await.ok()?;
         }
-        std::fs::write(&self.patch, diff.stdout).ok()?;
-        Some(self.patch)
+        git_output(
+            &self.repo,
+            &[
+                "worktree".as_ref(),
+                "remove".as_ref(),
+                "--force".as_ref(),
+                self.path.as_os_str(),
+            ],
+        )
+        .await?;
+        (!diff.is_empty()).then_some(self.patch)
     }
 }
 
-fn git_output(directory: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(directory)
-        .args(args)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout).ok()
+async fn git_output(directory: &Path, args: &[&std::ffi::OsStr]) -> Option<Vec<u8>> {
+    let operation = async {
+        let mut command = tokio::process::Command::new("git");
+        command
+            .arg("-C")
+            .arg(directory)
+            .args(args)
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        #[cfg(unix)]
+        command.process_group(0);
+        let mut child = command.spawn().ok()?;
+        let _group = niucode_tools::ProcessGroupGuard::new(child.id()?);
+        let mut bytes = Vec::new();
+        child
+            .stdout
+            .take()?
+            .take(8 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .ok()?;
+        if bytes.len() > 8 * 1024 * 1024 || !child.wait().await.ok()?.success() {
+            return None;
+        }
+        Some(bytes)
+    };
+    tokio::time::timeout(Duration::from_secs(30), operation)
+        .await
+        .ok()
+        .flatten()
 }
 
 fn parse_tasks(input: &Value) -> Result<Vec<TaskSpec>> {
@@ -565,9 +611,9 @@ mod worktree_tests {
             .arg("-C")
             .arg(directory)
             .args(args)
-            .status()
+            .output()
             .expect("git");
-        assert!(status.success(), "git {args:?}");
+        assert!(status.status.success(), "git {args:?}");
     }
 
     fn repo(tag: &str) -> (PathBuf, AgentConfig) {
@@ -587,16 +633,20 @@ mod worktree_tests {
         (directory, config)
     }
 
-    #[test]
-    fn two_workers_get_independent_worktrees_and_patches() {
+    #[tokio::test]
+    async fn two_workers_get_independent_worktrees_and_patches() {
         let (directory, config) = repo("two");
-        let first = Worktree::create(&config, "worker-a").expect("first worktree");
-        let second = Worktree::create(&config, "worker-b").expect("second worktree");
+        let first = Worktree::create(&config, "worker-a")
+            .await
+            .expect("first worktree");
+        let second = Worktree::create(&config, "worker-b")
+            .await
+            .expect("second worktree");
         assert_ne!(first.path, second.path);
         std::fs::write(first.path.join("file.txt"), "first\n").expect("first write");
         std::fs::write(second.path.join("file.txt"), "second\n").expect("second write");
-        let first_patch = first.finish().expect("first patch");
-        let second_patch = second.finish().expect("second patch");
+        let first_patch = first.finish().await.expect("first patch");
+        let second_patch = second.finish().await.expect("second patch");
         assert!(std::fs::read_to_string(first_patch)
             .expect("first patch text")
             .contains("first"));
@@ -611,12 +661,12 @@ mod worktree_tests {
         let _ = std::fs::remove_dir_all(directory);
     }
 
-    #[test]
-    fn non_git_workspace_falls_back_to_shared_workdir() {
+    #[tokio::test]
+    async fn non_git_workspace_falls_back_to_shared_workdir() {
         let directory = temp_dir("non-git");
         let mut config = AgentConfig::new("test", directory.clone());
         config.worktree_root = Some(directory.join("worktrees"));
-        assert!(Worktree::create(&config, "fallback").is_none());
+        assert!(Worktree::create(&config, "fallback").await.is_none());
         std::fs::remove_dir_all(directory).expect("cleanup");
     }
 }
