@@ -119,7 +119,7 @@ def bulk(binary, count=100):
                 "arguments":json.dumps({"path":f"file-{i:03}","content":f"body {i}\n"})} for i in range(count)]
         fixture=root/"fixture.json"
         fixture.write_text(json.dumps({"schema_version":1,"turns":[calls,[{"type":"text_delta","text":"BULK_SENTINEL\n"}]]}))
-        terminal=Terminal(binary,root,args=["--replay",str(fixture),"--sandbox","full-access","--approval","never"])
+        terminal=Terminal(binary,root,args=["--replay",str(fixture),"--sandbox","full-access","--network","on","--approval","never"])
         try:
             terminal.wait_for(b"\x1b[?2004h")
             terminal.transcript.clear();os.write(terminal.master,b"create fixture files\r")

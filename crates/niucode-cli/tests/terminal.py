@@ -162,7 +162,7 @@ def scenario(binary, inline, cancel):
                 pump(0.05)
             assert child.poll() == 0, "TUI did not exit cleanly"
             restored = termios.tcgetattr(slave)
-            assert restored == original, "terminal attributes were not restored"
+            assert restored == original, f"terminal attributes were not restored: {original!r} -> {restored!r}"
             assert b"\x1b[?2004l" in transcript and b"\x1b[?25h" in transcript
             assert b"\x1b[0 q" in transcript, "default cursor shape was not restored"
         finally:
