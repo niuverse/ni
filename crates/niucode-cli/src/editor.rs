@@ -791,7 +791,7 @@ impl State<'_> {
             write!(out, "{}", self.styled_prompt)?;
             write!(out, "{line}")?;
         }
-        writeln!(out)?;
+        write!(out, "\r\n")?;
         out.flush()
     }
 }
