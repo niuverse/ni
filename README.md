@@ -26,7 +26,7 @@ sidecar extension host are landing incrementally; M4-002 loads local
 
 ## Quick start
 
-Requires Rust 1.85+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
+Requires Rust 1.88+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
 cargo run -p niucode                 # start the TUI (no subcommand needed)
