@@ -31,7 +31,8 @@ docs = ["adr-0025"]
 - CLI、agent 与 subagent 的真实 sidecar 场景都限定到 Linux；其余 agent 回归保留跨平台执行。
 - PTY 测试使用独立会话中的 stdin 终端，不调用 `TIOCSCTTY`，以便 macOS 在子进程退出后
   仍可读取并核对恢复的 termios。异常清理先关闭 PTY，再有界等待回收子进程。
-- CI 即时打印测试失败，并给测试步骤设置 5 分钟超时，避免一个挂起场景隐藏其他失败。
+- CI 即时打印测试失败，继续执行其他测试目标，并给测试步骤设置 5 分钟超时，避免一个挂起场景隐藏其他失败。
+- 批量写入 fixture 显式采用 `full-access / network on / approval never`，不依赖 bwrap 执行断网。
 
 ADR-0025 的强制隔离不变；不提供无沙箱降级，不修改 benchmark 冻结输入或证据。
 CI 的 macOS PTY 回归仍保留，不代替真实终端验收。
@@ -47,6 +48,13 @@ CI 配置采用仅影响当前 VM 的 sysctl，不写系统持久配置。
 暴露 macOS PTY 测试壳的问题：退出后 `tcgetattr(slave)` 返回 ENOTTY，volume 场景
 异常清理停在 `Terminal.close()` 的 `child.wait()`。临时 faulthandler 取得调用栈后移除，
 保留原有终端属性恢复、取消、详情和输出量断言。Linux 同轮全部检查通过。
+
+[run 39579150782](https://github.com/niuverse/niucode/actions/runs/39579150782)
+确认恢复后的 termios 仅 `c_lflag` 从 1483 变为 536872395，差值为 `PENDIN`（0x20000000）。
+[XNU tty.c](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/tty.c)
+在重新启用 ICANON 时主动设置该 pending-input 状态位，并在下一次输入处理中清除。
+常规 PTY 和压力脚本共用恢复断言：macOS 仅排除此内核状态位，所有模式、速率和控制字符
+仍须一致；其他平台继续完整比较。不改生产代码来清除一个正常的内核状态。
 
 ## 验收
 

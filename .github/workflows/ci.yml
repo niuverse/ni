@@ -28,7 +28,7 @@ jobs:
           bwrap --ro-bind / / --unshare-pid --unshare-ipc --unshare-uts --unshare-net -- /usr/bin/true
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace -- --nocapture
+      - run: cargo test --workspace --no-fail-fast -- --nocapture
         timeout-minutes: 5
       - run: python3 -m unittest discover -s benchmarks -p 'test_*.py'
       - run: python3 benchmarks/bench.py validate

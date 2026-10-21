@@ -79,6 +79,15 @@ class Terminal:
         return [json.loads(line) for path in (self.root / "sessions").glob("*.jsonl")
                 for line in path.read_text().splitlines() if line]
 
+    def assert_restored(self):
+        expected, restored = self.original.copy(), termios.tcgetattr(self.slave)
+        if sys.platform == "darwin":
+            # XNU sets PENDIN when ICANON is restored. It is pending-input state,
+            # not a mode the application failed to restore (M6-019).
+            expected[3] &= ~termios.PENDIN
+            restored[3] &= ~termios.PENDIN
+        assert restored == expected, f"terminal attributes were not restored: {expected!r} -> {restored!r}"
+
     def close(self):
         if self.child.poll() is None:
             self.child.kill()
@@ -102,7 +111,7 @@ def scenario(binary, inline, cancel):
         ]}))
         terminal = Terminal(binary, root, inline, ["--replay", str(fixture), "--approval", "ask"])
         master, slave, child = terminal.master, terminal.slave, terminal.child
-        original, transcript = terminal.original, terminal.transcript
+        transcript = terminal.transcript
         pump, wait_for = terminal.pump, terminal.wait_for
         wait_for_cursor, events = terminal.wait_for_cursor, terminal.events
 
@@ -161,8 +170,7 @@ def scenario(binary, inline, cancel):
             while child.poll() is None and time.monotonic() < deadline:
                 pump(0.05)
             assert child.poll() == 0, "TUI did not exit cleanly"
-            restored = termios.tcgetattr(slave)
-            assert restored == original, f"terminal attributes were not restored: {original!r} -> {restored!r}"
+            terminal.assert_restored()
             assert b"\x1b[?2004l" in transcript and b"\x1b[?25h" in transcript
             assert b"\x1b[0 q" in transcript, "default cursor shape was not restored"
         finally:

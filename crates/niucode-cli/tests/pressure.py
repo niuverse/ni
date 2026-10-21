@@ -8,7 +8,6 @@ import sys
 import tempfile
 import threading
 import time
-import termios
 from terminal import Terminal
 
 
@@ -89,7 +88,7 @@ def run(binary, duration):
             os.write(terminal.master,b"\x04")
             terminal.child.wait(timeout=5)
             assert terminal.child.returncode==0
-            assert termios.tcgetattr(terminal.slave)==terminal.original
+            terminal.assert_restored()
             report={"duration_s":round(time.monotonic()-started,2),"cancel_ms":round(cancel_ms,2),
                     "requests_to_local_fixture":len(requests),"detail_visits":views,"output_bytes":total_bytes,
                     "rss_kib_first":rss[0] if rss else None,"rss_kib_last":rss[-1] if rss else None,
