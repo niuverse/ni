@@ -41,7 +41,9 @@ tempfile = "3"
 serde_json = "1.0"
 thiserror = "2.0"
 tokio-util = { version = "0.7", features = ["codec", "io-util"] }
-tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "process", "signal", "fs"] }
+# M6-018: 1.54.0 drops elapsed interval timers without driver synchronization.
+# Keep pinned until a fixed release passes the timer and repeated TUI regressions.
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "process", "signal", "fs"] }
 toml = "0.8"
 unicode-width = "0.2"
 unicode-segmentation = "1.12"
