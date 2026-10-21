@@ -831,15 +831,10 @@ async fn run_tui(
         context_budget
     };
     let preset = parse_provider(&preset)?;
-    let (provider, model, _auth_source, provider_factory) = if let Some(path) = &replay {
+    let (provider, model, provider_factory) = if let Some(path) = &replay {
         let provider = ReplayProvider::load(path)?;
         let model = model.unwrap_or_else(|| "replay".into());
-        (
-            Arc::new(provider) as Arc<dyn Provider>,
-            model,
-            "replay".into(),
-            None,
-        )
+        (Arc::new(provider) as Arc<dyn Provider>, model, None)
     } else {
         let factory = ProviderFactory::new(no_thinking, None)?;
         let mut provider_id = preset.as_str().to_string();
@@ -851,10 +846,7 @@ async fn run_tui(
             model = selection.model;
         }
         let provider = factory.build(&provider_id, &model)?;
-        let auth_source = factory
-            .auth_source(&provider_id)?
-            .unwrap_or_else(|| "unknown".into());
-        (provider, model, auth_source, Some(factory))
+        (provider, model, Some(factory))
     };
 
     let context_budget_auto = context_budget == 0;
@@ -1070,14 +1062,13 @@ async fn run_exec(
         context_budget
     };
     let preset = parse_provider(&preset)?;
-    let (provider, model, auth_source, _provider_factory) = if let Some(path) = &replay {
+    let (provider, model, auth_source) = if let Some(path) = &replay {
         let provider = ReplayProvider::load(path)?;
         let model = model.unwrap_or_else(|| "replay".into());
         (
             Arc::new(provider) as Arc<dyn Provider>,
             model,
             "replay".into(),
-            None,
         )
     } else {
         let factory = ProviderFactory::new(no_thinking, record.clone())?;
@@ -1096,14 +1087,7 @@ async fn run_exec(
         let auth_source = factory
             .auth_source(&provider_id)?
             .unwrap_or_else(|| "unknown".into());
-        (provider, model, auth_source, Some(factory))
-    };
-
-    let context_budget_auto = context_budget == 0;
-    let context_budget = if context_budget_auto {
-        niucode_provider::derived_context_budget(provider.name(), &model)
-    } else {
-        context_budget
+        (provider, model, auth_source)
     };
 
     let context_budget_auto = context_budget == 0;
