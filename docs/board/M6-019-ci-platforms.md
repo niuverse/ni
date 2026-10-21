@@ -1,12 +1,13 @@
 +++
 id = "M6-019"
 title = "Restore Linux and macOS CI with explicit sandbox prerequisites"
-status = "review"
+status = "done"
 milestone = "M6"
 module = "extensions"
 size = "S"
 priority = "P1"
 updated = "2026-10-21"
+completed = "2026-10-21"
 depends_on = ["M4-007"]
 docs = ["adr-0025"]
 +++
@@ -67,4 +68,13 @@ CI 配置采用仅影响当前 VM 的 sysctl，不写系统持久配置。
 ## 验收
 
 - [x] workspace tests、fmt、clippy、benchmark 离线验证与 dashboard check 通过。
-- [ ] 修复提交在 GitHub Actions 的 Linux/macOS matrix 全部通过。
+- [x] 修复提交在 GitHub Actions 的 Linux/macOS matrix 全部通过。
+
+## 验证结果
+
+[修复验证 run 39579988488](https://github.com/niuverse/niucode/actions/runs/39579988488)
+对应 `a8de6ee`，Linux/macOS 两个 job 均成功。Linux 212 项、macOS 199 项 Rust 测试通过；
+平台差异来自 Linux namespace 等专属测试。两平台 fmt、clippy、5 项 Python 单测、8 个
+合成任务自检、4 个 Polyglot 自检和 dashboard check 全部通过。
+本地额外验证强制关闭 PTY 可回收子进程、关闭两个描述符，以及 5 秒 SSE/慢读/取消场景。
+原 benchmark 目录、依赖锁和 Tokio pin 均未改动；真实终端验收 gate 保持原状态。
