@@ -146,7 +146,7 @@ def bulk(binary, count=100):
 
 if __name__ == "__main__":
     # Temporary CI diagnostic for the macOS PTY stall (M6-019).
-    faulthandler.dump_traceback_later(30, repeat=True)
+    faulthandler.dump_traceback_later(30, exit=True)
     run(str(Path(sys.argv[1]).resolve()),int(sys.argv[2]) if len(sys.argv)>2 else 3)
     if len(sys.argv)<=2:
         bulk(str(Path(sys.argv[1]).resolve()))
