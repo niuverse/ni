@@ -151,6 +151,7 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::SubagentSpawn { .. }
             | Event::SubagentResult { .. }
             | Event::PlanMode { .. }
+            | Event::Verification { .. }
             | Event::GoalSet { .. }
             | Event::GoalCleared { .. }
             | Event::GoalVerdict { .. }

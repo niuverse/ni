@@ -231,6 +231,15 @@ pub enum Event {
         active: bool,
         ts: Timestamp,
     },
+    /// A human-run verification command and its recorded result.
+    Verification {
+        command: String,
+        ok: bool,
+        /// Bounded stdout/stderr tail; never the full output.
+        #[serde(default)]
+        output: String,
+        ts: Timestamp,
+    },
     /// Active session goal / completion condition.
     GoalSet {
         text: String,
@@ -360,6 +369,7 @@ impl Event {
             Self::SubagentSpawn { .. } => "subagent_spawn",
             Self::SubagentResult { .. } => "subagent_result",
             Self::PlanMode { .. } => "plan_mode",
+            Self::Verification { .. } => "verification",
             Self::GoalSet { .. } => "goal_set",
             Self::GoalCleared { .. } => "goal_cleared",
             Self::GoalVerdict { .. } => "goal_verdict",
@@ -395,6 +405,7 @@ impl Event {
             | Self::SubagentSpawn { ts, .. }
             | Self::SubagentResult { ts, .. }
             | Self::PlanMode { ts, .. }
+            | Self::Verification { ts, .. }
             | Self::GoalSet { ts, .. }
             | Self::GoalCleared { ts }
             | Self::GoalVerdict { ts, .. }
@@ -520,6 +531,26 @@ mod tests {
         };
         assert_eq!(event.kind(), "instructions");
         assert_eq!(event.ts(), 7);
+    }
+
+    #[test]
+    fn verification_event_roundtrips() {
+        let event = Event::Verification {
+            command: "cargo test".into(),
+            ok: false,
+            output: "one failure".into(),
+            ts: 11,
+        };
+        assert_eq!(event.kind(), "verification");
+        assert_eq!(event.ts(), 11);
+        let encoded = serde_json::to_value(&event).unwrap();
+        assert_eq!(encoded["type"], "verification");
+        let decoded: Event = serde_json::from_value(encoded).unwrap();
+        assert!(matches!(
+            decoded,
+            Event::Verification { command, ok: false, output, ts: 11 }
+                if command == "cargo test" && output == "one failure"
+        ));
     }
 
     #[test]
