@@ -1478,6 +1478,7 @@ dependencies = [
  "ignore",
  "niucode-core",
  "niucode-extension",
+ "niucode-mcp",
  "niucode-provider",
  "niucode-tools",
  "serde_json",
@@ -1538,6 +1539,7 @@ name = "niucode-mcp"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "niucode-provider",
  "serde",
  "serde_json",
  "tempfile",

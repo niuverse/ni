@@ -32,7 +32,7 @@ integration each time.
 
 - [x] A Python stdio MCP server mounts, lists one tool, and is callable.
 - [x] A non-read-only manifest is refused before any turn.
-- [ ] A name collision is refused before any turn.
+- [x] A name collision is refused before any turn.
 - [x] Credentials from the parent environment do not reach the server.
 - [x] A hung server times out and is killed without stalling the session.
 - [ ] `exec --mcp-config` and the TUI mount the same host; `doctor` reports it.
@@ -40,7 +40,6 @@ integration each time.
 
 ## Notes
 
-Client crate and offline fixture are done. Remaining: load
-`~/.niucode/mcp.toml`, mount the host in `exec` and the TUI, expose namespaced
-specs to the agent loop, report mounts in `doctor`, and add the collision test
-at mount time. See ADR-0033 and [mcp](../mcp.md).
+Client, host, namespaced specs, collision check, and agent dispatch are done
+and tested. Remaining: load `~/.niucode/mcp.toml`, mount the host in `exec` and
+the TUI, and report mounts in `doctor`. See ADR-0033 and [mcp](../mcp.md).

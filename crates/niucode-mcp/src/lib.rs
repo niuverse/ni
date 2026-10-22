@@ -5,17 +5,19 @@
 //! It does not inherit the parent environment and never exposes a mutating
 //! tool surface.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use niucode_provider::ToolSpec;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -223,7 +225,7 @@ impl McpClient {
         Ok(McpCall { ok, output })
     }
 
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(&mut self) -> Result<()> {
         let _ = self.child.start_kill();
         let _ = self.child.wait().await;
         Ok(())
@@ -291,6 +293,118 @@ impl McpClient {
 impl Drop for McpClient {
     fn drop(&mut self) {
         let _ = self.child.start_kill();
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpMount {
+    pub server: String,
+    pub tools: Vec<String>,
+}
+
+struct HostTool {
+    server: usize,
+    tool: String,
+    spec: ToolSpec,
+}
+
+/// A set of mounted read-only MCP servers. Calls are serialized per server and
+/// may run in parallel across servers; the host owns the child processes.
+pub struct McpHost {
+    clients: Vec<Mutex<McpClient>>,
+    tools: Vec<HostTool>,
+    servers: Vec<String>,
+}
+
+impl McpHost {
+    pub async fn mount(servers: &[McpServerSpec], limit: Duration) -> Result<Self> {
+        let mut clients: Vec<Mutex<McpClient>> = Vec::new();
+        let mut tools = Vec::new();
+        let mut server_names: Vec<String> = Vec::new();
+        let mut names = HashSet::new();
+        for server in servers {
+            server.validate()?;
+            let mut client = McpClient::connect(server, limit).await?;
+            let listed = client.list_tools(limit).await?;
+            let server_index = clients.len();
+            for tool in listed {
+                let name = exposed_name(&server.name, &tool.name);
+                if !names.insert(name.clone()) {
+                    bail!("MCP tool name collision: {name}");
+                }
+                let description = if tool.description.is_empty() {
+                    format!("MCP tool {} from {}", tool.name, server.name)
+                } else {
+                    tool.description
+                };
+                let schema = if tool.input_schema.is_null() {
+                    json!({"type": "object"})
+                } else {
+                    tool.input_schema
+                };
+                tools.push(HostTool {
+                    server: server_index,
+                    tool: tool.name,
+                    spec: ToolSpec::function(name, description, schema),
+                });
+            }
+            clients.push(Mutex::new(client));
+            server_names.push(server.name.clone());
+        }
+        Ok(Self {
+            clients,
+            tools,
+            servers: server_names,
+        })
+    }
+
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        self.tools.iter().map(|tool| tool.spec.clone()).collect()
+    }
+
+    pub fn has_tool(&self, name: &str) -> bool {
+        self.tools
+            .iter()
+            .any(|tool| tool.spec.function.name == name)
+    }
+
+    pub fn mounts(&self) -> Vec<McpMount> {
+        let mut mounts: Vec<McpMount> = self
+            .servers
+            .iter()
+            .map(|server| McpMount {
+                server: server.clone(),
+                tools: Vec::new(),
+            })
+            .collect();
+        for tool in &self.tools {
+            if let Some(mount) = mounts.get_mut(tool.server) {
+                mount.tools.push(tool.spec.function.name.clone());
+            }
+        }
+        mounts
+    }
+
+    pub async fn call(&self, name: &str, arguments: Value, limit: Duration) -> Result<McpCall> {
+        let tool = self
+            .tools
+            .iter()
+            .find(|tool| tool.spec.function.name == name)
+            .with_context(|| format!("unknown MCP tool {name}"))?;
+        let client = self
+            .clients
+            .get(tool.server)
+            .with_context(|| format!("MCP server for {name} is not mounted"))?;
+        let mut client = client.lock().await;
+        client.call_tool(&tool.tool, arguments, limit).await
+    }
+
+    pub async fn shutdown(&self) -> Result<()> {
+        for client in &self.clients {
+            let mut client = client.lock().await;
+            client.shutdown().await?;
+        }
+        Ok(())
     }
 }
 

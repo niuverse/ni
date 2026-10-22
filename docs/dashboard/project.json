@@ -394,8 +394,8 @@
       "title": "MCP Client",
       "layer": "adapters",
       "status": "active",
-      "summary": "只读 MCP stdio v1：显式 mcp.toml、initialize/tools/list/tools/call、环境清洗、超时与进程组清理；尚未挂载进 session。",
-      "contract": "McpServerSpec::validate；McpClient::connect/list_tools/call_tool/shutdown；exposed_name 做命名空间。不拥有 loop 或事件日志。",
+      "summary": "只读 MCP stdio v1：显式 mcp.toml、initialize/tools/list/tools/call、多服务器 host、环境清洗、超时与进程组清理；AgentConfig 已可派发。",
+      "contract": "McpServerSpec::validate；McpClient::connect/list_tools/call_tool/shutdown；McpHost::mount/specs/has_tool/call/shutdown；exposed_name 做命名空间。不拥有 loop 或事件日志。",
       "paths": [
         "crates/niucode-mcp/src/lib.rs"
       ],

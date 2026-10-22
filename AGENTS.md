@@ -128,5 +128,6 @@ M6 remains active and real-terminal acceptance stays independent.
 
 M8 is in progress: ADR-0033 fixes a read-only stdio MCP client with an explicit
 `~/.niucode/mcp.toml` trust file, scrubbed environments, namespaced tools, and
-no resources/HTTP/mutating tools in v1. M8-001 has the client crate and offline
-fixture; session mounting and `doctor` are next.
+no resources/HTTP/mutating tools in v1. M8-001 now has the client, multi-server
+host, `AgentConfig.mcp_host` dispatch, and offline tests; loading the config
+into `exec`/the TUI and `doctor` are next.

@@ -37,6 +37,7 @@ const TOOL_OUTPUT_TAIL_BYTES: usize = 65_536;
 const RETRY_BASE_MS: u64 = 250;
 const MAX_RETRY_DELAY_SECS: u64 = 10;
 const UNBOUNDED_SAFETY_TURNS: usize = 256;
+const MCP_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 use context::non_empty;
 pub use context::{
@@ -111,6 +112,9 @@ pub struct AgentConfig {
     /// Read-only tools supplied by an embedder. Dispatched after built-ins and
     /// the extension host; not inherited by subagents.
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
+    /// Mounted read-only MCP servers. Dispatched after built-ins and the
+    /// extension host; not inherited by subagents.
+    pub mcp_host: Option<Arc<niucode_mcp::McpHost>>,
     /// Shared W1 write lock. Parent and Worker subagents use the same lock so
     /// mutating built-ins never race on one workspace.
     pub write_lock: Option<Arc<tokio::sync::Mutex<()>>>,
@@ -156,6 +160,7 @@ impl AgentConfig {
             goal: None,
             extension_host: None,
             extra_tools: Vec::new(),
+            mcp_host: None,
             write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
             read_roots: Vec::new(),
@@ -272,6 +277,20 @@ async fn run_engine(
     let mut tools = Toolbox::specs();
     if let Some(host) = &config.extension_host {
         tools.extend(host.specs());
+    }
+    if let Some(host) = &config.mcp_host {
+        for spec in host.specs() {
+            if tools
+                .iter()
+                .any(|existing| existing.function.name == spec.function.name)
+            {
+                bail!(
+                    "MCP tool {} collides with an existing tool",
+                    spec.function.name
+                );
+            }
+            tools.push(spec);
+        }
     }
     for tool in &config.extra_tools {
         let spec = tool.spec();
@@ -582,6 +601,27 @@ async fn run_engine(
                 };
                 io.wait(session, host.execute(&call.name, &call.input))
                     .await?
+            } else if let Some(host) = config
+                .mcp_host
+                .as_ref()
+                .filter(|host| host.has_tool(&call.name))
+            {
+                let result = io
+                    .wait(
+                        session,
+                        host.call(&call.name, call.input.clone(), MCP_CALL_TIMEOUT),
+                    )
+                    .await;
+                match result {
+                    Ok(Ok(call)) => ToolResult {
+                        ok: call.ok,
+                        output: call.output,
+                    },
+                    Ok(Err(error)) | Err(error) => ToolResult {
+                        ok: false,
+                        output: format!("mcp error: {error:#}"),
+                    },
+                }
             } else if let Some(tool) = config
                 .extra_tools
                 .iter()

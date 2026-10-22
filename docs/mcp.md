@@ -9,14 +9,16 @@ summary = "Read-only MCP v1: the client crate, manifest shape, security rules, a
 
 ## Status
 
-The `niucode-mcp` crate implements the v1 client from
-[ADR-0033](adr/0033-mcp-client.md): spawn, `initialize`, `tools/list`, and
-`tools/call` over newline-delimited JSON on stdio. It is covered offline by a
-Python fixture server, including list, call, tool error, environment scrubbing,
-and timeout.
+The `niucode-mcp` crate implements the v1 client and host from
+[ADR-0033](adr/0033-mcp-client.md): spawn, `initialize`, `tools/list`,
+`tools/call`, and a multi-server host over newline-delimited JSON on stdio.
+`AgentConfig.mcp_host` advertises namespaced specs and dispatches them in the
+turn loop. It is covered offline by a Python fixture server, including list,
+call, tool error, environment scrubbing, timeout, host mounting, collisions,
+and an agent turn.
 
-It is **not mounted into `exec` or the TUI yet**. The session host, `doctor`
-report, and config loading from `~/.niucode/mcp.toml` are the next card slice.
+It is **not mounted from `~/.niucode/mcp.toml` into `exec` or the TUI yet**.
+Config loading and the `doctor` report are the next card slice.
 
 ## Manifest
 
