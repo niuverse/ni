@@ -15,7 +15,7 @@ Accepted · 2026-10-22。来自 niuse 的嵌入需求；上游讨论见 [#1](htt
 
 第二步在 exec 路径落地：`run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` 会在构造 `AgentConfig` 后调用 `augment_system_prompt`，在运行时事件上调用 `on_event`，并在首个 turn 结束后调用 `on_turn_end`；集成测试用 replay fixture 断言三者都发生。
 
-TUI 路径已有 `TuiOptions` 与 `run_tui_with_hooks`，并在启动前调用 `augment_system_prompt`；TUI 的事件观察和 turn-end 调用尚未接线，renderer 迁移也尚未开始。
+TUI 路径已有 `TuiOptions` 与 `run_tui_with_hooks`，启动前调用 `augment_system_prompt`；TUI 循环与 live runner 通过共享的 `Rc<RefCell<Box<dyn TurnHooks>>>` 短借用，事件观察和 turn-end 均已接线。renderer 迁移尚未开始。
 
 ## 背景
 
@@ -68,7 +68,7 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
 
 ## 实施草图（第一步已落地）
 
-第一步不改变上面的决策，只把「接受之后第一小步做什么」拆到可评审的程度。`src/lib.rs` 现在承载 `run()`，`src/main.rs` 只剩 `#[tokio::main]` 封装；`TurnHooks` 的默认方法仍是空操作，exec 路径已经接线，TUI 路径尚未接入。
+第一步不改变上面的决策，只把「接受之后第一小步做什么」拆到可评审的程度。`src/lib.rs` 现在承载 `run()`，`src/main.rs` 只剩 `#[tokio::main]` 封装；`TurnHooks` 的默认方法仍是空操作，exec 与 TUI 路径都已接线，renderer 仍未迁移。
 
 ### 1. 结构
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- TUI hooks now cover prompt augmentation, runtime event observation, and turn-end through a shared hook cell; the renderer still lives in niuse.
+
 ## 0.1.1 — 2026-10-22
 
 Patch release for the inline TUI and the first TUI embedding entry.

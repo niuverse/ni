@@ -26,7 +26,7 @@ sidecar extension host are landing incrementally; M4-002 loads local
 
 ## Embedding
 
-`niucode-cli` builds a library as well as the binary. `run()` starts the normal CLI, `run_tui_with_hooks(TuiOptions, &mut TurnHooks)` starts the TUI with a prompt hook, and `run_exec_with_hooks(ExecOptions, &mut TurnHooks)` runs a one-shot task with prompt, event, and turn-end hooks. See [ADR-0032](docs/adr/0032-embedding-library-surface.md).
+`niucode-cli` builds a library as well as the binary. `run()` starts the normal CLI, `run_tui_with_hooks(TuiOptions, Box<dyn TurnHooks>)` runs the TUI with prompt, event, and turn-end hooks, and `run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` runs a one-shot task with the same three hooks. See [ADR-0032](docs/adr/0032-embedding-library-surface.md).
 
 ## Quick start
 

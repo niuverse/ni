@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -59,6 +60,10 @@ pub trait TurnHooks {
 pub struct NoHooks;
 
 impl TurnHooks for NoHooks {}
+
+/// Hooks shared by the TUI loop, the live runner, and the turn outcome.
+/// Borrows are taken only inside a call, never across an await.
+pub(crate) type SharedHooks = Rc<RefCell<Box<dyn TurnHooks>>>;
 
 /// Options for a one-shot (`exec`) run.
 #[derive(Debug, Clone)]
@@ -162,8 +167,8 @@ impl Default for TuiOptions {
 
 /// Run the TUI with embedder hooks. The prompt hook is applied once before
 /// the TUI starts; event and turn-end hooks are not wired on this path yet.
-pub async fn run_tui_with_hooks(options: TuiOptions, hooks: &mut dyn TurnHooks) -> Result<()> {
-    run_tui(options, Some(hooks)).await
+pub async fn run_tui_with_hooks(options: TuiOptions, hooks: Box<dyn TurnHooks>) -> Result<()> {
+    run_tui(options, Some(Rc::new(RefCell::new(hooks)))).await
 }
 
 #[derive(Debug, Parser)]
@@ -888,7 +893,7 @@ fn run_fork(path: PathBuf, at: String, session_dir: Option<PathBuf>) -> Result<(
     Ok(())
 }
 
-async fn run_tui(options: TuiOptions, mut hooks: Option<&mut dyn TurnHooks>) -> Result<()> {
+async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> {
     let TuiOptions {
         preset,
         model,
@@ -1049,8 +1054,10 @@ async fn run_tui(options: TuiOptions, mut hooks: Option<&mut dyn TurnHooks>) -> 
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
-    if let Some(hooks) = hooks.as_mut() {
-        hooks.augment_system_prompt(&mut agent_config.system_prompt);
+    if let Some(hooks) = hooks.as_ref() {
+        hooks
+            .borrow_mut()
+            .augment_system_prompt(&mut agent_config.system_prompt);
     }
 
     let theme = Theme::detect_stdout();
@@ -1080,6 +1087,7 @@ async fn run_tui(options: TuiOptions, mut hooks: Option<&mut dyn TurnHooks>) -> 
         &mut session,
         &agent_config,
         history,
+        hooks,
     )
     .await;
     unmount_extensions(&extension_host, &mut session).await?;

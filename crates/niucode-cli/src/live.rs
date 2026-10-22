@@ -6,6 +6,7 @@ use crate::{
     terminal::{DetailScreen, TerminalSession},
     text_layout::wrap,
     theme::Theme,
+    SharedHooks,
 };
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -248,6 +249,7 @@ impl Transcript {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     provider: &dyn Provider,
     session: &SessionLog,
@@ -256,6 +258,7 @@ pub async fn run(
     history: Vec<ChatMessage>,
     editor: &mut LineEditor,
     allow_session: &mut bool,
+    hooks: Option<SharedHooks>,
 ) -> Result<RunOutcome> {
     let (mut client, endpoint) = runtime_channel();
     let mut terminal = editor.start(Theme::detect_stdout())?;
@@ -277,6 +280,11 @@ pub async fn run(
             // Drain events before accepting completion so final output is not lost.
             event = client.events.recv(), if !client.events.is_closed() || !client.events.is_empty() => {
                 if let Some(event) = event {
+                    if let RuntimeEvent::Agent(agent_event) = &event {
+                        if let Some(hooks) = &hooks {
+                            hooks.borrow_mut().on_event(agent_event);
+                        }
+                    }
                     match event {
                         RuntimeEvent::Agent(AgentEvent::TextDelta(text)) => {
                             status = "responding".into(); transcript.delta(&mut terminal, view.is_some(), &text)?;
@@ -416,7 +424,13 @@ pub async fn run(
         }
     }
     terminal.finish()?;
-    completed.expect("completed before exit")
+    let result = completed.expect("completed before exit");
+    if let Some(hooks) = &hooks {
+        if let Ok(outcome) = &result {
+            hooks.borrow_mut().on_turn_end(outcome);
+        }
+    }
+    result
 }
 
 fn send(client: &RuntimeClient, command: RuntimeCommand) -> Result<()> {

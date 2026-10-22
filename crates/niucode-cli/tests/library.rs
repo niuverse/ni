@@ -70,5 +70,6 @@ fn tui_options_have_safe_defaults() {
     assert_eq!(options.sandbox, "workspace-write");
     assert_eq!(options.approval, "on-failure");
     assert_eq!(options.context_budget, 0);
-    let _ = niucode::run_tui_with_hooks;
+    let _future = niucode::run_tui_with_hooks(TuiOptions::default(), Box::new(niucode::NoHooks));
+    drop(_future);
 }

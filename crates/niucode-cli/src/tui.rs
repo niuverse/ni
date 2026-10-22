@@ -39,6 +39,7 @@ use crate::slash::{
 use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
 use crate::workspace::Workspace;
+use crate::SharedHooks;
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
@@ -240,6 +241,7 @@ pub async fn run(
     session: &mut SessionLog,
     config: &AgentConfig,
     history: Vec<ChatMessage>,
+    hooks: Option<SharedHooks>,
 ) -> Result<()> {
     reset_terminal_modes();
     let out = Theme::detect_stdout();
@@ -423,6 +425,7 @@ pub async fn run(
                     history.clone(),
                     editor,
                     &mut allow_session,
+                    hooks.clone(),
                 )
                 .await,
             )
@@ -446,160 +449,174 @@ pub async fn run(
                 }
             };
 
-            let mut observer = |event: AgentEvent| match event {
-                AgentEvent::Phase(_) => {}
-                AgentEvent::TextDelta(delta) => {
-                    if delta.is_empty() {
-                        return;
-                    }
-                    if !text_started {
-                        if line_open {
-                            println!();
-                            line_open = false;
+            let hook_cell = hooks.clone();
+            let mut observer = |event: AgentEvent| {
+                if let Some(hooks) = &hook_cell {
+                    hooks.borrow_mut().on_event(&event);
+                }
+                match event {
+                    AgentEvent::Phase(_) => {}
+                    AgentEvent::TextDelta(delta) => {
+                        if delta.is_empty() {
+                            return;
                         }
+                        if !text_started {
+                            if line_open {
+                                println!();
+                                line_open = false;
+                            }
+                            if thinking {
+                                eprintln!();
+                                thinking = false;
+                            }
+                            flush_usage(err, &mut pending_usage, turn_no);
+                            print!("{} ", out.accent(theme::ASSISTANT));
+                            text_started = true;
+                            thinking = false;
+                        }
+                        print!("{delta}");
+                        let _ = std::io::stdout().flush();
+                        line_open = !delta.ends_with('\n');
+                    }
+                    AgentEvent::ReasoningDelta(delta) => {
+                        if delta.is_empty() {
+                            return;
+                        }
+                        if !thinking {
+                            if line_open {
+                                println!();
+                                line_open = false;
+                            }
+                            flush_usage(err, &mut pending_usage, turn_no);
+                            eprintln!("\r{}", err.dim(format!("{} thinking", theme::THINKING)));
+                            thinking = true;
+                        }
+                    }
+                    AgentEvent::ToolCall { name, input } => {
                         if thinking {
                             eprintln!();
                             thinking = false;
                         }
-                        flush_usage(err, &mut pending_usage, turn_no);
-                        print!("{} ", out.accent(theme::ASSISTANT));
-                        text_started = true;
-                        thinking = false;
-                    }
-                    print!("{delta}");
-                    let _ = std::io::stdout().flush();
-                    line_open = !delta.ends_with('\n');
-                }
-                AgentEvent::ReasoningDelta(delta) => {
-                    if delta.is_empty() {
-                        return;
-                    }
-                    if !thinking {
                         if line_open {
                             println!();
                             line_open = false;
                         }
+                        text_started = false;
+                        thinking = false;
+                        tools_pending += 1;
+                        let detail = compact_json(&input);
+                        let mut line = format!(
+                            "{} {}",
+                            err.paint(Tone::Magenta, theme::TOOL),
+                            err.paint(Tone::Bright, name)
+                        );
+                        if !detail.is_empty() {
+                            line.push(' ');
+                            line.push_str(&err.dim(detail));
+                        }
+                        eprintln!("{line}");
+                    }
+                    AgentEvent::ToolResult {
+                        name,
+                        ok,
+                        summary,
+                        output,
+                    } => {
+                        if thinking {
+                            eprintln!();
+                            thinking = false;
+                        }
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        text_started = false;
+                        thinking = false;
+                        render_tool_result(err, &name, ok, &summary, &output, &mut last_tool);
+                        tools_pending = tools_pending.saturating_sub(1);
+                        if tools_pending == 0 {
+                            flush_usage(err, &mut pending_usage, turn_no);
+                        }
+                    }
+                    AgentEvent::TurnEnd { usage } => {
+                        if thinking {
+                            eprintln!();
+                            thinking = false;
+                        }
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        text_started = false;
+                        thinking = false;
+                        turn_no += 1;
+                        pending_usage = Some(usage);
+                    }
+                    AgentEvent::Compaction {
+                        replaced_events,
+                        before_tokens,
+                        after_tokens,
+                    } => {
+                        if thinking {
+                            eprintln!();
+                            thinking = false;
+                        }
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        text_started = false;
                         flush_usage(err, &mut pending_usage, turn_no);
-                        eprintln!("\r{}", err.dim(format!("{} thinking", theme::THINKING)));
-                        thinking = true;
-                    }
-                }
-                AgentEvent::ToolCall { name, input } => {
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
-                    }
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    text_started = false;
-                    thinking = false;
-                    tools_pending += 1;
-                    let detail = compact_json(&input);
-                    let mut line = format!(
-                        "{} {}",
-                        err.paint(Tone::Magenta, theme::TOOL),
-                        err.paint(Tone::Bright, name)
-                    );
-                    if !detail.is_empty() {
-                        line.push(' ');
-                        line.push_str(&err.dim(detail));
-                    }
-                    eprintln!("{line}");
-                }
-                AgentEvent::ToolResult {
-                    name,
-                    ok,
-                    summary,
-                    output,
-                } => {
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
-                    }
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    text_started = false;
-                    thinking = false;
-                    render_tool_result(err, &name, ok, &summary, &output, &mut last_tool);
-                    tools_pending = tools_pending.saturating_sub(1);
-                    if tools_pending == 0 {
-                        flush_usage(err, &mut pending_usage, turn_no);
-                    }
-                }
-                AgentEvent::TurnEnd { usage } => {
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
-                    }
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    text_started = false;
-                    thinking = false;
-                    turn_no += 1;
-                    pending_usage = Some(usage);
-                }
-                AgentEvent::Compaction {
-                    replaced_events,
-                    before_tokens,
-                    after_tokens,
-                } => {
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
-                    }
-                    if line_open {
-                        println!();
-                        line_open = false;
-                    }
-                    text_started = false;
-                    flush_usage(err, &mut pending_usage, turn_no);
-                    eprintln!(
+                        eprintln!(
                     "{} {}",
                     err.paint(Tone::Magenta, theme::COMPACT),
                     err.dim(format!(
                         "compacted · {replaced_events} events · ~{before_tokens} → ~{after_tokens} tokens"
                     ))
                 );
-                }
-                AgentEvent::Warning(message) => {
-                    if thinking {
-                        eprintln!();
-                        thinking = false;
                     }
-                    if line_open {
-                        println!();
-                        line_open = false;
+                    AgentEvent::Warning(message) => {
+                        if thinking {
+                            eprintln!();
+                            thinking = false;
+                        }
+                        if line_open {
+                            println!();
+                            line_open = false;
+                        }
+                        text_started = false;
+                        flush_usage(err, &mut pending_usage, turn_no);
+                        eprintln!(
+                            "{} {}",
+                            err.paint(Tone::Warning, theme::WARN),
+                            err.paint(Tone::Warning, clean_text(&message))
+                        );
                     }
-                    text_started = false;
-                    flush_usage(err, &mut pending_usage, turn_no);
-                    eprintln!(
-                        "{} {}",
-                        err.paint(Tone::Warning, theme::WARN),
-                        err.paint(Tone::Warning, clean_text(&message))
-                    );
                 }
             };
 
-            let run = run_with_history(
-                provider.as_ref(),
-                session,
-                &run_config,
-                prompt,
-                history.clone(),
-                &mut approver,
-                &mut observer,
-            );
-            tokio::pin!(run);
-            tokio::select! {
-                result = &mut run => Some(result),
-                _ = tokio::signal::ctrl_c() => None,
+            let result = {
+                let run = run_with_history(
+                    provider.as_ref(),
+                    session,
+                    &run_config,
+                    prompt,
+                    history.clone(),
+                    &mut approver,
+                    &mut observer,
+                );
+                tokio::pin!(run);
+                tokio::select! {
+                    result = &mut run => Some(result),
+                    _ = tokio::signal::ctrl_c() => None,
+                }
+            };
+            if let Some(Ok(outcome)) = &result {
+                if let Some(hooks) = &hook_cell {
+                    hooks.borrow_mut().on_turn_end(outcome);
+                }
             }
+            result
         };
 
         if line_open {
