@@ -30,7 +30,7 @@ use crate::diff::render_plain;
 use crate::editor::{mouse_events_seen, Input, LineEditor};
 use crate::goal::{self, GoalStatus, MAX_GOAL_TURNS};
 use crate::provider_factory::{available_model_choices, provider_choices, ProviderFactory};
-use crate::review::{review_diff, ApprovalChoice};
+use crate::review::{choice_for_key, review_diff, ApprovalChoice};
 use crate::session_ops;
 use crate::skills;
 use crate::slash::{
@@ -39,7 +39,7 @@ use crate::slash::{
 use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
 use crate::workspace::Workspace;
-use crate::SharedHooks;
+use crate::{ApprovalKeys, SharedHooks};
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
@@ -242,6 +242,7 @@ pub async fn run(
     config: &AgentConfig,
     history: Vec<ChatMessage>,
     hooks: Option<SharedHooks>,
+    approval_keys: ApprovalKeys,
 ) -> Result<()> {
     reset_terminal_modes();
     let out = Theme::detect_stdout();
@@ -438,6 +439,7 @@ pub async fn run(
                     editor,
                     &mut allow_session,
                     hooks.clone(),
+                    approval_keys,
                 )
                 .await,
             )
@@ -451,7 +453,7 @@ pub async fn run(
                     );
                     return true;
                 }
-                match prompt_approval(request, out, err) {
+                match prompt_approval(request, out, err, approval_keys) {
                     ApprovalChoice::Allow => true,
                     ApprovalChoice::Deny => false,
                     ApprovalChoice::Session => {
@@ -2425,10 +2427,15 @@ fn reset_screen(theme: Theme) {
     }
 }
 
-fn prompt_approval(request: &ApprovalRequest, out: Theme, err: Theme) -> ApprovalChoice {
+fn prompt_approval(
+    request: &ApprovalRequest,
+    out: Theme,
+    err: Theme,
+    keys: ApprovalKeys,
+) -> ApprovalChoice {
     if let Some(preview) = &request.preview {
         if preview.is_diff() && std::io::stdout().is_terminal() && std::io::stderr().is_terminal() {
-            match review_diff(request, preview, out) {
+            match review_diff(request, preview, out, keys) {
                 Ok(Some(choice)) => return choice,
                 Ok(None) => {}
                 Err(error) => eprintln!(
@@ -2454,37 +2461,33 @@ fn prompt_approval(request: &ApprovalRequest, out: Theme, err: Theme) -> Approva
         );
     }
 
-    prompt_keys(err)
+    prompt_keys(err, keys)
 }
 
-fn prompt_keys(err: Theme) -> ApprovalChoice {
+fn prompt_keys(err: Theme, keys: ApprovalKeys) -> ApprovalChoice {
     if terminal::enable_raw_mode().is_ok() {
         eprint!(
             "{}  {}  {}  ",
-            err.paint(Tone::Accent, "[a]llow"),
-            err.paint(Tone::Danger, "[d]eny"),
-            err.paint(Tone::Magenta, "[s]ession")
+            err.paint(Tone::Accent, format!("[{}]llow", keys.allow)),
+            err.paint(Tone::Danger, format!("[{}]eny", keys.deny)),
+            err.paint(Tone::Magenta, format!("[{}]ession", keys.session))
         );
         let _ = std::io::stderr().flush();
         let choice = loop {
             match event::read() {
                 Ok(TerminalEvent::Key(KeyEvent {
                     code, modifiers, ..
-                })) => match code {
-                    KeyCode::Char('a') | KeyCode::Char('A') => {
-                        break ApprovalChoice::Allow;
-                    }
-                    KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Esc => {
+                })) => {
+                    if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
                         break ApprovalChoice::Deny;
                     }
-                    KeyCode::Char('s') | KeyCode::Char('S') => {
-                        break ApprovalChoice::Session;
+                    if let Some(choice) = choice_for_key(code, keys) {
+                        break choice;
                     }
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if code == KeyCode::Esc {
                         break ApprovalChoice::Deny;
                     }
-                    _ => {}
-                },
+                }
                 Ok(_) => {}
                 Err(_) => break ApprovalChoice::Deny,
             }
@@ -2496,19 +2499,23 @@ fn prompt_keys(err: Theme) -> ApprovalChoice {
 
     eprint!(
         "{} {} {}: ",
-        err.paint(Tone::Accent, "[a]llow"),
-        err.paint(Tone::Danger, "[d]eny"),
-        err.paint(Tone::Magenta, "[s]ession")
+        err.paint(Tone::Accent, format!("[{}] allow", keys.allow)),
+        err.paint(Tone::Danger, format!("[{}] deny", keys.deny)),
+        err.paint(Tone::Magenta, format!("[{}] session", keys.session))
     );
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     if std::io::stdin().read_line(&mut line).is_err() {
         return ApprovalChoice::Deny;
     }
-    match line.trim() {
-        "a" | "A" | "allow" | "yes" | "y" => ApprovalChoice::Allow,
-        "s" | "S" | "session" => ApprovalChoice::Session,
-        _ => ApprovalChoice::Deny,
+    let input = line.trim().to_lowercase();
+    let first = input.chars().next();
+    if input == "allow" || input == "yes" || first == Some(keys.allow.to_ascii_lowercase()) {
+        ApprovalChoice::Allow
+    } else if input == "session" || first == Some(keys.session.to_ascii_lowercase()) {
+        ApprovalChoice::Session
+    } else {
+        ApprovalChoice::Deny
     }
 }
 

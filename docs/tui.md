@@ -157,7 +157,9 @@ Ghostty 默认保留 linear；`NIUCODE_TUI_INLINE=1` 显式试用 inline，`NIUC
  file 1/1 · 1-7/7   a allow · d deny · s session · j/k scroll · n/p file
 ```
 
-审批按键：a 允许、d/Esc/q 拒绝、s 本 session 自动允许；Ctrl-C 取消整个任务。↑↓、j/k、PageUp/PageDown/空格滚动；resize 重排。非 TTY 使用逐行 a/d/s。
+审批按键：a 允许、d/Esc/q 拒绝、s 本 session 自动允许；Ctrl-C 取消整个任务。↑↓、j/k、PageUp/PageDown/空格滚动；resize 重排。非 TTY 使用逐行输入。
+
+嵌入方可以通过 `TuiOptions.approval_keys` 覆盖三个按键（例如 niuse 用 y/n/s，避免 d 在 REPL 里表示完整 diff）；pager 页脚、inline view 和逐行提示都会显示实际按键，重复按键会被拒绝。Esc/q/Ctrl-C 始终保留拒绝或取消的安全含义。
 
 文件预览和实际写入绑定同一个 prepared mutation：路径、文件身份、内容摘要、权限与已读行覆盖都重新校验。审批等待不占写锁；批准后获取 W1 再校验。变化后返回结构化 conflict，需要重新读取和预览。临时文件写入成功后原子替换，保留现有权限/可执行位；新文件竞争创建不覆盖。
 

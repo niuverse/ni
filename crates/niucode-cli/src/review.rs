@@ -17,6 +17,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::diff::{self, file_starts, Row, RowKind};
 use crate::theme::{Theme, Tone};
+use crate::ApprovalKeys;
 
 const MIN_WIDTH: usize = 40;
 const MIN_HEIGHT: usize = 6;
@@ -28,6 +29,22 @@ pub enum ApprovalChoice {
     Session,
 }
 
+/// Map a key press to an approval choice using the configured keys.
+pub(crate) fn choice_for_key(code: KeyCode, keys: ApprovalKeys) -> Option<ApprovalChoice> {
+    match code {
+        KeyCode::Char(character) if character.eq_ignore_ascii_case(&keys.allow) => {
+            Some(ApprovalChoice::Allow)
+        }
+        KeyCode::Char(character) if character.eq_ignore_ascii_case(&keys.deny) => {
+            Some(ApprovalChoice::Deny)
+        }
+        KeyCode::Char(character) if character.eq_ignore_ascii_case(&keys.session) => {
+            Some(ApprovalChoice::Session)
+        }
+        _ => None,
+    }
+}
+
 /// Show a width-aware diff pager and return the user's decision.
 ///
 /// `Ok(None)` means the terminal is too small, so the caller should fall back
@@ -36,6 +53,7 @@ pub fn review_diff(
     request: &ApprovalRequest,
     preview: &ChangePreview,
     theme: Theme,
+    keys: ApprovalKeys,
 ) -> io::Result<Option<ApprovalChoice>> {
     let (columns, rows) = terminal::size()?;
     let width = columns.saturating_sub(1) as usize;
@@ -45,41 +63,38 @@ pub fn review_diff(
     }
 
     let _guard = ScreenGuard::enter()?;
-    let mut state = ReviewState::new(request, preview, width, height, theme);
+    let mut state = ReviewState::new(request, preview, width, height, theme, keys);
     let mut out = io::stdout();
 
     loop {
         state.draw(&mut out)?;
         match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Char('a') | KeyCode::Char('A') => {
-                    return Ok(Some(ApprovalChoice::Allow));
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                if let Some(choice) = choice_for_key(key.code, keys) {
+                    return Ok(Some(choice));
                 }
-                KeyCode::Char('s') | KeyCode::Char('S') => {
-                    return Ok(Some(ApprovalChoice::Session));
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+                        return Ok(Some(ApprovalChoice::Deny));
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(Some(ApprovalChoice::Deny));
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => state.scroll_by(1),
+                    KeyCode::Char('k') | KeyCode::Up => state.scroll_by(-1),
+                    KeyCode::PageDown | KeyCode::Char(' ') => {
+                        state.scroll_by(state.body_height() as isize)
+                    }
+                    KeyCode::PageUp | KeyCode::Char('b') => {
+                        state.scroll_by(-(state.body_height() as isize))
+                    }
+                    KeyCode::Char('g') | KeyCode::Home => state.scroll = 0,
+                    KeyCode::Char('G') | KeyCode::End => state.scroll = state.max_scroll(),
+                    KeyCode::Char('n') | KeyCode::Char(']') => state.jump_file(1),
+                    KeyCode::Char('p') | KeyCode::Char('[') => state.jump_file(-1),
+                    _ => {}
                 }
-                KeyCode::Char('d')
-                | KeyCode::Char('D')
-                | KeyCode::Esc
-                | KeyCode::Char('q')
-                | KeyCode::Char('Q') => return Ok(Some(ApprovalChoice::Deny)),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    return Ok(Some(ApprovalChoice::Deny));
-                }
-                KeyCode::Char('j') | KeyCode::Down => state.scroll_by(1),
-                KeyCode::Char('k') | KeyCode::Up => state.scroll_by(-1),
-                KeyCode::PageDown | KeyCode::Char(' ') => {
-                    state.scroll_by(state.body_height() as isize)
-                }
-                KeyCode::PageUp | KeyCode::Char('b') => {
-                    state.scroll_by(-(state.body_height() as isize))
-                }
-                KeyCode::Char('g') | KeyCode::Home => state.scroll = 0,
-                KeyCode::Char('G') | KeyCode::End => state.scroll = state.max_scroll(),
-                KeyCode::Char('n') | KeyCode::Char(']') => state.jump_file(1),
-                KeyCode::Char('p') | KeyCode::Char('[') => state.jump_file(-1),
-                _ => {}
-            },
+            }
             Event::Resize(columns, rows) => {
                 let width = columns.saturating_sub(1) as usize;
                 let height = rows as usize;
@@ -102,6 +117,7 @@ struct ReviewState<'a> {
     height: usize,
     scroll: usize,
     theme: Theme,
+    keys: ApprovalKeys,
 }
 
 impl<'a> ReviewState<'a> {
@@ -111,6 +127,7 @@ impl<'a> ReviewState<'a> {
         width: usize,
         height: usize,
         theme: Theme,
+        keys: ApprovalKeys,
     ) -> Self {
         let rows = diff::layout(preview, width);
         let file_starts = file_starts(&rows);
@@ -123,6 +140,7 @@ impl<'a> ReviewState<'a> {
             height,
             scroll: 0,
             theme,
+            keys,
         }
     }
 
@@ -232,14 +250,20 @@ impl<'a> ReviewState<'a> {
         } else {
             format!("{}-{}/{}", self.scroll + 1, visible_end, self.rows.len())
         };
-        let keys = if self.width >= 90 {
-            "a allow · d deny · s session · j/k scroll · n/p file"
+        let footer_keys = if self.width >= 90 {
+            format!(
+                "{} allow · {} deny · {} session · j/k scroll · n/p file",
+                self.keys.allow, self.keys.deny, self.keys.session
+            )
         } else if self.width >= 60 {
-            "a allow · d deny · s session · j/k"
+            format!(
+                "{} allow · {} deny · {} session · j/k",
+                self.keys.allow, self.keys.deny, self.keys.session
+            )
         } else {
-            "a allow · d deny"
+            format!("{} allow · {} deny", self.keys.allow, self.keys.deny)
         };
-        format!(" {file_position} · {range}   {keys} ")
+        format!(" {file_position} · {range}   {footer_keys} ")
     }
 }
 
@@ -315,7 +339,14 @@ mod tests {
         let file = FilePreview::from_text("a.rs", "", "a\n", true);
         let preview = ChangePreview::diff(vec![file]).with_warning("read first");
         let request = request(&preview);
-        let mut state = ReviewState::new(&request, &preview, 80, 10, Theme::plain());
+        let mut state = ReviewState::new(
+            &request,
+            &preview,
+            80,
+            10,
+            Theme::plain(),
+            ApprovalKeys::default(),
+        );
 
         assert_eq!(state.current_file(), None);
         state.jump_file(1);
@@ -329,7 +360,14 @@ mod tests {
         let second = FilePreview::from_text("b.rs", "", "b\n", true);
         let preview = ChangePreview::diff(vec![first, second]);
         let request = request(&preview);
-        let mut state = ReviewState::new(&request, &preview, 80, 10, Theme::plain());
+        let mut state = ReviewState::new(
+            &request,
+            &preview,
+            80,
+            10,
+            Theme::plain(),
+            ApprovalKeys::default(),
+        );
 
         assert_eq!(state.current_file(), Some(0));
         state.jump_file(1);
@@ -338,5 +376,33 @@ mod tests {
         assert_eq!(state.current_file(), Some(0));
         state.jump_file(-1);
         assert_eq!(state.current_file(), Some(1));
+    }
+
+    #[test]
+    fn custom_keys_are_matched_and_shown_in_the_footer() {
+        let keys = ApprovalKeys::custom('y', 'n', 's').unwrap();
+        assert_eq!(
+            choice_for_key(KeyCode::Char('y'), keys),
+            Some(ApprovalChoice::Allow)
+        );
+        assert_eq!(
+            choice_for_key(KeyCode::Char('N'), keys),
+            Some(ApprovalChoice::Deny)
+        );
+        assert_eq!(
+            choice_for_key(KeyCode::Char('s'), keys),
+            Some(ApprovalChoice::Session)
+        );
+        assert_eq!(choice_for_key(KeyCode::Char('a'), keys), None);
+        assert!(ApprovalKeys::custom('a', 'A', 's').is_none());
+
+        let file = FilePreview::from_text("a.rs", "", "a\n", true);
+        let preview = ChangePreview::diff(vec![file]);
+        let request = request(&preview);
+        let state = ReviewState::new(&request, &preview, 90, 10, Theme::plain(), keys);
+        let footer = state.footer();
+        assert!(footer.contains("y allow"));
+        assert!(footer.contains("n deny"));
+        assert!(footer.contains("s session"));
     }
 }

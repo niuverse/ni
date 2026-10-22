@@ -82,7 +82,7 @@ A task is not done until:
 M0–M5 kernel milestones are done; M6 is active. M5-003/M5-006 terminal gates remain open. M4-001/M4-002/M4-003 are done: CommandRegistry,
 TUI slash auto-menu, `/plan`, `/goal`, the session-scoped sidecar extension
 host, and subagent Explore/Worker profiles with W1 write serialization.
-M4-004/M4-005/M4-006/M4-007/M4-008/M4-009/M4-010/M4-011/M4-012 are done.
+M4-004/M4-005/M4-006/M4-007/M4-008/M4-009/M4-010/M4-011/M4-012/M4-013 are done.
 M5-001/M5-002/M5-004/M5-005 are done; M5-003 inline is review. Ghostty
 currently defaults to the stable linear editor; linear startup overlap was
 fixed by unifying startup output/flush; inline remains M5-006 blocked pending a real Ghostty screen test. There is no project-local

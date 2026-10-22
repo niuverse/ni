@@ -45,6 +45,41 @@ mod workspace;
 
 pub use niucode_agent::{AgentEvent, RunOutcome};
 
+/// Keys accepted while an approval is pending.
+///
+/// The default is `a` allow, `d` deny, `s` allow for the session. An embedder
+/// can align the prompt with its own front end; duplicate keys are rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApprovalKeys {
+    pub allow: char,
+    pub deny: char,
+    pub session: char,
+}
+
+impl Default for ApprovalKeys {
+    fn default() -> Self {
+        Self {
+            allow: 'a',
+            deny: 'd',
+            session: 's',
+        }
+    }
+}
+
+impl ApprovalKeys {
+    pub fn custom(allow: char, deny: char, session: char) -> Option<Self> {
+        let keys = [allow, deny, session].map(|key| key.to_ascii_lowercase());
+        if keys[0] == keys[1] || keys[0] == keys[2] || keys[1] == keys[2] {
+            return None;
+        }
+        Some(Self {
+            allow,
+            deny,
+            session,
+        })
+    }
+}
+
 /// Optional hooks for an embedder. Every method defaults to a no-op, and
 /// hooks never own durable state; the event log remains the only truth.
 pub trait TurnHooks {
@@ -168,6 +203,7 @@ pub struct TuiOptions {
     pub replay: Option<PathBuf>,
     pub plan: bool,
     pub allow_subagent_inheritance: bool,
+    pub approval_keys: ApprovalKeys,
 }
 
 impl Default for TuiOptions {
@@ -188,6 +224,7 @@ impl Default for TuiOptions {
             replay: None,
             plan: false,
             allow_subagent_inheritance: false,
+            approval_keys: ApprovalKeys::default(),
         }
     }
 }
@@ -551,6 +588,7 @@ pub async fn run() -> Result<()> {
                     replay,
                     plan,
                     allow_subagent_inheritance,
+                    approval_keys: ApprovalKeys::default(),
                 },
                 None,
             )
@@ -937,6 +975,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         replay,
         plan,
         allow_subagent_inheritance,
+        approval_keys,
     } = options;
     if context_budget != 0 && context_budget < 100 {
         bail!("--context-budget must be 0 (auto) or at least 100 tokens");
@@ -1115,6 +1154,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         &agent_config,
         history,
         hooks,
+        approval_keys,
     )
     .await;
     unmount_extensions(&extension_host, &mut session).await?;

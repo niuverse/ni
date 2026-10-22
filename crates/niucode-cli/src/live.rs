@@ -3,10 +3,11 @@ use crate::{
     details::Details,
     diff::render_plain,
     editor::{Input, LineEditor},
+    review::{choice_for_key, ApprovalChoice},
     terminal::{DetailScreen, TerminalSession},
     text_layout::wrap,
     theme::Theme,
-    SharedHooks,
+    ApprovalKeys, SharedHooks,
 };
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -24,6 +25,7 @@ const BUFFER_BYTES: usize = 262_144;
 struct View {
     screen: DetailScreen,
     content: ViewContent,
+    keys: ApprovalKeys,
 }
 enum ViewContent {
     History(Details),
@@ -46,13 +48,19 @@ enum ViewAction {
     },
 }
 impl View {
-    fn history(session: &SessionLog, width: usize) -> Result<Self> {
+    fn history(session: &SessionLog, width: usize, keys: ApprovalKeys) -> Result<Self> {
         Ok(Self {
             screen: DetailScreen::enter()?,
             content: ViewContent::History(Details::open(session.path(), width)?),
+            keys,
         })
     }
-    fn approval(id: String, request: ApprovalRequest, width: usize) -> Result<Self> {
+    fn approval(
+        id: String,
+        request: ApprovalRequest,
+        width: usize,
+        keys: ApprovalKeys,
+    ) -> Result<Self> {
         let lines = Self::approval_lines(&request, width);
         Ok(Self {
             screen: DetailScreen::enter()?,
@@ -63,6 +71,7 @@ impl View {
                 lines,
                 offset: 0,
             },
+            keys,
         })
     }
     fn show_approval(&mut self, id: String, request: ApprovalRequest, width: usize) {
@@ -111,8 +120,8 @@ impl View {
                 ..
             } => self.screen.draw(
                 &format!(
-                    "a allow / d deny / s session · Ctrl-C cancel · {}",
-                    request.summary
+                    "{} allow / {} deny / {} session · Ctrl-C cancel · {}",
+                    self.keys.allow, self.keys.deny, self.keys.session, request.summary
                 ),
                 lines,
                 *offset,
@@ -140,14 +149,20 @@ impl View {
                     if !key.modifiers.is_empty() {
                         return Ok(ViewAction::Stay);
                     }
-                    if matches!(
-                        key.code,
-                        KeyCode::Char('a' | 's' | 'd' | 'q') | KeyCode::Esc
-                    ) {
+                    let choice = choice_for_key(key.code, self.keys).or_else(|| {
+                        matches!(key.code, KeyCode::Esc | KeyCode::Char('q'))
+                            .then_some(ApprovalChoice::Deny)
+                    });
+                    if let Some(choice) = choice {
+                        let (allowed, session) = match choice {
+                            ApprovalChoice::Allow => (true, false),
+                            ApprovalChoice::Session => (true, true),
+                            ApprovalChoice::Deny => (false, false),
+                        };
                         return Ok(ViewAction::Approve {
                             id: id.clone(),
-                            allowed: matches!(key.code, KeyCode::Char('a' | 's')),
-                            session: key.code == KeyCode::Char('s'),
+                            allowed,
+                            session,
                         });
                     }
                 }
@@ -259,6 +274,7 @@ pub async fn run(
     editor: &mut LineEditor,
     allow_session: &mut bool,
     hooks: Option<SharedHooks>,
+    approval_keys: ApprovalKeys,
 ) -> Result<RunOutcome> {
     let (mut client, endpoint) = runtime_channel();
     let mut terminal = editor.start(Theme::detect_stdout())?;
@@ -345,7 +361,12 @@ pub async fn run(
                                     active.show_approval(request_id, request, terminal.size().0);
                                 } else {
                                     terminal.clear()?;
-                                    view = Some(View::approval(request_id, request, terminal.size().0)?);
+                                    view = Some(View::approval(
+                                        request_id,
+                                        request,
+                                        terminal.size().0,
+                                        approval_keys,
+                                    )?);
                                 }
                             }
                         }
@@ -379,7 +400,7 @@ pub async fn run(
                         let queued = matches!(&input, Input::Queue(_));
                         match input {
                             Input::Interrupted | Input::Eof => client.cancel(),
-                            Input::Details => { terminal.clear()?; view = Some(View::history(session, terminal.size().0)?); }
+                            Input::Details => { terminal.clear()?; view = Some(View::history(session, terminal.size().0, approval_keys)?); }
                             Input::Line(text) | Input::Queue(text) => {
                                 // Local commands cannot silently become steering instructions.
                                 if text.starts_with('/') || unacknowledged.len() >= 32 {
@@ -446,7 +467,7 @@ fn send(client: &RuntimeClient, command: RuntimeCommand) -> Result<()> {
 
 pub fn show_details(session: &SessionLog) -> Result<()> {
     let mut terminal = TerminalSession::enter(false, Theme::detect_stdout().is_ansi())?;
-    let mut view = View::history(session, terminal.size().0)?;
+    let mut view = View::history(session, terminal.size().0, ApprovalKeys::default())?;
     loop {
         view.draw()?;
         if let Some(event) = terminal.poll(Duration::from_millis(100))? {
