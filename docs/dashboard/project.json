@@ -1343,6 +1343,16 @@
         "adr-0033",
         "M8-001"
       ]
+    },
+    {
+      "date": "2026-10-22",
+      "kind": "decision",
+      "title": "Propose per-call approval for mutating MCP",
+      "detail": "Write-enabled servers name each write tool, require --allow-mcp-write and an interactive approval mode, show the arguments before dispatch, share the write lock, never retry an unknown timeout, and are not inherited by subagents.",
+      "refs": [
+        "adr-0034",
+        "M8-002"
+      ]
     }
   ]
 }

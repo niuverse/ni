@@ -2435,6 +2435,27 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>Every external capability currently needs a bespoke extension manifest and\nsidecar. Personal services increasingly speak MCP; without a client, niucode\ncannot reuse that ecosystem and niuse cannot reach personal data without a new\nintegration each time.</p>\n<h2>Scope</h2>\n<ul>\n<li>Read <code>~/.niucode/mcp.toml</code> (explicit <code>read_only = true</code> servers only).</li>\n<li>stdio transport: <code>initialize</code>, <code>tools/list</code>, <code>tools/call</code>, timeouts, process\ngroup shutdown.</li>\n<li>Expose tools as <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>; reject collisions.</li>\n<li>Scrubbed environment; only manifest-declared variables.</li>\n<li>Mount/unmount and call audit events; no new durable store.</li>\n<li>Do not inherit MCP tools into subagents in v1.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nA Python stdio MCP server mounts, lists one tool, and is callable.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nA non-read-only manifest is refused before any turn.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nA name collision is refused before any turn.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nCredentials from the parent environment do not reach the server.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nA hung server times out and is killed without stalling the session.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n<code>exec --mcp-config</code> and the TUI mount through the same host; startup prints each mount.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nOffline tests cover mount, list, call, timeout, shutdown, and an exec turn.</li>\n</ul>\n<h2>Notes</h2>\n<p>Client, host, namespaced specs, collision check, agent dispatch, config loading,\nand <code>exec</code>/TUI mounting are done and tested. Startup prints each mount. A\ndedicated <code>doctor</code> does not exist in niucode; the TUI-specific PTY mount test is\nstill a follow-up. See ADR-0033 and <a href=\"../mcp.md\">mcp</a>.</p>\n",
       "path": "docs/board/M8-001-mcp-client.md"
+    },
+    {
+      "id": "M8-002",
+      "title": "Mutating MCP with per-call approval",
+      "status": "backlog",
+      "milestone": "M8",
+      "module": "mcp",
+      "size": "L",
+      "priority": "P1",
+      "updated": "2026-10-22",
+      "completed": null,
+      "depends_on": [
+        "M8-001"
+      ],
+      "docs": [
+        "adr-0034",
+        "mcp"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>Read-only packs cannot create a note or update a task. A write path must not\nbecome the least-guarded surface in the harness.</p>\n<h2>Scope</h2>\n<ul>\n<li>Manifest <code>write_tools = [...]</code> allowlist and <code>--allow-mcp-write</code>.</li>\n<li>Refuse write-enabled servers in <code>never</code>/<code>full-access</code>/non-interactive runs.</li>\n<li>Per-call approval with tool, server, and bounded argument preview.</li>\n<li>Shared write lock, no retry on timeout, existing approval/tool_result events.</li>\n<li>No subagent inheritance.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\"/>\nA write tool not in <code>write_tools</code> is not exposed as mutating.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\nA listed-but-missing tool fails the mount.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\n<code>--allow-mcp-write</code> without an interactive approval mode refuses to mount.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\nApproval shows the namespaced tool and arguments; denial writes no change.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\nA timed-out mutation is not retried automatically.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\nSubagents never see mutating MCP tools.</li>\n<li><input disabled=\"\" type=\"checkbox\"/>\nOffline tests cover allowlist, refusal, deny, timeout, and no-retry.</li>\n</ul>\n<h2>Notes</h2>\n<p>Requires human sign-off on ADR-0034, especially the open questions. Do not\nimplement before the ADR status changes from <code>proposed</code>.</p>\n",
+      "path": "docs/board/M8-002-mutating-mcp.md"
     }
   ],
   "docs": [
@@ -2956,13 +2977,24 @@
       "excerpt": "A minimal MCP client: stdio servers from an explicit trust file, tools only, read-only in v1, with namespaced tools, audit events, timeouts, and no inherited credentials."
     },
     {
+      "id": "adr-0034",
+      "title": "ADR-0034: Mutating MCP — explicit tool allowlist and per-call approval",
+      "kind": "adr",
+      "status": "proposed",
+      "order": 61,
+      "summary": "Mutating MCP stays off by default. A write-enabled server names each write tool, mounts only with an explicit flag and an interactive approval mode, and every call is approved with its arguments and recorded.",
+      "body_html": "<h2>Status</h2>\n<p>Proposed · 2026-10-22. This is a design for M8-002, not an implemented\ncapability. Until it is accepted, the client keeps the ADR-0033 rule: only\n<code>read_only = true</code> servers mount, and <code>read_only = false</code> is refused before\nspawn.</p>\n<h2>Context</h2>\n<p>Read-only MCP is shipped and tested. The next useful personal pack (create a\nnote, add a calendar entry) needs a write. The existing write paths have three\nproperties MCP currently lacks:</p>\n<ul>\n<li>a human sees the proposed change before it lands;</li>\n<li>built-in writes share a workspace write lock;</li>\n<li>the result is auditable in the event log.</li>\n</ul>\n<p>An MCP server is an arbitrary local process. niucode cannot inspect a generic\n<code>write_note</code> argument and produce a trustworthy diff, cannot confine a process\nthat ignores its declared roots, and cannot undo a remote side effect. The\ndesign must therefore be explicit about what approval means: the human trusts\nthe server and approves the exact tool plus arguments, not a filesystem diff.</p>\n<h2>Decision</h2>\n<ol>\n<li><strong>No write by default.</strong> A server with <code>read_only = false</code> is refused unless\nboth conditions hold: the manifest names the write tools in\n<code>write_tools = [...]</code>, and the run passes <code>--allow-mcp-write</code>.</li>\n<li><strong>Per-tool allowlist, never <code>write = true</code>.</strong> Every mutating tool must be\nnamed. A listed tool that the server does not expose is a mount error, not a\nsilent omission. Unlisted tools remain read-only.</li>\n<li><strong>Interactive approval only.</strong> A mutating call requires an approval mode\nwith a human in the loop (<code>ask</code> or <code>review</code>). <code>never</code>, <code>full-access</code>,\n<code>--json</code>, and other non-interactive paths do not mount write-enabled\nservers. \"Always allow\" is not offered in v1.</li>\n<li><strong>Approval shows the call, not a fake diff.</strong> The prompt contains the\nnamespaced tool, the server, and a bounded JSON argument preview. The text\nsays the effect is server-defined. Denial is a tool error and is recorded.</li>\n<li><strong>Shared lock, honest limits.</strong> A mutating call takes the same write lock as\nbuilt-in writes so the agent cannot interleave its own edits. The lock is\nserialization, not a sandbox: the server still runs as the user and may\ntouch anything it can. The manifest is the trust boundary.</li>\n<li><strong>No retry on timeout.</strong> A timed-out mutation has an unknown outcome. The\nclient kills the process group, records the failure, and tells the model not\nto retry without human confirmation.</li>\n<li><strong>Bounded result and arguments.</strong> Argument preview and tool output use the\nexisting tool-output budget. Secrets are not redacted automatically; the\nmanifest must not put credentials in arguments the agent can read.</li>\n<li><strong>Audit.</strong> Every mutating call writes the existing <code>approval</code> event\n(allowed/denied) and <code>tool_result</code>; a mount writes its config hash and the\nwrite-tool list. No new durable store.</li>\n<li><strong>No subagent inheritance.</strong> A subagent never receives mutating MCP tools.\nA future worker profile needs its own approval design.</li>\n<li><strong>stdio only.</strong> No HTTP transport or remote OAuth in this slice.</li>\n</ol>\n<h2>Consequences</h2>\n<p><strong>Better</strong></p>\n<ul>\n<li>A write cannot happen without a human seeing the tool and arguments.</li>\n<li><code>read_only = false</code> alone cannot silently widen the surface.</li>\n<li>The audit trail uses events that already exist.</li>\n</ul>\n<p><strong>Worse</strong></p>\n<ul>\n<li>Approval quality depends on the arguments being legible; a tool that hides\nits effect behind a blob is dangerous even when approved.</li>\n<li>No automatic rollback, diff, or filesystem confinement.</li>\n<li>Write-enabled servers are useless in headless/JSON runs by design.</li>\n</ul>\n<h2>Alternatives</h2>\n<ul>\n<li><strong>Treat all server tools as read-only and rely on the server.</strong> Rejected:\nnames lie; the harness would claim a guarantee it cannot enforce.</li>\n<li><strong>Require a dry-run/diff tool before apply.</strong> Attractive, but not part of\nMCP and not implementable for arbitrary servers. Revisit if a pack adopts a\n<code>preview</code> convention.</li>\n<li><strong>Run servers in a container.</strong> Stronger, but a separate sandbox project;\ndoes not replace approval.</li>\n<li><strong>Auto-approve in <code>full-access</code>.</strong> Rejected: <code>full-access</code> is about the\nworkspace, not an arbitrary external process.</li>\n</ul>\n<h2>Open questions for the human</h2>\n<ul>\n<li>Is per-call approval enough, or should a write-enabled server also require a\none-time session confirmation at mount?</li>\n<li>Should a denied call be visible in <code>niuse evidence</code> as <code>denied</code> even when the\nmodel retries?</li>\n<li>Do we need a manifest <code>roots</code> field for documentation, knowing it is not\nenforced?</li>\n</ul>\n",
+      "path": "docs/adr/0034-mutating-mcp.md",
+      "excerpt": "Mutating MCP stays off by default. A write-enabled server names each write tool, mounts only with an explicit flag and an interactive approval mode, and every call is approved with its arguments and recorded."
+    },
+    {
       "id": "mcp",
       "title": "MCP stdio client",
       "kind": "doc",
       "status": "living",
       "order": 70,
       "summary": "Read-only MCP v1: the client crate, manifest shape, security rules, and what is still unmounted.",
-      "body_html": "<h2>Status</h2>\n<p>The <code>niucode-mcp</code> crate implements the v1 client and host from\n<a href=\"adr/0033-mcp-client.md\">ADR-0033</a>: spawn, <code>initialize</code>, <code>tools/list</code>,\n<code>tools/call</code>, and a multi-server host over newline-delimited JSON on stdio.\n<code>AgentConfig.mcp_host</code> advertises namespaced specs and dispatches them in the\nturn loop. It is covered offline by a Python fixture server, including list,\ncall, tool error, environment scrubbing, timeout, host mounting, collisions,\nand an agent turn.</p>\n<p><code>exec</code> and the TUI load <code>~/.niucode/mcp.toml</code> (or <code>--mcp-config PATH</code>), mount\nread-only servers, print one <code>mcp: &lt;server&gt; · &lt;n&gt; tool(s)</code> line per mount, and\nshut the children down at the end of the run. The host is shared by both paths.</p>\n<h2>Manifest</h2>\n<p><code>~/.niucode/mcp.toml</code> is explicit trust. A workspace file is never read.</p>\n<pre><code class=\"language-toml\">[[server]]\nname = \"notes\"\ncommand = \"python3\"\nargs = [\"/home/me/notes-server.py\"]\nread_only = true\n\n[server.env]\nNOTES_DIR = \"/home/me/notes\"\n</code></pre>\n<p>Only <code>server.env</code> is passed to the child. <code>read_only = false</code> is refused before\nspawn; v1 has no mutating path.</p>\n<h2>Rules</h2>\n<ul>\n<li>stdio only; no HTTP/SSE.</li>\n<li>tools only; no resources, prompts, sampling, or elicitation.</li>\n<li>namespaced as <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>; collisions are startup errors.</li>\n<li>stdout is protocol, stderr is diagnostics; a child that hangs is killed at\nthe timeout.</li>\n<li>the child is an ordinary local process running as the user. The manifest is a\ntrust decision, not a sandbox.</li>\n</ul>\n<h2>Verify</h2>\n<pre><code class=\"language-sh\">cargo test -p niucode-mcp\ncargo test -p niucode --test mcp\nniucode exec --mcp-config /path/to/mcp.toml \"list the notes\"\n</code></pre>\n",
+      "body_html": "<h2>Status</h2>\n<p>The <code>niucode-mcp</code> crate implements the v1 client and host from\n<a href=\"adr/0033-mcp-client.md\">ADR-0033</a>: spawn, <code>initialize</code>, <code>tools/list</code>,\n<code>tools/call</code>, and a multi-server host over newline-delimited JSON on stdio.\n<code>AgentConfig.mcp_host</code> advertises namespaced specs and dispatches them in the\nturn loop. It is covered offline by a Python fixture server, including list,\ncall, tool error, environment scrubbing, timeout, host mounting, collisions,\nand an agent turn.</p>\n<p><code>exec</code> and the TUI load <code>~/.niucode/mcp.toml</code> (or <code>--mcp-config PATH</code>), mount\nread-only servers, print one <code>mcp: &lt;server&gt; · &lt;n&gt; tool(s)</code> line per mount, and\nshut the children down at the end of the run. The host is shared by both paths.</p>\n<h2>Manifest</h2>\n<p><code>~/.niucode/mcp.toml</code> is explicit trust. A workspace file is never read.</p>\n<pre><code class=\"language-toml\">[[server]]\nname = \"notes\"\ncommand = \"python3\"\nargs = [\"/home/me/notes-server.py\"]\nread_only = true\n\n[server.env]\nNOTES_DIR = \"/home/me/notes\"\n</code></pre>\n<p>Only <code>server.env</code> is passed to the child. <code>read_only = false</code> is refused before\nspawn; v1 has no mutating path. Mutating MCP is designed in\n<a href=\"adr/0034-mutating-mcp.md\">ADR-0034</a> but not implemented.</p>\n<h2>Rules</h2>\n<ul>\n<li>stdio only; no HTTP/SSE.</li>\n<li>tools only; no resources, prompts, sampling, or elicitation.</li>\n<li>namespaced as <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>; collisions are startup errors.</li>\n<li>stdout is protocol, stderr is diagnostics; a child that hangs is killed at\nthe timeout.</li>\n<li>the child is an ordinary local process running as the user. The manifest is a\ntrust decision, not a sandbox.</li>\n</ul>\n<h2>Verify</h2>\n<pre><code class=\"language-sh\">cargo test -p niucode-mcp\ncargo test -p niucode --test mcp\nniucode exec --mcp-config /path/to/mcp.toml \"list the notes\"\n</code></pre>\n",
       "path": "docs/mcp.md",
       "excerpt": "Read-only MCP v1: the client crate, manifest shape, security rules, and what is still unmounted."
     },
@@ -3802,13 +3834,23 @@
         "adr-0033",
         "M8-001"
       ]
+    },
+    {
+      "date": "2026-10-22",
+      "kind": "decision",
+      "title": "Propose per-call approval for mutating MCP",
+      "detail": "Write-enabled servers name each write tool, require --allow-mcp-write and an interactive approval mode, show the arguments before dispatch, share the write lock, never retry an unknown timeout, and are not inherited by subagents.",
+      "refs": [
+        "adr-0034",
+        "M8-002"
+      ]
     }
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 76,
+    "cards": 77,
     "modules": 14,
-    "docs": 49,
+    "docs": 50,
     "generator": "cargo xtask dashboard"
   }
 }

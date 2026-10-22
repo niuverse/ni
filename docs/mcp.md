@@ -37,7 +37,8 @@ NOTES_DIR = "/home/me/notes"
 ```
 
 Only `server.env` is passed to the child. `read_only = false` is refused before
-spawn; v1 has no mutating path.
+spawn; v1 has no mutating path. Mutating MCP is designed in
+[ADR-0034](adr/0034-mutating-mcp.md) but not implemented.
 
 ## Rules
 

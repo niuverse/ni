@@ -130,4 +130,5 @@ M8 is in progress: ADR-0033 fixes a read-only stdio MCP client with an explicit
 `~/.niucode/mcp.toml` trust file, scrubbed environments, namespaced tools, and
 no resources/HTTP/mutating tools in v1. M8-001 is done: client, multi-server
 host, `AgentConfig.mcp_host` dispatch, `mcp.toml` loading, and `exec`/TUI
-mounting with startup reports are tested. A TUI PTY mount test is a follow-up.
+mounting with startup reports are tested. Mutating MCP is proposed in ADR-0034
+and must stay off until that ADR is accepted; M8-002 is backlog.
