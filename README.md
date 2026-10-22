@@ -26,7 +26,7 @@ sidecar extension host are landing incrementally; M4-002 loads local
 
 ## Embedding
 
-`niucode-cli` builds a library as well as the binary. `run()` starts the normal CLI, `run_tui_with_hooks(TuiOptions, Box<dyn TurnHooks>)` runs the TUI with prompt, event, and turn-end hooks, and `run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` runs a one-shot task with the same three hooks. `examples/hooked_tui.rs` is a minimal recording probe; it exercises `filter_text` before display answers `/probe` through the command hook, and asks a post-turn question through `after_turn` / `on_answer`. See [ADR-0032](docs/adr/0032-embedding-library-surface.md).
+`niucode-cli` builds a library as well as the binary. `run()` starts the normal CLI, `run_tui_with_hooks(TuiOptions, Box<dyn TurnHooks>)` runs the TUI with prompt, event, and turn-end hooks, and `run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` runs a one-shot task with the same three hooks. `TurnHooks::commands` registers embedder slash commands in `/help` and completion; `examples/hooked_tui.rs` is a minimal recording probe; it exercises `filter_text` before display answers `/probe` through the command hook, and asks a post-turn question through `after_turn` / `on_answer`. See [ADR-0032](docs/adr/0032-embedding-library-surface.md).
 
 ## Quick start
 
@@ -34,7 +34,7 @@ Requires Rust 1.88+. On Linux, install `bubblewrap` for sandboxed bash; without 
 
 ```sh
 cargo install niucode                # published; Rust 1.88+
-cargo install niucode --version 0.1.4 --locked
+cargo install niucode --version 0.1.5 --locked
 cargo run -p niucode                 # start the TUI from a checkout (no subcommand needed)
 cargo run -p niucode -- session new  # create a session, print its path
 cargo run -p niucode -- session show <path>

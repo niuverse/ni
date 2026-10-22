@@ -246,7 +246,10 @@ pub async fn run(
     reset_terminal_modes();
     let out = Theme::detect_stdout();
     let err = Theme::detect_stderr();
-    let commands = CommandRegistry::builtin();
+    let mut commands = CommandRegistry::builtin();
+    if let Some(hooks) = &hooks {
+        commands.extend(hooks.borrow().commands());
+    }
     let mut editor = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         let inline = inline_tui_allowed();
         let mut editor = LineEditor::new(commands.clone(), inline);

@@ -40,6 +40,10 @@ impl TurnHooks for Probe {
         *text = text.replace("RAW", "FILTERED");
     }
 
+    fn commands(&self) -> Vec<(String, String)> {
+        vec![("/probe".into(), "answer the probe".into())]
+    }
+
     fn command(&mut self, input: &str) -> Option<String> {
         self.record("command");
         (input.trim() == "/probe").then(|| "probe-ok".to_string())

@@ -9,8 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-niucode-provider = { path = "../niucode-provider", version = "0.1.4" }
-niucode-tools = { path = "../niucode-tools", version = "0.1.4" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.5" }
+niucode-tools = { path = "../niucode-tools", version = "0.1.5" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

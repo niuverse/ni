@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-10-22
+
+- `TurnHooks::commands` registers embedder slash commands in `/help` and Tab completion; `CommandRegistry::extend` deduplicates built-ins.
+
 ## 0.1.4 — 2026-10-22
 
 - `after_turn` / `on_answer` let an embedder ask a generic numbered question after a turn; the PTY probe answers a two-option prompt.

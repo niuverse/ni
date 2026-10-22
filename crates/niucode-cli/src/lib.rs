@@ -62,6 +62,10 @@ pub trait TurnHooks {
     fn command(&mut self, _input: &str) -> Option<String> {
         None
     }
+    /// Extra slash commands to surface in help and completion.
+    fn commands(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
     /// Questions to ask after a successful turn. The host renders them in the
     /// terminal and reports the chosen index through `on_answer`.
     fn after_turn(&mut self, _outcome: &RunOutcome) -> Vec<TurnPrompt> {

@@ -63,6 +63,21 @@ impl CommandRegistry {
         &self.entries
     }
 
+    /// Append embedder commands without duplicating a built-in name.
+    pub fn extend(&mut self, entries: impl IntoIterator<Item = (String, String)>) {
+        for (name, description) in entries {
+            let name = if name.starts_with('/') {
+                name
+            } else {
+                format!("/{name}")
+            };
+            if self.entries.iter().any(|entry| entry.name == name) {
+                continue;
+            }
+            self.entries.push(CommandSpec { name, description });
+        }
+    }
+
     pub fn candidates(&self, prefix: &str) -> Vec<&CommandSpec> {
         self.entries
             .iter()
