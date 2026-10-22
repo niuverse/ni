@@ -42,6 +42,8 @@ niucode          (binary crate)
 ./scripts/publish-niucode.sh --execute   # publish in order, waiting for the index
 ```
 
+Or run the **release** workflow from Actions → Run workflow, type `publish-niucode`, and let it use the `CARGO_REGISTRY_TOKEN` repository secret. The `crates-io` environment can hold protection rules for that secret. The workflow runs the same script and refuses without a license or token.
+
 A dry run of a dependent crate cannot succeed before its dependency is published: Cargo looks up `niucode-core` on crates.io. That is why the script checks the plan instead of pretending each crate can be dry-run locally.
 
 ## After publishing
