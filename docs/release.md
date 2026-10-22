@@ -47,6 +47,10 @@ Or run the **release** workflow from Actions → Run workflow, type `publish-niu
 
 The script checks crates.io before each upload and skips a crate whose version is already listed, so a failed run can be retried without `already uploaded` errors. A dry run of a dependent crate cannot succeed before its dependency is published: Cargo looks up `niucode-core` on crates.io. That is why the script checks the plan instead of pretending each crate can be dry-run locally.
 
+## Published
+
+0.1.0 was published on 2026-10-22 in the order above. `cargo install niucode --version 0.1.0 --locked` was verified from a clean root, and the installed binary reports `niucode 0.1.0`. Tag: `v0.1.0`.
+
 ## After publishing
 
 - Add `version = "0.1.0"` beside the `path` dependencies in niuse.
