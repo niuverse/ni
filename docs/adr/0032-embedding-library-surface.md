@@ -33,6 +33,7 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
        fn augment_system_prompt(&mut self, _prompt: &mut String) {}
        fn on_turn_end(&mut self, _outcome: &RunOutcome) {}
        fn on_event(&mut self, _event: &AgentEvent) {}
+       fn filter_text(&mut self, _text: &mut String) {}
    }
    ```
 
@@ -94,6 +95,7 @@ pub fn run_tui(options: TuiOptions, hooks: Box<dyn TurnHooks>) -> Result<()>;
 
 - `augment_system_prompt` 在构造 `AgentConfig` 之前调用一次。
 - `on_event` 由运行时观察者转发 `AgentEvent`，只读，不写日志；持久化的 `Event` 仍是唯一真相。
+- `filter_text` 在显示前修改一个 text delta；持久化的 `Event` 不变。它是嵌入方剥离自有协议块的 seam。
 - `on_turn_end` 在最终事件落盘后调用。hook 不应 panic；库不额外捕获。
 - `TuiOptions` 只包含现有入口已经需要的字段，不引入产品类型。
 

@@ -286,8 +286,12 @@ pub async fn run(
                         }
                     }
                     match event {
-                        RuntimeEvent::Agent(AgentEvent::TextDelta(text)) => {
-                            status = "responding".into(); transcript.delta(&mut terminal, view.is_some(), &text)?;
+                        RuntimeEvent::Agent(AgentEvent::TextDelta(mut text)) => {
+                            if let Some(hooks) = &hooks {
+                                hooks.borrow_mut().filter_text(&mut text);
+                            }
+                            status = "responding".into();
+                            transcript.delta(&mut terminal, view.is_some(), &text)?;
                         }
                         RuntimeEvent::Agent(AgentEvent::ReasoningDelta(_)) => status = "thinking · Ctrl-O recorded details".into(),
                         RuntimeEvent::Agent(AgentEvent::ToolCall { name, .. }) => {

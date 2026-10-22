@@ -54,6 +54,9 @@ pub trait TurnHooks {
     fn on_turn_end(&mut self, _outcome: &RunOutcome) {}
     /// Read-only observation of an event. Do not append to the session log here.
     fn on_event(&mut self, _event: &AgentEvent) {}
+    /// Mutate a text delta before it is rendered. The persisted event is
+    /// unchanged; this is the seam for embedder-side protocol stripping.
+    fn filter_text(&mut self, _text: &mut String) {}
 }
 
 /// The no-op implementation used when no embedder hooks are supplied.
@@ -1377,9 +1380,14 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     };
 
     let mut line_open = false;
-    let mut observer = |event: AgentEvent| {
+    let mut observer = |mut event: AgentEvent| {
         if let Some(hooks) = hooks.borrow_mut().as_mut() {
             hooks.on_event(&event);
+        }
+        if let AgentEvent::TextDelta(text) = &mut event {
+            if let Some(hooks) = hooks.borrow_mut().as_mut() {
+                hooks.filter_text(text);
+            }
         }
         if json {
             emit_json(event_json(&event));

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `TurnHooks::filter_text` mutates a text delta before display; the persisted event is unchanged. The PTY hook probe verifies filtering and turn-end together.
+
 ## 0.1.2 — 2026-10-22
 
 - TUI hooks cover prompt augmentation, runtime event observation, and turn-end through a shared hook cell; an example probe verifies all three under a PTY. The renderer still lives in niuse.

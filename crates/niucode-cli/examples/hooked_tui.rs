@@ -35,6 +35,11 @@ impl TurnHooks for Probe {
         self.record("event");
     }
 
+    fn filter_text(&mut self, text: &mut String) {
+        self.record("filter");
+        *text = text.replace("RAW", "FILTERED");
+    }
+
     fn on_turn_end(&mut self, _outcome: &RunOutcome) {
         self.record("turn_end");
     }
