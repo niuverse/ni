@@ -19,6 +19,7 @@ use ratatui::{
 };
 use std::io::{self, stdout, Write};
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
 
 type Inline = Terminal<CrosstermBackend<io::Stdout>>;
 
@@ -151,7 +152,10 @@ impl TerminalSession {
                 let width = t.size()?.width.saturating_sub(1).max(1) as usize;
                 for row in wrap(line, width) {
                     let row = theme.row(&row, self.code_block);
-                    t.insert_before(1, |buf| Paragraph::new(row).render(buf.area, buf))?;
+                    t.insert_before(1, |buf| {
+                        Paragraph::new(row).render(buf.area, buf);
+                        collapse_wide_continuations(buf);
+                    })?;
                 }
             } else {
                 write!(out, "{}\r\n", theme.render_row(line, self.code_block))?;
@@ -231,6 +235,7 @@ impl TerminalSession {
                     })
                     .collect();
                 f.render_widget(Paragraph::new(rows), area);
+                collapse_wide_continuations(f.buffer_mut());
                 if visible_cursor {
                     f.set_cursor_position((area.x + cursor.1 as u16, area.y + cursor.0 as u16));
                 }
@@ -404,6 +409,30 @@ impl DetailScreen {
         Ok(())
     }
 }
+/// Ratatui fills the second cell of a wide grapheme with a space. The backend
+/// then writes that space after the glyph, which is the visible gap after CJK.
+/// Clear the continuation cells so the renderer leaves them untouched.
+fn collapse_wide_continuations(buffer: &mut ratatui::buffer::Buffer) {
+    let area = buffer.area;
+    for y in area.top()..area.bottom() {
+        let mut x = area.left();
+        while x < area.right() {
+            let width = UnicodeWidthStr::width(buffer[(x, y)].symbol());
+            if width > 1 {
+                for offset in 1..width {
+                    let next = x + offset as u16;
+                    if next < area.right() {
+                        buffer[(next, y)].set_symbol("");
+                    }
+                }
+                x += width as u16;
+            } else {
+                x += 1;
+            }
+        }
+    }
+}
+
 impl Drop for DetailScreen {
     fn drop(&mut self) {
         let _ = execute!(stdout(), terminal::LeaveAlternateScreen, Show);
@@ -416,6 +445,17 @@ impl Drop for DetailScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wide_graphemes_do_not_leave_filler_spaces() {
+        let mut buffer = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 20, 1));
+        Paragraph::new("中文").render(buffer.area, &mut buffer);
+        collapse_wide_continuations(&mut buffer);
+        assert_eq!(buffer[(0, 0)].symbol(), "中");
+        assert!(buffer[(1, 0)].symbol().is_empty());
+        assert_eq!(buffer[(2, 0)].symbol(), "文");
+        assert!(buffer[(3, 0)].symbol().is_empty());
+    }
+
     #[test]
     fn clearing_inline_hands_off_at_viewport_origin_and_preserves_transcript() {
         let mut terminal = Terminal::with_options(
