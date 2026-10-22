@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-10-22
 
-- TUI hooks now cover prompt augmentation, runtime event observation, and turn-end through a shared hook cell; the renderer still lives in niuse.
+- TUI hooks cover prompt augmentation, runtime event observation, and turn-end through a shared hook cell; an example probe verifies all three under a PTY. The renderer still lives in niuse.
 
 ## 0.1.1 — 2026-10-22
 

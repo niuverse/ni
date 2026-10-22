@@ -17,12 +17,12 @@ clap.workspace = true
 crossterm.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
-niucode-agent = { path = "../niucode-agent", version = "0.1.1" }
-niucode-auth = { path = "../niucode-auth", version = "0.1.1" }
-niucode-core = { path = "../niucode-core", version = "0.1.1" }
-niucode-extension = { path = "../niucode-extension", version = "0.1.1" }
-niucode-provider = { path = "../niucode-provider", version = "0.1.1" }
-niucode-tools = { path = "../niucode-tools", version = "0.1.1" }
+niucode-agent = { path = "../niucode-agent", version = "0.1.2" }
+niucode-auth = { path = "../niucode-auth", version = "0.1.2" }
+niucode-core = { path = "../niucode-core", version = "0.1.2" }
+niucode-extension = { path = "../niucode-extension", version = "0.1.2" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.2" }
+niucode-tools = { path = "../niucode-tools", version = "0.1.2" }
 ratatui.workspace = true
 rpassword.workspace = true
 serde.workspace = true

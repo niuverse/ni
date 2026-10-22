@@ -18,7 +18,7 @@ docs = ["adr-0032"]
 - 共享 `Rc<RefCell<Box<dyn TurnHooks>>>` 只在一个方法调用内借用，不跨 await。
 - 启动前调用 `augment_system_prompt`。
 - live runner 和无编辑器路径都把 `AgentEvent` 转发给 `on_event`，并在成功 outcome 上调用 `on_turn_end`。
-- 编译测试验证公开入口可实例化；全量测试、clippy、dashboard 通过。
+- 编译测试验证公开入口可实例化；PTY + replay 的 example 探针确认 prompt / event / turn_end 都实际触发；全量测试、clippy、dashboard 通过。
 
 ## 验收
 
@@ -26,4 +26,5 @@ docs = ["adr-0032"]
 - [x] live 路径的事件和 turn-end 调用。
 - [x] 无编辑器路径的事件和 turn-end 调用。
 - [x] 默认空 hooks 不影响行为。
+- [x] PTY 运行时探针：`examples/hooked_tui.rs` 记录到 prompt/event/turn_end。
 - [ ] renderer 迁移（下一步，不在本卡）。
