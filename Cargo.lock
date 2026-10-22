@@ -1445,6 +1445,7 @@ name = "niucode"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "crossterm",
  "futures-util",

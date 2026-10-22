@@ -43,7 +43,9 @@ mod theme;
 mod tui;
 mod workspace;
 
-pub use niucode_agent::{AgentEvent, RunOutcome};
+pub use niucode_agent::{AgentEvent, EmbedderTool, RunOutcome};
+pub use niucode_provider::ToolSpec;
+pub use niucode_tools::ToolResult;
 
 /// Keys accepted while an approval is pending.
 ///
@@ -150,6 +152,7 @@ pub struct ExecOptions {
     pub tools: Option<Vec<String>>,
     pub goal: Option<String>,
     pub max_goal_turns: usize,
+    pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
 }
 
 impl Default for ExecOptions {
@@ -175,6 +178,7 @@ impl Default for ExecOptions {
             tools: None,
             goal: None,
             max_goal_turns: 6,
+            extra_tools: Vec::new(),
         }
     }
 }
@@ -204,6 +208,7 @@ pub struct TuiOptions {
     pub plan: bool,
     pub allow_subagent_inheritance: bool,
     pub approval_keys: ApprovalKeys,
+    pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
 }
 
 impl Default for TuiOptions {
@@ -225,6 +230,7 @@ impl Default for TuiOptions {
             plan: false,
             allow_subagent_inheritance: false,
             approval_keys: ApprovalKeys::default(),
+            extra_tools: Vec::new(),
         }
     }
 }
@@ -545,6 +551,7 @@ pub async fn run() -> Result<()> {
                     tools,
                     goal,
                     max_goal_turns,
+                    extra_tools: Vec::new(),
                 },
                 None,
             )
@@ -589,6 +596,7 @@ pub async fn run() -> Result<()> {
                     plan,
                     allow_subagent_inheritance,
                     approval_keys: ApprovalKeys::default(),
+                    extra_tools: Vec::new(),
                 },
                 None,
             )
@@ -976,6 +984,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         plan,
         allow_subagent_inheritance,
         approval_keys,
+        extra_tools,
     } = options;
     if context_budget != 0 && context_budget < 100 {
         bail!("--context-budget must be 0 (auto) or at least 100 tokens");
@@ -1120,6 +1129,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    agent_config.extra_tools = extra_tools;
     if let Some(hooks) = hooks.as_ref() {
         hooks
             .borrow_mut()
@@ -1204,6 +1214,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         tools,
         goal,
         max_goal_turns,
+        extra_tools,
     } = options;
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
@@ -1384,6 +1395,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    agent_config.extra_tools = extra_tools;
     agent_config.allowed_tools = tools;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);

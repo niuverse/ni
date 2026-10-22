@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
 similar.workspace = true
@@ -21,4 +22,3 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-async-trait.workspace = true

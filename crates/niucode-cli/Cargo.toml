@@ -34,4 +34,5 @@ unicode-width.workspace = true
 unicode-segmentation.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 tempfile.workspace = true

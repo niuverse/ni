@@ -17,6 +17,8 @@ Accepted · 2026-10-22。来自 niuse 的嵌入需求；上游讨论见 [#1](htt
 
 TUI 路径已有 `TuiOptions` 与 `run_tui_with_hooks`，启动前调用 `augment_system_prompt`；TUI 循环与 live runner 通过共享的 `Rc<RefCell<Box<dyn TurnHooks>>>` 短借用，事件观察和 turn-end 均已接线。PTY + replay 的 example 探针确认三者都实际触发；renderer 迁移尚未开始。
 
+第三步（2026-10-22）：`EmbedderTool` 与 `AgentConfig.extra_tools` 允许嵌入方注册只读工具，`TuiOptions`/`ExecOptions` 暴露同一入口。spec 与内建、扩展工具合并后按名分发；v1 在首轮前拒绝非只读工具和重名，子 agent 不继承。它不引入产品类型，也不是 extension host 的替代。
+
 ## 背景
 
 niuse 需要复用 niucode 的 TUI、审批、diff 与 transcript，但 `niucode-cli` 目前只有 bin、没有 lib。结果是 niuse 自己驱动 turn、自己维护 renderer：同一套前端要演进两次，而且 niuse 无法复用终端验收。

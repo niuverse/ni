@@ -10,10 +10,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
+use async_trait::async_trait;
 use futures_util::StreamExt;
 use niucode_core::{now_ms, Event, SessionLog, ToolCall, Usage};
-use niucode_provider::{ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent};
-use niucode_tools::{ChangePreview, SandboxPolicy, Toolbox};
+use niucode_provider::{
+    ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent, ToolSpec,
+};
+use niucode_tools::{ChangePreview, SandboxPolicy, ToolResult, Toolbox};
 use serde_json::{json, Value};
 
 mod changes;
@@ -67,6 +70,20 @@ pub struct ApprovalRequest {
     pub preview: Option<ChangePreview>,
 }
 
+/// A read-only tool supplied by an embedder.
+///
+/// The loop advertises the spec and dispatches by name. v1 accepts only
+/// read-only tools: they do not ask for approval, do not write through the
+/// sandbox, and are not inherited by subagents.
+#[async_trait]
+pub trait EmbedderTool: Send + Sync + std::fmt::Debug {
+    fn spec(&self) -> ToolSpec;
+    fn read_only(&self) -> bool {
+        true
+    }
+    async fn execute(&self, input: Value) -> ToolResult;
+}
+
 #[derive(Clone)]
 pub struct AgentConfig {
     pub provider: String,
@@ -91,6 +108,9 @@ pub struct AgentConfig {
     /// Optional session-scoped sidecar host. External tools are merged into the
     /// advertised tool list and dispatched after the built-ins.
     pub extension_host: Option<Arc<niucode_extension::ExtensionHost>>,
+    /// Read-only tools supplied by an embedder. Dispatched after built-ins and
+    /// the extension host; not inherited by subagents.
+    pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     /// Shared W1 write lock. Parent and Worker subagents use the same lock so
     /// mutating built-ins never race on one workspace.
     pub write_lock: Option<Arc<tokio::sync::Mutex<()>>>,
@@ -135,6 +155,7 @@ impl AgentConfig {
             plan_mode: false,
             goal: None,
             extension_host: None,
+            extra_tools: Vec::new(),
             write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
             read_roots: Vec::new(),
@@ -251,6 +272,25 @@ async fn run_engine(
     let mut tools = Toolbox::specs();
     if let Some(host) = &config.extension_host {
         tools.extend(host.specs());
+    }
+    for tool in &config.extra_tools {
+        let spec = tool.spec();
+        if !tool.read_only() {
+            bail!(
+                "embedder tool {} is not read-only; v1 supports read-only tools only",
+                spec.function.name
+            );
+        }
+        if tools
+            .iter()
+            .any(|existing| existing.function.name == spec.function.name)
+        {
+            bail!(
+                "embedder tool {} collides with an existing tool",
+                spec.function.name
+            );
+        }
+        tools.push(spec);
     }
     let tools = match &config.allowed_tools {
         Some(allowed) => tools
@@ -542,6 +582,12 @@ async fn run_engine(
                 };
                 io.wait(session, host.execute(&call.name, &call.input))
                     .await?
+            } else if let Some(tool) = config
+                .extra_tools
+                .iter()
+                .find(|tool| tool.spec().function.name == call.name)
+            {
+                io.wait(session, tool.execute(call.input.clone())).await?
             } else {
                 execute_builtin(session, config, io, &toolbox, &call)
                     .await?
