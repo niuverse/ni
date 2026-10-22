@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use niucode::{AgentEvent, ExecOptions, RunOutcome, TurnHooks};
+use niucode::{AgentEvent, ExecOptions, RunOutcome, TuiOptions, TurnHooks};
 
 #[derive(Default)]
 struct Recorder {
@@ -61,4 +61,14 @@ async fn exec_invokes_the_hooks() {
     assert!(hooks.saw_prompt);
     assert!(hooks.events > 0);
     assert_eq!(hooks.turns, 1);
+}
+
+#[test]
+fn tui_options_have_safe_defaults() {
+    let options = TuiOptions::default();
+    assert_eq!(options.preset, "deepseek");
+    assert_eq!(options.sandbox, "workspace-write");
+    assert_eq!(options.approval, "on-failure");
+    assert_eq!(options.context_budget, 0);
+    let _ = niucode::run_tui_with_hooks;
 }

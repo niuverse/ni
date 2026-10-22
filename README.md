@@ -24,6 +24,10 @@ versioned JSONL protocol. M4 is active: profiles, `/plan`, `/goal`, and the
 sidecar extension host are landing incrementally; M4-002 loads local
 `.niucode/extensions/*.toml` tools through JSON-RPC.
 
+## Embedding
+
+`niucode-cli` builds a library as well as the binary. `run()` starts the normal CLI, `run_tui_with_hooks(TuiOptions, &mut TurnHooks)` starts the TUI with a prompt hook, and `run_exec_with_hooks(ExecOptions, &mut TurnHooks)` runs a one-shot task with prompt, event, and turn-end hooks. See [ADR-0032](docs/adr/0032-embedding-library-surface.md).
+
 ## Quick start
 
 Requires Rust 1.88+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.

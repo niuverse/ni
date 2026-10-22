@@ -13,7 +13,9 @@ Accepted · 2026-10-22。来自 niuse 的嵌入需求；上游讨论见 [#1](htt
 
 第一步已落地：`niucode-cli` 增加库目标，导出 `run()`、`TurnHooks` 与 `NoHooks`，并有一个链接测试。
 
-第二步在 exec 路径落地：`run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` 会在构造 `AgentConfig` 后调用 `augment_system_prompt`，在运行时事件上调用 `on_event`，并在首个 turn 结束后调用 `on_turn_end`；集成测试用 replay fixture 断言三者都发生。TUI 路径尚未接线，renderer 迁移也尚未开始。
+第二步在 exec 路径落地：`run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` 会在构造 `AgentConfig` 后调用 `augment_system_prompt`，在运行时事件上调用 `on_event`，并在首个 turn 结束后调用 `on_turn_end`；集成测试用 replay fixture 断言三者都发生。
+
+TUI 路径已有 `TuiOptions` 与 `run_tui_with_hooks`，并在启动前调用 `augment_system_prompt`；TUI 的事件观察和 turn-end 调用尚未接线，renderer 迁移也尚未开始。
 
 ## 背景
 

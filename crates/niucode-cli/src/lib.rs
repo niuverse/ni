@@ -118,6 +118,54 @@ pub async fn run_exec_with_hooks(options: ExecOptions, hooks: &mut dyn TurnHooks
     run_exec(options, Some(hooks)).await
 }
 
+/// Options for the interactive TUI.
+#[derive(Debug, Clone)]
+pub struct TuiOptions {
+    pub preset: String,
+    pub model: Option<String>,
+    pub context_budget: usize,
+    pub max_steps: usize,
+    pub keep_recent_turns: usize,
+    pub no_thinking: bool,
+    pub cwd: Option<PathBuf>,
+    pub session_dir: Option<PathBuf>,
+    pub resume: Option<PathBuf>,
+    pub sandbox: String,
+    pub approval: String,
+    pub network: String,
+    pub replay: Option<PathBuf>,
+    pub plan: bool,
+    pub allow_subagent_inheritance: bool,
+}
+
+impl Default for TuiOptions {
+    fn default() -> Self {
+        Self {
+            preset: "deepseek".into(),
+            model: None,
+            context_budget: 0,
+            max_steps: 0,
+            keep_recent_turns: 3,
+            no_thinking: false,
+            cwd: None,
+            session_dir: None,
+            resume: None,
+            sandbox: "workspace-write".into(),
+            approval: "on-failure".into(),
+            network: "off".into(),
+            replay: None,
+            plan: false,
+            allow_subagent_inheritance: false,
+        }
+    }
+}
+
+/// Run the TUI with embedder hooks. The prompt hook is applied once before
+/// the TUI starts; event and turn-end hooks are not wired on this path yet.
+pub async fn run_tui_with_hooks(options: TuiOptions, hooks: &mut dyn TurnHooks) -> Result<()> {
+    run_tui(options, Some(hooks)).await
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "niucode",
@@ -455,41 +503,34 @@ pub async fn run() -> Result<()> {
             allow_subagent_inheritance,
         }) => {
             run_tui(
-                preset,
-                model,
-                context_budget,
-                max_steps,
-                keep_recent_turns,
-                no_thinking,
-                cwd,
-                session_dir,
-                resume,
-                sandbox,
-                approval,
-                network,
-                replay,
-                plan,
-                allow_subagent_inheritance,
+                TuiOptions {
+                    preset,
+                    model,
+                    context_budget,
+                    max_steps,
+                    keep_recent_turns,
+                    no_thinking,
+                    cwd,
+                    session_dir,
+                    resume,
+                    sandbox,
+                    approval,
+                    network,
+                    replay,
+                    plan,
+                    allow_subagent_inheritance,
+                },
+                None,
             )
             .await
         }
         None => {
             run_tui(
-                "deepseek".into(),
+                TuiOptions {
+                    context_budget: 64_000,
+                    ..TuiOptions::default()
+                },
                 None,
-                64_000,
-                0,
-                3,
-                false,
-                None,
-                None,
-                None,
-                "workspace-write".into(),
-                "on-failure".into(),
-                "off".into(),
-                None,
-                false,
-                false,
             )
             .await
         }
@@ -847,24 +888,24 @@ fn run_fork(path: PathBuf, at: String, session_dir: Option<PathBuf>) -> Result<(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_tui(
-    preset: String,
-    model: Option<String>,
-    context_budget: usize,
-    max_steps: usize,
-    keep_recent_turns: usize,
-    no_thinking: bool,
-    cwd: Option<PathBuf>,
-    session_dir: Option<PathBuf>,
-    resume: Option<PathBuf>,
-    sandbox: String,
-    approval: String,
-    network: String,
-    replay: Option<PathBuf>,
-    plan: bool,
-    allow_subagent_inheritance: bool,
-) -> Result<()> {
+async fn run_tui(options: TuiOptions, mut hooks: Option<&mut dyn TurnHooks>) -> Result<()> {
+    let TuiOptions {
+        preset,
+        model,
+        context_budget,
+        max_steps,
+        keep_recent_turns,
+        no_thinking,
+        cwd,
+        session_dir,
+        resume,
+        sandbox,
+        approval,
+        network,
+        replay,
+        plan,
+        allow_subagent_inheritance,
+    } = options;
     if context_budget != 0 && context_budget < 100 {
         bail!("--context-budget must be 0 (auto) or at least 100 tokens");
     }
@@ -1008,6 +1049,9 @@ async fn run_tui(
     agent_config.allow_subagent_inheritance = allow_subagent_inheritance;
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
+    if let Some(hooks) = hooks.as_mut() {
+        hooks.augment_system_prompt(&mut agent_config.system_prompt);
+    }
 
     let theme = Theme::detect_stdout();
     let width = crossterm::terminal::size()
