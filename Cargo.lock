@@ -1534,6 +1534,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "niucode-mcp"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "niucode-provider"
 version = "0.1.5"
 dependencies = [

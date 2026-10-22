@@ -1,7 +1,7 @@
 +++
 id = "M8-001"
 title = "MCP stdio client v1"
-status = "backlog"
+status = "doing"
 milestone = "M8"
 module = "extensions"
 size = "L"
@@ -30,15 +30,17 @@ integration each time.
 
 ## Acceptance
 
-- [ ] A Python stdio MCP server mounts, lists one tool, and is callable.
-- [ ] A non-read-only manifest is refused before any turn.
+- [x] A Python stdio MCP server mounts, lists one tool, and is callable.
+- [x] A non-read-only manifest is refused before any turn.
 - [ ] A name collision is refused before any turn.
-- [ ] Credentials from the parent environment do not reach the server.
-- [ ] A hung server times out and is killed without stalling the session.
+- [x] Credentials from the parent environment do not reach the server.
+- [x] A hung server times out and is killed without stalling the session.
 - [ ] `exec --mcp-config` and the TUI mount the same host; `doctor` reports it.
 - [ ] Offline tests cover mount, list, call, timeout, and shutdown.
 
 ## Notes
 
-See ADR-0033. Resources, prompts, HTTP transport, and mutating tools are
-explicitly out of v1.
+Client crate and offline fixture are done. Remaining: load
+`~/.niucode/mcp.toml`, mount the host in `exec` and the TUI, expose namespaced
+specs to the agent loop, report mounts in `doctor`, and add the collision test
+at mount time. See ADR-0033 and [mcp](../mcp.md).

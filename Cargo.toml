@@ -7,6 +7,7 @@ members = [
     "crates/niucode-tools",
     "crates/niucode-agent",
     "crates/niucode-extension",
+    "crates/niucode-mcp",
     "crates/niucode-cli",
     "crates/xtask",
     "benchmarks/gateway",

@@ -126,6 +126,7 @@ The benchmark gateway owns a separate append-only cost journal, not session stat
 All model calls, including development and delegated calls, share one CNY 300 cap.
 M6 remains active and real-terminal acceptance stays independent.
 
-M8 is planned: ADR-0033 fixes a read-only stdio MCP client with an explicit
+M8 is in progress: ADR-0033 fixes a read-only stdio MCP client with an explicit
 `~/.niucode/mcp.toml` trust file, scrubbed environments, namespaced tools, and
-no resources/HTTP/mutating tools in v1. M8-001 is backlog.
+no resources/HTTP/mutating tools in v1. M8-001 has the client crate and offline
+fixture; session mounting and `doctor` are next.
