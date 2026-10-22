@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-10-22
+
+Patch release for the inline TUI and the first TUI embedding entry.
+
+- Inline transcript and composer clear ratatui's wide-grapheme filler cells, removing the extra column after every CJK character.
+- `TuiOptions` and `run_tui_with_hooks` are public; the TUI applies `augment_system_prompt` once before the first turn.
+- No event/turn-end TUI hooks yet; the exec path remains the only path that invokes all three hooks.
+
 ## 0.1.0 — 2026-10-22
 
 First public crate set, versioned together at 0.1.0.

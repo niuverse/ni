@@ -9,9 +9,9 @@ summary = "Version 0.1.0, publish order, and the license/token prerequisites for
 
 ## Version
 
-All publishable crates share the workspace version **0.1.0**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
+All publishable crates share the workspace version **0.1.1**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
 
-Version `0.1.0` signals the same thing as niuse's 0.1.0: usable, documented, still pre-1.0.
+Version `0.1.1` is a patch on the 0.1.0 release: the inline CJK spacing fix plus the first TUI embedding entry. It stays pre-1.0.
 
 ## Prerequisites
 
@@ -49,7 +49,9 @@ The script checks crates.io before each upload and skips a crate whose version i
 
 ## Published
 
-0.1.0 was published on 2026-10-22 in the order above. `cargo install niucode --version 0.1.0 --locked` was verified from a clean root, and the installed binary reports `niucode 0.1.0`. Tag: `v0.1.0`.
+0.1.0 was published on 2026-10-22 in the order above. `cargo install niucode --version 0.1.0 --locked` was verified from a clean root.
+
+0.1.1 is the patch release for the inline CJK spacing fix and `TuiOptions`; it uses the same order.
 
 ## After publishing
 

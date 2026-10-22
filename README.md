@@ -33,8 +33,8 @@ sidecar extension host are landing incrementally; M4-002 loads local
 Requires Rust 1.88+. On Linux, install `bubblewrap` for sandboxed bash; without it, the default `--approval on-failure` falls back to per-tool prompts. The OS keyring uses Secret Service (`libdbus-1-dev` at build time); use `NIUCODE_AUTH_DISABLE_KEYRING=1` for the 0600 file fallback.
 
 ```sh
-cargo install niucode                # published 0.1.0; Rust 1.88+
-cargo install niucode --version 0.1.0 --locked
+cargo install niucode                # published; Rust 1.88+
+cargo install niucode --version 0.1.1 --locked
 cargo run -p niucode                 # start the TUI from a checkout (no subcommand needed)
 cargo run -p niucode -- session new  # create a session, print its path
 cargo run -p niucode -- session show <path>
