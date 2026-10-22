@@ -238,6 +238,9 @@ pub enum Event {
         /// Bounded stdout/stderr tail; never the full output.
         #[serde(default)]
         output: String,
+        /// Optional niuse plan step, e.g. `p-2`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<String>,
         ts: Timestamp,
     },
     /// Active session goal / completion condition.
@@ -539,6 +542,7 @@ mod tests {
             command: "cargo test".into(),
             ok: false,
             output: "one failure".into(),
+            step: Some("p-2".into()),
             ts: 11,
         };
         assert_eq!(event.kind(), "verification");
@@ -548,8 +552,8 @@ mod tests {
         let decoded: Event = serde_json::from_value(encoded).unwrap();
         assert!(matches!(
             decoded,
-            Event::Verification { command, ok: false, output, ts: 11 }
-                if command == "cargo test" && output == "one failure"
+            Event::Verification { command, ok: false, output, step: Some(step), ts: 11 }
+                if command == "cargo test" && output == "one failure" && step == "p-2"
         ));
     }
 

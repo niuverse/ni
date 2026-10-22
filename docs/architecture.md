@@ -56,7 +56,7 @@ user input
 | `subagent_spawn` | 父 session 启动只读子任务 | id、call_id、task、session、预算 |
 | `subagent_result` | 子任务结束 | id、ok、summary、session、turns、usage |
 | `plan_mode` | plan mode 开关 | active |
-| `verification` | 人显式运行一次检查后 | command、ok、output（有界尾部） |
+| `verification` | 人显式运行一次检查后 | command、ok、output（有界尾部）、可选 step |
 | `goal_set` / `goal_cleared` | 会话目标 | text / 清除 |
 | `goal_verdict` | `/goal run` evaluator 结论 | status、reason |
 | `model_change` | 运行时模型选择 | provider、model |
