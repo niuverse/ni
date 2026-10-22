@@ -12,6 +12,7 @@ order=(
     niucode-provider
     niucode-tools
     niucode-extension
+    niucode-mcp
     niucode-agent
     niucode
 )

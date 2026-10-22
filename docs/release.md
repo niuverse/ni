@@ -11,7 +11,11 @@ summary = "Version 0.1.0, publish order, and the license/token prerequisites for
 
 All publishable crates share the workspace version **0.1.5**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
 
-Version `0.1.5` adds embedder command registration in help/completion on top of 0.1.4's post-turn prompts. It stays pre-1.0.
+Version `0.1.5` adds embedder command registration in help/completion on top of
+0.1.4's post-turn prompts, plus the new `niucode-mcp` read-only client crate.
+Because `niucode-mcp` is new, it can be published at 0.1.5 alongside the
+existing set; already-published crates are skipped by the script. It stays
+pre-1.0.
 
 ## Prerequisites
 
@@ -30,6 +34,7 @@ niucode-auth
 niucode-provider
 niucode-tools
 niucode-extension
+niucode-mcp
 niucode-agent
 niucode          (binary crate)
 ```
