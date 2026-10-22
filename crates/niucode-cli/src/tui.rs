@@ -39,7 +39,7 @@ use crate::slash::{
 use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
 use crate::workspace::Workspace;
-use crate::{SharedHooks, TurnPrompt};
+use crate::SharedHooks;
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
