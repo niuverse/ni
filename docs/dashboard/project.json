@@ -5,7 +5,7 @@
     "title": "niucode",
     "tagline": "minimal, observable coding agent",
     "summary": "一个围绕 append-only 事件日志、薄 provider 适配层和锋利工具面构建的最小 agent harness。看板是架构、决策与迭代的维护面，不是运行时监控。",
-    "status": "M6 · Reliable pairing / terminal acceptance pending",
+    "status": "M6 · Reliable pairing · M8 MCP planned",
     "repo": "niuverse/niucode",
     "language": "Rust"
   },
@@ -100,6 +100,18 @@
         "niucode/mini-SWE-agent/DeepSeek Harness/Pi 基础/增强配置固定并有完整配对结果",
         "DeepSeek 全部调用计入 300 元总预算，token/费用/失败可审计",
         "外部固定任务使用上游原始测试评分并公开协议差异；格式/测试/clippy/dashboard 通过，M6 实机 gate 保持独立"
+      ]
+    },
+    {
+      "id": "M8",
+      "title": "Connected harness",
+      "status": "planned",
+      "goal": "通过标准、可审计的连接器让 harness 访问外部工具，而不为每个服务写一套 sidecar。",
+      "exit": [
+        "stdio MCP 客户端支持 initialize/tools/list/tools/call，超时与进程组清理可验证",
+        "只读 v1 的信任清单显式列出服务器，环境变量不继承凭证",
+        "工具命名与冲突、审计事件、输出预算有离线测试",
+        "niuse 能通过同一 seam 使用一个个人工具包，且不需要 fork 内核"
       ]
     }
   ],
@@ -1304,6 +1316,16 @@
         "M6-018",
         "timer-regression",
         "tui"
+      ]
+    },
+    {
+      "date": "2026-10-22",
+      "kind": "decision",
+      "title": "Choose a read-only stdio MCP v1",
+      "detail": "MCP servers come from an explicit trust file, run as local stdio processes with scrubbed environments, and expose tools only. Mutating tools and remote transports wait for a separate approval design.",
+      "refs": [
+        "adr-0033",
+        "M8-001"
       ]
     }
   ]
