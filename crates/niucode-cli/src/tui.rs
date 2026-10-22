@@ -806,9 +806,7 @@ async fn handle_command(
                 None => None,
             };
             let fresh = new_session(session, config, custom)?;
-            if let Some(hooks) = hooks {
-                hooks.borrow_mut().on_session_start(fresh.path());
-            }
+            notify_session(hooks, fresh.path());
             if plan {
                 fresh.append(&Event::PlanMode {
                     active: true,
@@ -876,9 +874,7 @@ async fn handle_command(
                 None => None,
             };
             *session = new_session(session, config, custom)?;
-            if let Some(hooks) = hooks {
-                hooks.borrow_mut().on_session_start(session.path());
-            }
+            notify_session(hooks, session.path());
             history.clear();
             *allow_session = false;
             *last_tool = None;
@@ -916,6 +912,7 @@ async fn handle_command(
                 out,
                 err,
             )?;
+            notify_session(hooks, session.path());
         }
         SlashCommand::Fork(at) => {
             let report = fork_session(session, at.as_deref())?;
@@ -932,6 +929,7 @@ async fn handle_command(
             *state = SessionUiState::from_events(&loaded.events);
             *allow_session = false;
             *last_tool = None;
+            notify_session(hooks, session.path());
             reset_screen(err);
             println!(
                 "{} {}",
@@ -2244,6 +2242,12 @@ fn resume_session(
     Ok(())
 }
 
+fn notify_session(hooks: Option<&SharedHooks>, path: &Path) {
+    if let Some(hooks) = hooks {
+        hooks.borrow_mut().on_session_start(path);
+    }
+}
+
 fn new_session(
     session: &SessionLog,
     config: &AgentConfig,
@@ -2828,6 +2832,29 @@ mod tests {
         assert_eq!(config.sandbox.mode, SandboxMode::ReadOnly);
         assert_eq!(config.sandbox.network, NetworkMode::Off);
         assert_eq!(config.approval, ApprovalMode::Never);
+    }
+
+    #[test]
+    fn session_change_notifies_hooks() {
+        use crate::TurnHooks;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        use std::sync::{Arc, Mutex};
+
+        struct Recorder(Arc<Mutex<Option<PathBuf>>>);
+        impl TurnHooks for Recorder {
+            fn on_session_start(&mut self, path: &Path) {
+                *self.0.lock().unwrap() = Some(path.to_path_buf());
+            }
+        }
+
+        let seen = Arc::new(Mutex::new(None));
+        let hooks: SharedHooks = Rc::new(RefCell::new(Box::new(Recorder(seen.clone()))));
+        notify_session(Some(&hooks), Path::new("/tmp/thread.jsonl"));
+        assert_eq!(
+            seen.lock().unwrap().as_deref(),
+            Some(Path::new("/tmp/thread.jsonl"))
+        );
     }
 
     #[test]

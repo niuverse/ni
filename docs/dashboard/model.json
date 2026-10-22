@@ -2287,6 +2287,27 @@
       "path": "docs/board/M6-027-new-session-seam.md"
     },
     {
+      "id": "M6-028",
+      "title": "Notify hooks on resume and fork",
+      "status": "done",
+      "milestone": "M6",
+      "module": "tui",
+      "size": "S",
+      "priority": "P1",
+      "updated": "2026-10-22",
+      "completed": "2026-10-22",
+      "depends_on": [
+        "M6-027"
+      ],
+      "docs": [
+        "tui",
+        "adr-0032"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p><code>/clear</code> and <code>/reset</code> used the new-session hook, but <code>/resume</code> and <code>/fork</code>\nreplaced the session pointer without notifying the embedder. niuse's hooks would\nkeep reading the old thread after either command.</p>\n<h2>Scope</h2>\n<ul>\n<li>Central <code>notify_session</code> helper around <code>on_session_start</code>.</li>\n<li>Call it after <code>/resume</code> and <code>/fork</code>, and replace the duplicated clear/reset\ncalls.</li>\n<li>Unit test with a recording hook.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n<code>/resume</code> notifies hooks after a successful switch.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n<code>/fork</code> notifies hooks after opening the destination.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n<code>/clear</code> and <code>/reset</code> use the same helper.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nA recording hook sees the new path.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo change to the session files themselves.</li>\n</ul>\n<h2>Notes</h2>\n<p>This fixes the in-session pointer. Whether a resumed or forked session should\nbecome <code>thread.jsonl</code> across restarts is a separate product decision.</p>\n",
+      "path": "docs/board/M6-028-tui-session-notify.md"
+    },
+    {
       "id": "M7-001",
       "title": "Public benchmark contract and frozen evaluation design",
       "status": "done",
@@ -3910,7 +3931,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 80,
+    "cards": 81,
     "modules": 14,
     "docs": 50,
     "generator": "cargo xtask dashboard"
