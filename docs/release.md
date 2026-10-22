@@ -15,7 +15,7 @@ Version `0.1.0` signals the same thing as niuse's 0.1.0: usable, documented, sti
 
 ## Prerequisites
 
-1. **A license.** The workspace currently has none. crates.io expects license metadata; choose one (MIT OR Apache-2.0 is the usual Rust default), add it to `[workspace.package]`, and commit it before publishing.
+1. **A license.** `MIT OR Apache-2.0` is now set in `[workspace.package]`, with `LICENSE-MIT` and `LICENSE-APACHE` at the root. Every publishable crate inherits it.
 2. **A crates.io token.** `cargo login`, or set `CARGO_REGISTRY_TOKEN` in the environment. Never commit the token.
 3. **A clean tree and green CI.** Publish from a commit that passed the normal workflow; no `--allow-dirty`.
 

@@ -90,3 +90,7 @@ More detail: [architecture](docs/architecture.md) · [exec](docs/exec.md) · [pr
 `docs/index.html` is generated from `docs/dashboard/project.json`, `docs/board/*.md`,
 and the Markdown documents. It is read-only in the browser; status changes go
 through the repository. See [the maintenance guide](docs/README.md).
+
+## License
+
+MIT OR Apache-2.0. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
