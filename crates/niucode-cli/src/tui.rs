@@ -341,6 +341,7 @@ pub async fn run(
                 &commands,
                 &mut provider,
                 provider_factory,
+                hooks.as_ref(),
                 out,
                 err,
             )
@@ -769,6 +770,7 @@ async fn handle_command(
     commands: &CommandRegistry,
     provider: &mut Arc<dyn Provider>,
     provider_factory: Option<&ProviderFactory>,
+    hooks: Option<&SharedHooks>,
     out: Theme,
     err: Theme,
 ) -> Result<CommandOutcome> {
@@ -799,7 +801,14 @@ async fn handle_command(
             let model = state.model.clone();
             let provider = state.provider.clone();
             let permissions = state.permissions;
-            let fresh = new_session(session, config)?;
+            let custom = match hooks {
+                Some(hooks) => hooks.borrow_mut().new_session_path()?,
+                None => None,
+            };
+            let fresh = new_session(session, config, custom)?;
+            if let Some(hooks) = hooks {
+                hooks.borrow_mut().on_session_start(fresh.path());
+            }
             if plan {
                 fresh.append(&Event::PlanMode {
                     active: true,
@@ -862,7 +871,14 @@ async fn handle_command(
         }
         SlashCommand::Reset => {
             let previous = session.path().to_path_buf();
-            *session = new_session(session, config)?;
+            let custom = match hooks {
+                Some(hooks) => hooks.borrow_mut().new_session_path()?,
+                None => None,
+            };
+            *session = new_session(session, config, custom)?;
+            if let Some(hooks) = hooks {
+                hooks.borrow_mut().on_session_start(session.path());
+            }
             history.clear();
             *allow_session = false;
             *last_tool = None;
@@ -2228,13 +2244,20 @@ fn resume_session(
     Ok(())
 }
 
-fn new_session(session: &SessionLog, config: &AgentConfig) -> Result<SessionLog> {
+fn new_session(
+    session: &SessionLog,
+    config: &AgentConfig,
+    custom: Option<PathBuf>,
+) -> Result<SessionLog> {
     let directory = session
         .path()
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let new_session = SessionLog::create(directory)?;
+    let new_session = match custom {
+        Some(path) => SessionLog::create_at(path)?,
+        None => SessionLog::create(directory)?,
+    };
     new_session.append(&Event::SessionStart {
         id: new_session.id().to_string(),
         cwd: config.working_dir.display().to_string(),

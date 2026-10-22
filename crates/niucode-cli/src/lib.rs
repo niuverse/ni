@@ -100,6 +100,13 @@ pub trait TurnHooks {
     fn command(&mut self, _input: &str) -> Option<String> {
         None
     }
+    /// Path the TUI should use for a new conversation, or `None` for its
+    /// default timestamped file. The embedder archives the old log first.
+    fn new_session_path(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
+    /// The TUI switched to a new session file. Update any path-sensitive state.
+    fn on_session_start(&mut self, _path: &Path) {}
     /// Extra slash commands to surface in help and completion.
     fn commands(&self) -> Vec<(String, String)> {
         Vec::new()

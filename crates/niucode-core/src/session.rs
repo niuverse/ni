@@ -57,6 +57,36 @@ impl SessionLog {
         })
     }
 
+    /// Create a session at an embedder-chosen path. Existing files are never
+    /// overwritten; callers archive or move an old log first.
+    pub fn create_at(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("create session directory {}", parent.display()))?;
+        }
+        let id = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("session")
+            .to_string();
+        let mut options = OpenOptions::new();
+        options.create_new(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options
+            .open(&path)
+            .with_context(|| format!("create session file {}", path.display()))?;
+        Ok(Self {
+            id,
+            path,
+            writer: Mutex::new(Some(BufWriter::new(file))),
+        })
+    }
+
     /// Open an existing session for appending.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
@@ -241,6 +271,17 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn create_at_uses_the_chosen_path_and_refuses_to_overwrite() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("thread.jsonl");
+        let log = SessionLog::create_at(&path).unwrap();
+        assert_eq!(log.path(), path);
+        assert!(path.exists());
+        drop(log);
+        assert!(SessionLog::create_at(&path).is_err());
+    }
+
     #[test]
     fn created_session_files_are_private() {
         use std::os::unix::fs::PermissionsExt;
