@@ -3,15 +3,17 @@ name = "niucode-tools"
 description = "Workspace tools for the niucode coding agent"
 version.workspace = true
 edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
 globset.workspace = true
 ignore.workspace = true
-niucode-core = { path = "../niucode-core" }
+niucode-core = { path = "../niucode-core", version = "0.1.0" }
 sha2.workspace = true
 tempfile.workspace = true
-niucode-provider = { path = "../niucode-provider" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.0" }
 regex.workspace = true
 serde_json.workspace = true
 similar.workspace = true

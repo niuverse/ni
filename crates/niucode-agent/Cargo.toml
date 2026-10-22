@@ -3,16 +3,18 @@ name = "niucode-agent"
 description = "Minimal turn loop for the niucode coding agent"
 version.workspace = true
 edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
 similar.workspace = true
-niucode-core = { path = "../niucode-core" }
-niucode-extension = { path = "../niucode-extension" }
-niucode-provider = { path = "../niucode-provider" }
-niucode-tools = { path = "../niucode-tools" }
+niucode-core = { path = "../niucode-core", version = "0.1.0" }
+niucode-extension = { path = "../niucode-extension", version = "0.1.0" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.0" }
+niucode-tools = { path = "../niucode-tools", version = "0.1.0" }
 serde_json.workspace = true
 tokio.workspace = true
 
