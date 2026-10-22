@@ -2,14 +2,16 @@
 id = "adr-0032"
 title = "ADR-0032：向嵌入方暴露可复用前端与 turn hooks"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 order = 59
 summary = "把 TUI 与 runtime 暴露为库，并提供通用 hook：prompt 追加、turn 结束、事件观察；不引入产品类型，不新增第二状态。"
 +++
 
 ## 状态
 
-Proposed · 2026-10-21。来自 niuse 的嵌入需求；上游讨论见 [#1](https://github.com/niuverse/niucode/issues/1)。等待维护者决定是否并入 M6 终端所有权工作。
+Accepted · 2026-10-22。来自 niuse 的嵌入需求；上游讨论见 [#1](https://github.com/niuverse/niucode/issues/1)。
+
+第一步已落地：`niucode-cli` 增加库目标，导出 `run()`、`TurnHooks` 与 `NoHooks`，并有一个链接测试；hook 的实际调用点（prompt 追加、事件观察、turn 结束）是下一步。
 
 ## 背景
 
@@ -60,9 +62,9 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
 | 给 niucode 加 `--profile personal` | 把产品藏进内核，内核被迫理解身份与记忆 |
 | 只暴露事件流，让 niuse 自建 TUI | 等于把前端复制一次，没有解决根因 |
 
-## 实施草图（proposed）
+## 实施草图（第一步已落地）
 
-这一步不改变上面的决策，只把「接受之后第一步做什么」拆到可评审的程度。
+第一步不改变上面的决策，只把「接受之后第一小步做什么」拆到可评审的程度。`src/lib.rs` 现在承载 `run()`，`src/main.rs` 只剩 `#[tokio::main]` 封装；`TurnHooks` 的默认方法仍是空操作，尚未接入 turn 循环。
 
 ### 1. 结构
 
