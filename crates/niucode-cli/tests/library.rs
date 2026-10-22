@@ -47,6 +47,7 @@ async fn exec_invokes_the_hooks() {
         session_dir: Some(directory.path().join("sessions")),
         replay: Some(fixture),
         sandbox: "full-access".into(),
+        network: "on".into(),
         approval: "never".into(),
         json: true,
         max_steps: 2,
