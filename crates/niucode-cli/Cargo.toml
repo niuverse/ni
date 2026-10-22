@@ -21,6 +21,7 @@ niucode-agent = { path = "../niucode-agent", version = "0.1.5" }
 niucode-auth = { path = "../niucode-auth", version = "0.1.5" }
 niucode-core = { path = "../niucode-core", version = "0.1.5" }
 niucode-extension = { path = "../niucode-extension", version = "0.1.5" }
+niucode-mcp = { path = "../niucode-mcp", version = "0.1.5" }
 niucode-provider = { path = "../niucode-provider", version = "0.1.5" }
 niucode-tools = { path = "../niucode-tools", version = "0.1.5" }
 ratatui.workspace = true

@@ -13,6 +13,7 @@ use niucode_agent::{
 use niucode_auth::AuthStore;
 use niucode_core::{now_ms, Event, SessionLog};
 use niucode_extension::{discover_in, ExtensionHost};
+use niucode_mcp::{McpConfig, McpHost};
 use niucode_provider::{
     ChatMessage, CompletionRequest, OpenAiConfig, OpenAiProvider, Preset, Provider, ReplayProvider,
     StreamEvent, ThinkingMode,
@@ -153,6 +154,7 @@ pub struct ExecOptions {
     pub goal: Option<String>,
     pub max_goal_turns: usize,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
+    pub mcp_config: Option<PathBuf>,
 }
 
 impl Default for ExecOptions {
@@ -179,6 +181,7 @@ impl Default for ExecOptions {
             goal: None,
             max_goal_turns: 6,
             extra_tools: Vec::new(),
+            mcp_config: None,
         }
     }
 }
@@ -209,6 +212,7 @@ pub struct TuiOptions {
     pub allow_subagent_inheritance: bool,
     pub approval_keys: ApprovalKeys,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
+    pub mcp_config: Option<PathBuf>,
 }
 
 impl Default for TuiOptions {
@@ -231,6 +235,7 @@ impl Default for TuiOptions {
             allow_subagent_inheritance: false,
             approval_keys: ApprovalKeys::default(),
             extra_tools: Vec::new(),
+            mcp_config: None,
         }
     }
 }
@@ -248,6 +253,9 @@ pub async fn run_tui_with_hooks(options: TuiOptions, hooks: Box<dyn TurnHooks>) 
     about = "Minimal, observable coding agent; starts the TUI when no subcommand is given"
 )]
 struct Cli {
+    /// MCP trust config (defaults to ~/.niucode/mcp.toml)
+    #[arg(long, global = true)]
+    mcp_config: Option<PathBuf>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -552,6 +560,7 @@ pub async fn run() -> Result<()> {
                     goal,
                     max_goal_turns,
                     extra_tools: Vec::new(),
+                    mcp_config: cli.mcp_config.clone(),
                 },
                 None,
             )
@@ -597,6 +606,7 @@ pub async fn run() -> Result<()> {
                     allow_subagent_inheritance,
                     approval_keys: ApprovalKeys::default(),
                     extra_tools: Vec::new(),
+                    mcp_config: cli.mcp_config.clone(),
                 },
                 None,
             )
@@ -779,6 +789,45 @@ fn removed_old_sessions(directory: &Path, days: u64, keep: usize) {
     for (index, (modified, path)) in files.into_iter().enumerate() {
         if index >= keep || cutoff.is_some_and(|cutoff| modified < cutoff) {
             let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+async fn mount_mcp(config: Option<PathBuf>) -> Option<Arc<McpHost>> {
+    let path = match config {
+        Some(path) => path,
+        None => match workspace::global_root() {
+            Ok(root) => root.join("mcp.toml"),
+            Err(_) => return None,
+        },
+    };
+    let parsed = match McpConfig::load(&path) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("warning: MCP config: {error:#}");
+            return None;
+        }
+    };
+    let servers = match parsed.validated() {
+        Ok(servers) => servers,
+        Err(error) => {
+            eprintln!("warning: MCP disabled: {error:#}");
+            return None;
+        }
+    };
+    if servers.is_empty() {
+        return None;
+    }
+    match McpHost::mount(&servers, std::time::Duration::from_secs(10)).await {
+        Ok(host) => {
+            for mount in host.mounts() {
+                eprintln!("mcp: {} · {} tool(s)", mount.server, mount.tools.len());
+            }
+            Some(Arc::new(host))
+        }
+        Err(error) => {
+            eprintln!("warning: MCP disabled: {error:#}");
+            None
         }
     }
 }
@@ -985,6 +1034,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         allow_subagent_inheritance,
         approval_keys,
         extra_tools,
+        mcp_config,
     } = options;
     if context_budget != 0 && context_budget < 100 {
         bail!("--context-budget must be 0 (auto) or at least 100 tokens");
@@ -1130,6 +1180,10 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
+    let mcp_host = mount_mcp(mcp_config).await;
+    if let Some(host) = &mcp_host {
+        agent_config.mcp_host = Some(host.clone());
+    }
     if let Some(hooks) = hooks.as_ref() {
         hooks
             .borrow_mut()
@@ -1168,6 +1222,9 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     )
     .await;
     unmount_extensions(&extension_host, &mut session).await?;
+    if let Some(host) = &mcp_host {
+        let _ = host.shutdown().await;
+    }
     result
 }
 
@@ -1215,6 +1272,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         goal,
         max_goal_turns,
         extra_tools,
+        mcp_config,
     } = options;
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
@@ -1396,6 +1454,10 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
+    let mcp_host = mount_mcp(mcp_config).await;
+    if let Some(host) = &mcp_host {
+        agent_config.mcp_host = Some(host.clone());
+    }
     agent_config.allowed_tools = tools;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);
@@ -1666,6 +1728,9 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         eprintln!("fixture: {}", path.display());
     }
     unmount_extensions(&extension_host, &mut session).await?;
+    if let Some(host) = &mcp_host {
+        let _ = host.shutdown().await;
+    }
 
     if json {
         let mut done = json!({

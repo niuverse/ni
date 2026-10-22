@@ -1454,6 +1454,7 @@ dependencies = [
  "niucode-auth",
  "niucode-core",
  "niucode-extension",
+ "niucode-mcp",
  "niucode-provider",
  "niucode-tools",
  "ratatui",

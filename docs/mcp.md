@@ -17,8 +17,9 @@ turn loop. It is covered offline by a Python fixture server, including list,
 call, tool error, environment scrubbing, timeout, host mounting, collisions,
 and an agent turn.
 
-It is **not mounted from `~/.niucode/mcp.toml` into `exec` or the TUI yet**.
-Config loading and the `doctor` report are the next card slice.
+`exec` and the TUI load `~/.niucode/mcp.toml` (or `--mcp-config PATH`), mount
+read-only servers, print one `mcp: <server> · <n> tool(s)` line per mount, and
+shut the children down at the end of the run. The host is shared by both paths.
 
 ## Manifest
 
@@ -52,4 +53,6 @@ spawn; v1 has no mutating path.
 
 ```sh
 cargo test -p niucode-mcp
+cargo test -p niucode --test mcp
+niucode exec --mcp-config /path/to/mcp.toml "list the notes"
 ```

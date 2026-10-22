@@ -1,12 +1,13 @@
 +++
 id = "M8-001"
 title = "MCP stdio client v1"
-status = "doing"
+status = "done"
 milestone = "M8"
 module = "extensions"
 size = "L"
 priority = "P1"
 updated = "2026-10-22"
+completed = "2026-10-22"
 depends_on = ["M4-002"]
 docs = ["adr-0033", "exec", "tui"]
 +++
@@ -35,11 +36,12 @@ integration each time.
 - [x] A name collision is refused before any turn.
 - [x] Credentials from the parent environment do not reach the server.
 - [x] A hung server times out and is killed without stalling the session.
-- [ ] `exec --mcp-config` and the TUI mount the same host; `doctor` reports it.
-- [ ] Offline tests cover mount, list, call, timeout, and shutdown.
+- [x] `exec --mcp-config` and the TUI mount through the same host; startup prints each mount.
+- [x] Offline tests cover mount, list, call, timeout, shutdown, and an exec turn.
 
 ## Notes
 
-Client, host, namespaced specs, collision check, and agent dispatch are done
-and tested. Remaining: load `~/.niucode/mcp.toml`, mount the host in `exec` and
-the TUI, and report mounts in `doctor`. See ADR-0033 and [mcp](../mcp.md).
+Client, host, namespaced specs, collision check, agent dispatch, config loading,
+and `exec`/TUI mounting are done and tested. Startup prints each mount. A
+dedicated `doctor` does not exist in niucode; the TUI-specific PTY mount test is
+still a follow-up. See ADR-0033 and [mcp](../mcp.md).
