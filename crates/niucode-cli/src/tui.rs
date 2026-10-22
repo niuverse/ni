@@ -39,7 +39,7 @@ use crate::slash::{
 use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
 use crate::workspace::Workspace;
-use crate::SharedHooks;
+use crate::{SharedHooks, TurnPrompt};
 
 const TOOL_OUTPUT_FOLD_LINES: usize = 12;
 const TOOL_OUTPUT_FOLD_BYTES: usize = 2_000;
@@ -661,6 +661,7 @@ pub async fn run(
                         ))
                     );
                 }
+                run_turn_prompts(&hooks, &outcome);
                 history = project_history(&load(session.path())?.events)?;
                 if state.goal_run {
                     if let Err(error) = goal_after_turn(
@@ -2629,6 +2630,38 @@ fn print_last(theme: Theme, last: Option<&ToolEcho>) {
         }
     }
     println!("{}", theme.dim("╰─ end"));
+}
+
+fn run_turn_prompts(hooks: &Option<SharedHooks>, outcome: &RunOutcome) {
+    let Some(hooks) = hooks else {
+        return;
+    };
+    let prompts = hooks.borrow_mut().after_turn(outcome);
+    for prompt in prompts {
+        println!("\n{}", prompt.question);
+        for (index, option) in prompt.options.iter().enumerate() {
+            println!("  {}. {option}", index + 1);
+        }
+        if !std::io::stdin().is_terminal() {
+            continue;
+        }
+        loop {
+            print!("> ");
+            let _ = std::io::stdout().flush();
+            let mut line = String::new();
+            if std::io::stdin().read_line(&mut line).is_err() {
+                break;
+            }
+            let choice = line.trim().parse::<usize>().ok();
+            match choice {
+                Some(choice) if (1..=prompt.options.len()).contains(&choice) => {
+                    hooks.borrow_mut().on_answer(&prompt.id, choice - 1);
+                    break;
+                }
+                _ => eprintln!("enter 1..{}", prompt.options.len()),
+            }
+        }
+    }
 }
 
 fn print_help(theme: Theme, commands: &CommandRegistry) {

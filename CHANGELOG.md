@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `after_turn` / `on_answer` let an embedder ask a generic numbered question after a turn; the PTY probe answers a two-option prompt.
+
 ## 0.1.3 — 2026-10-22
 
 - `TurnHooks::filter_text` mutates a text delta before display; the persisted event is unchanged.

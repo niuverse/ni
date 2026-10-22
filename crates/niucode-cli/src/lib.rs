@@ -62,12 +62,27 @@ pub trait TurnHooks {
     fn command(&mut self, _input: &str) -> Option<String> {
         None
     }
+    /// Questions to ask after a successful turn. The host renders them in the
+    /// terminal and reports the chosen index through `on_answer`.
+    fn after_turn(&mut self, _outcome: &RunOutcome) -> Vec<TurnPrompt> {
+        Vec::new()
+    }
+    /// Receives the zero-based choice for a prompt returned by `after_turn`.
+    fn on_answer(&mut self, _id: &str, _choice: usize) {}
 }
 
 /// The no-op implementation used when no embedder hooks are supplied.
 pub struct NoHooks;
 
 impl TurnHooks for NoHooks {}
+
+/// A question the embedder wants the host to ask after a turn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnPrompt {
+    pub id: String,
+    pub question: String,
+    pub options: Vec<String>,
+}
 
 /// Hooks shared by the TUI loop, the live runner, and the turn outcome.
 /// Borrows are taken only inside a call, never across an await.

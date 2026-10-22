@@ -6,7 +6,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use niucode::{AgentEvent, RunOutcome, TuiOptions, TurnHooks};
+use niucode::{AgentEvent, RunOutcome, TuiOptions, TurnHooks, TurnPrompt};
 
 struct Probe {
     marker: PathBuf,
@@ -43,6 +43,19 @@ impl TurnHooks for Probe {
     fn command(&mut self, input: &str) -> Option<String> {
         self.record("command");
         (input.trim() == "/probe").then(|| "probe-ok".to_string())
+    }
+
+    fn after_turn(&mut self, _outcome: &RunOutcome) -> Vec<TurnPrompt> {
+        self.record("prompt_question");
+        vec![TurnPrompt {
+            id: "probe".into(),
+            question: "choose a probe answer".into(),
+            options: vec!["first".into(), "second".into()],
+        }]
+    }
+
+    fn on_answer(&mut self, id: &str, choice: usize) {
+        self.record(&format!("answer:{id}:{choice}"));
     }
 
     fn on_turn_end(&mut self, _outcome: &RunOutcome) {
