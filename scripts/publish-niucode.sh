@@ -16,11 +16,12 @@ order=(
     niucode
 )
 
+version="$(grep -A1 '^\[workspace.package\]' Cargo.toml | grep '^version' | cut -d'"' -f2)"
 license="$(grep -E '^license' Cargo.toml || true)"
 token="${CARGO_REGISTRY_TOKEN:-}"
 credentials="${CARGO_HOME:-$HOME/.cargo}/credentials.toml"
 
-echo "version: $(grep -A1 '^\[workspace.package\]' Cargo.toml | grep '^version' | cut -d'"' -f2)"
+echo "version: $version"
 echo "license: ${license:-MISSING}"
 if [ -n "$token" ]; then
     echo "token:   environment"
@@ -50,6 +51,12 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 for crate in "${order[@]}"; do
+    if curl -fsSL "https://crates.io/api/v1/crates/$crate" 2>/dev/null \
+        | python3 -c 'import json, sys; versions = [v["num"] for v in json.load(sys.stdin).get("versions", [])]; sys.exit(0 if "'"$version"'" in versions else 1)'
+    then
+        echo "== $crate $version already published; skipping =="
+        continue
+    fi
     echo "== publishing $crate =="
     cargo publish -p "$crate"
     # Give the sparse index time to expose the new version to dependents.
