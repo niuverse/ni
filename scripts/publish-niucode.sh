@@ -51,7 +51,7 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 for crate in "${order[@]}"; do
-    if curl -fsSL "https://crates.io/api/v1/crates/$crate" 2>/dev/null \
+    if curl -fsSL -A 'niucode-release-check/0.1.0' "https://crates.io/api/v1/crates/$crate" 2>/dev/null \
         | python3 -c 'import json, sys; versions = [v["num"] for v in json.load(sys.stdin).get("versions", [])]; sys.exit(0 if "'"$version"'" in versions else 1)'
     then
         echo "== $crate $version already published; skipping =="
