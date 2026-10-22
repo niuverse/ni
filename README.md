@@ -34,7 +34,7 @@ Requires Rust 1.88+. On Linux, install `bubblewrap` for sandboxed bash; without 
 
 ```sh
 cargo install niucode                # published; Rust 1.88+
-cargo install niucode --version 0.1.3 --locked
+cargo install niucode --version 0.1.4 --locked
 cargo run -p niucode                 # start the TUI from a checkout (no subcommand needed)
 cargo run -p niucode -- session new  # create a session, print its path
 cargo run -p niucode -- session show <path>

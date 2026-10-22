@@ -11,10 +11,10 @@ rust-version.workspace = true
 anyhow.workspace = true
 globset.workspace = true
 ignore.workspace = true
-niucode-core = { path = "../niucode-core", version = "0.1.3" }
+niucode-core = { path = "../niucode-core", version = "0.1.4" }
 sha2.workspace = true
 tempfile.workspace = true
-niucode-provider = { path = "../niucode-provider", version = "0.1.3" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.4" }
 regex.workspace = true
 serde_json.workspace = true
 similar.workspace = true

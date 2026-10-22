@@ -9,9 +9,9 @@ summary = "Version 0.1.0, publish order, and the license/token prerequisites for
 
 ## Version
 
-All publishable crates share the workspace version **0.1.3**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
+All publishable crates share the workspace version **0.1.4**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
 
-Version `0.1.3` adds `filter_text` and the embedder command hook on top of 0.1.2's full TUI hook surface. It stays pre-1.0.
+Version `0.1.4` adds post-turn prompts on top of 0.1.3's filter and command hooks. It stays pre-1.0.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ The script checks crates.io before each upload and skips a crate whose version i
 
 0.1.0 was published on 2026-10-22 in the order above. `cargo install niucode --version 0.1.0 --locked` was verified from a clean root.
 
-0.1.1 was the patch for the inline CJK spacing fix and `TuiOptions`. 0.1.2 added the full TUI hook surface; 0.1.3 adds `filter_text` and the command hook. The order is unchanged.
+0.1.1 was the patch for the inline CJK spacing fix and `TuiOptions`. 0.1.2 added the full TUI hook surface; 0.1.3 added `filter_text` and the command hook; 0.1.4 adds `after_turn` / `on_answer`. The order is unchanged.
 
 ## After publishing
 
