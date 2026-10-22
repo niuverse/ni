@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use niucode_agent::{
-    project_history, run_with_history, AgentConfig, AgentEvent, ApprovalMode, ApprovalRequest,
+    project_history, run_with_history, AgentConfig, ApprovalMode, ApprovalRequest,
 };
 use niucode_auth::AuthStore;
 use niucode_core::{now_ms, Event, SessionLog};
@@ -41,7 +42,7 @@ mod theme;
 mod tui;
 mod workspace;
 
-pub use niucode_agent::RunOutcome;
+pub use niucode_agent::{AgentEvent, RunOutcome};
 
 /// Optional hooks for an embedder. Every method defaults to a no-op, and
 /// hooks never own durable state; the event log remains the only truth.
@@ -51,13 +52,71 @@ pub trait TurnHooks {
     /// Called after the final assistant event for a turn is recorded.
     fn on_turn_end(&mut self, _outcome: &RunOutcome) {}
     /// Read-only observation of an event. Do not append to the session log here.
-    fn on_event(&mut self, _event: &Event) {}
+    fn on_event(&mut self, _event: &AgentEvent) {}
 }
 
 /// The no-op implementation used when no embedder hooks are supplied.
 pub struct NoHooks;
 
 impl TurnHooks for NoHooks {}
+
+/// Options for a one-shot (`exec`) run.
+#[derive(Debug, Clone)]
+pub struct ExecOptions {
+    pub prompt: String,
+    pub preset: String,
+    pub model: Option<String>,
+    pub max_steps: usize,
+    pub context_budget: usize,
+    pub keep_recent_turns: usize,
+    pub no_thinking: bool,
+    pub cwd: Option<PathBuf>,
+    pub session_dir: Option<PathBuf>,
+    pub resume: Option<PathBuf>,
+    pub record: Option<PathBuf>,
+    pub replay: Option<PathBuf>,
+    pub sandbox: String,
+    pub approval: String,
+    pub network: String,
+    pub json: bool,
+    pub allow_subagent_inheritance: bool,
+    pub tools: Option<Vec<String>>,
+    pub goal: Option<String>,
+    pub max_goal_turns: usize,
+}
+
+impl Default for ExecOptions {
+    fn default() -> Self {
+        Self {
+            prompt: String::new(),
+            preset: "deepseek".into(),
+            model: None,
+            max_steps: 0,
+            context_budget: 0,
+            keep_recent_turns: 3,
+            no_thinking: false,
+            cwd: None,
+            session_dir: None,
+            resume: None,
+            record: None,
+            replay: None,
+            sandbox: "workspace-write".into(),
+            approval: "on-failure".into(),
+            network: "off".into(),
+            json: false,
+            allow_subagent_inheritance: false,
+            tools: None,
+            goal: None,
+            max_goal_turns: 6,
+        }
+    }
+}
+
+/// Run one shot with optional embedder hooks. The CLI path uses `run_exec`
+/// with no hooks; this is the library entry for an embedder.
+pub async fn run_exec_with_hooks(options: ExecOptions, hooks: &mut dyn TurnHooks) -> Result<i32> {
+    run_exec(options, Some(hooks)).await
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -348,26 +407,29 @@ pub async fn run() -> Result<()> {
             max_goal_turns,
         }) => {
             let code = run_exec(
-                prompt,
-                preset,
-                model,
-                max_steps,
-                context_budget,
-                keep_recent_turns,
-                no_thinking,
-                cwd,
-                session_dir,
-                resume,
-                record,
-                replay,
-                sandbox,
-                approval,
-                network,
-                json,
-                allow_subagent_inheritance,
-                tools,
-                goal,
-                max_goal_turns,
+                ExecOptions {
+                    prompt,
+                    preset,
+                    model,
+                    max_steps,
+                    context_budget,
+                    keep_recent_turns,
+                    no_thinking,
+                    cwd,
+                    session_dir,
+                    resume,
+                    record,
+                    replay,
+                    sandbox,
+                    approval,
+                    network,
+                    json,
+                    allow_subagent_inheritance,
+                    tools,
+                    goal,
+                    max_goal_turns,
+                },
+                None,
             )
             .await?;
             if code != 0 {
@@ -1001,28 +1063,29 @@ async fn run_actor_once(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn run_exec(
-    prompt: String,
-    preset: String,
-    model: Option<String>,
-    max_steps: usize,
-    context_budget: usize,
-    keep_recent_turns: usize,
-    no_thinking: bool,
-    cwd: Option<PathBuf>,
-    session_dir: Option<PathBuf>,
-    resume: Option<PathBuf>,
-    record: Option<PathBuf>,
-    replay: Option<PathBuf>,
-    sandbox: String,
-    approval: String,
-    network: String,
-    json: bool,
-    allow_subagent_inheritance: bool,
-    tools: Option<Vec<String>>,
-    goal: Option<String>,
-    max_goal_turns: usize,
-) -> Result<i32> {
+async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -> Result<i32> {
+    let ExecOptions {
+        prompt,
+        preset,
+        model,
+        max_steps,
+        context_budget,
+        keep_recent_turns,
+        no_thinking,
+        cwd,
+        session_dir,
+        resume,
+        record,
+        replay,
+        sandbox,
+        approval,
+        network,
+        json,
+        allow_subagent_inheritance,
+        tools,
+        goal,
+        max_goal_turns,
+    } = options;
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
     }
@@ -1217,6 +1280,10 @@ async fn run_exec(
         })?;
         agent_config.goal = Some(condition.clone());
     }
+    if let Some(hooks) = hooks.as_mut() {
+        hooks.augment_system_prompt(&mut agent_config.system_prompt);
+    }
+    let hooks = RefCell::new(hooks);
 
     if json {
         emit_json(json!({
@@ -1259,6 +1326,9 @@ async fn run_exec(
 
     let mut line_open = false;
     let mut observer = |event: AgentEvent| {
+        if let Some(hooks) = hooks.borrow_mut().as_mut() {
+            hooks.on_event(&event);
+        }
         if json {
             emit_json(event_json(&event));
             return;
@@ -1353,6 +1423,9 @@ async fn run_exec(
         }
     };
     let mut outcome = outcome;
+    if let Some(hooks) = hooks.borrow_mut().as_mut() {
+        hooks.on_turn_end(&outcome);
+    }
     if let Some(condition) = goal.as_deref() {
         let mut rounds = 1_usize;
         loop {

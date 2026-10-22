@@ -13,6 +13,7 @@ First public crate set, versioned together at 0.1.0.
 - `niucode-agent`: turn loop, history projection, approvals, and cancellation.
 
 ### Reference UI
-- `niucode` binary with the ratatui TUI, CLI one-shot mode, approval flow, and session resume; `niucode-cli` also builds a library with `run()`, `TurnHooks`, and `NoHooks`.
+- `niucode` binary with the ratatui TUI, CLI one-shot mode, approval flow, and session resume.
+- `niucode-cli` also builds a library with `run()`, `ExecOptions`, `run_exec_with_hooks()`, `TurnHooks`, and `NoHooks`; the exec path invokes prompt, event, and turn-end hooks, while the TUI path is not wired yet.
 - Session files are created `0600`; unknown events warn while readable lines survive.
 - Linux sandbox and macOS checks in CI; MSRV 1.88.

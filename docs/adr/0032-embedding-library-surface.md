@@ -11,7 +11,9 @@ summary = "把 TUI 与 runtime 暴露为库，并提供通用 hook：prompt 追�
 
 Accepted · 2026-10-22。来自 niuse 的嵌入需求；上游讨论见 [#1](https://github.com/niuverse/niucode/issues/1)。
 
-第一步已落地：`niucode-cli` 增加库目标，导出 `run()`、`TurnHooks` 与 `NoHooks`，并有一个链接测试；hook 的实际调用点（prompt 追加、事件观察、turn 结束）是下一步。
+第一步已落地：`niucode-cli` 增加库目标，导出 `run()`、`TurnHooks` 与 `NoHooks`，并有一个链接测试。
+
+第二步在 exec 路径落地：`run_exec_with_hooks(ExecOptions, &mut dyn TurnHooks)` 会在构造 `AgentConfig` 后调用 `augment_system_prompt`，在运行时事件上调用 `on_event`，并在首个 turn 结束后调用 `on_turn_end`；集成测试用 replay fixture 断言三者都发生。TUI 路径尚未接线，renderer 迁移也尚未开始。
 
 ## 背景
 
@@ -28,7 +30,7 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
    pub trait TurnHooks {
        fn augment_system_prompt(&mut self, _prompt: &mut String) {}
        fn on_turn_end(&mut self, _outcome: &RunOutcome) {}
-       fn on_event(&mut self, _event: &Event) {}
+       fn on_event(&mut self, _event: &AgentEvent) {}
    }
    ```
 
@@ -64,7 +66,7 @@ niucode 的边界不能因此改变：内核仍然是最小 harness，不认识�
 
 ## 实施草图（第一步已落地）
 
-第一步不改变上面的决策，只把「接受之后第一小步做什么」拆到可评审的程度。`src/lib.rs` 现在承载 `run()`，`src/main.rs` 只剩 `#[tokio::main]` 封装；`TurnHooks` 的默认方法仍是空操作，尚未接入 turn 循环。
+第一步不改变上面的决策，只把「接受之后第一小步做什么」拆到可评审的程度。`src/lib.rs` 现在承载 `run()`，`src/main.rs` 只剩 `#[tokio::main]` 封装；`TurnHooks` 的默认方法仍是空操作，exec 路径已经接线，TUI 路径尚未接入。
 
 ### 1. 结构
 
@@ -89,7 +91,7 @@ pub fn run_tui(options: TuiOptions, hooks: Box<dyn TurnHooks>) -> Result<()>;
 ```
 
 - `augment_system_prompt` 在构造 `AgentConfig` 之前调用一次。
-- `on_event` 由 TUI 的观察者转发，只读，不写日志。
+- `on_event` 由运行时观察者转发 `AgentEvent`，只读，不写日志；持久化的 `Event` 仍是唯一真相。
 - `on_turn_end` 在最终事件落盘后调用。hook 不应 panic；库不额外捕获。
 - `TuiOptions` 只包含现有入口已经需要的字段，不引入产品类型。
 

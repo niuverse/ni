@@ -32,3 +32,6 @@ toml.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
 unicode-segmentation.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
