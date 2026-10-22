@@ -15,9 +15,10 @@ Version `0.1.0` signals the same thing as niuse's 0.1.0: usable, documented, sti
 
 ## Prerequisites
 
-1. **A license.** `MIT OR Apache-2.0` is now set in `[workspace.package]`, with `LICENSE-MIT` and `LICENSE-APACHE` at the root. Every publishable crate inherits it.
-2. **A crates.io token.** `cargo login`, or set `CARGO_REGISTRY_TOKEN` in the environment. Never commit the token.
-3. **A clean tree and green CI.** Publish from a commit that passed the normal workflow; no `--allow-dirty`.
+1. **A license.** `MIT OR Apache-2.0` is set in `[workspace.package]`, with `LICENSE-MIT` and `LICENSE-APACHE` at the root. Every publishable crate inherits it.
+2. **A verified crates.io email.** crates.io rejects uploads from an account whose email is not verified, even with a valid token. Set it at <https://crates.io/settings/profile>.
+3. **A crates.io token.** `cargo login`, or set `CARGO_REGISTRY_TOKEN` in the environment. Never commit the token.
+4. **A clean tree and green CI.** Publish from a commit that passed the normal workflow; no `--allow-dirty`.
 
 ## Publish order
 
@@ -44,7 +45,7 @@ niucode          (binary crate)
 
 Or run the **release** workflow from Actions → Run workflow, type `publish-niucode`, and let it use the `CARGO_REGISTRY_TOKEN` repository secret. The `crates-io` environment can hold protection rules for that secret. The workflow runs the same script and refuses without a license or token.
 
-A dry run of a dependent crate cannot succeed before its dependency is published: Cargo looks up `niucode-core` on crates.io. That is why the script checks the plan instead of pretending each crate can be dry-run locally.
+The script checks crates.io before each upload and skips a crate whose version is already listed, so a failed run can be retried without `already uploaded` errors. A dry run of a dependent crate cannot succeed before its dependency is published: Cargo looks up `niucode-core` on crates.io. That is why the script checks the plan instead of pretending each crate can be dry-run locally.
 
 ## After publishing
 
