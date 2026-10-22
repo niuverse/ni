@@ -57,6 +57,11 @@ pub trait TurnHooks {
     /// Mutate a text delta before it is rendered. The persisted event is
     /// unchanged; this is the seam for embedder-side protocol stripping.
     fn filter_text(&mut self, _text: &mut String) {}
+    /// Handle a slash command the TUI does not know. Return the text to print,
+    /// or `None` to leave it as an unknown command.
+    fn command(&mut self, _input: &str) -> Option<String> {
+        None
+    }
 }
 
 /// The no-op implementation used when no embedder hooks are supplied.

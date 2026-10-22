@@ -40,6 +40,11 @@ impl TurnHooks for Probe {
         *text = text.replace("RAW", "FILTERED");
     }
 
+    fn command(&mut self, input: &str) -> Option<String> {
+        self.record("command");
+        (input.trim() == "/probe").then(|| "probe-ok".to_string())
+    }
+
     fn on_turn_end(&mut self, _outcome: &RunOutcome) {
         self.record("turn_end");
     }

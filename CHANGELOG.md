@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- `TurnHooks::filter_text` mutates a text delta before display; the persisted event is unchanged. The PTY hook probe verifies filtering and turn-end together.
+- `TurnHooks::filter_text` mutates a text delta before display; the persisted event is unchanged.
+- `TurnHooks::command` lets an embedder handle unknown slash commands and return text. The example probe answers `/probe` under a PTY. Help and completion registration are still missing.
 
 ## 0.1.2 — 2026-10-22
 

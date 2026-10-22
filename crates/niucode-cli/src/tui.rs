@@ -365,11 +365,20 @@ pub async fn run(
                 }
             },
             SlashParsed::Unknown(name) => {
-                eprintln!(
-                    "{} unknown command /{name}; try {}",
-                    err.paint(Tone::Warning, theme::WARN),
-                    err.paint(Tone::Bright, "/help")
-                );
+                let handled = hooks
+                    .as_ref()
+                    .and_then(|hooks| hooks.borrow_mut().command(prompt));
+                if let Some(output) = handled {
+                    if !output.is_empty() {
+                        println!("{output}");
+                    }
+                } else {
+                    eprintln!(
+                        "{} unknown command /{name}; try {}",
+                        err.paint(Tone::Warning, theme::WARN),
+                        err.paint(Tone::Bright, "/help")
+                    );
+                }
                 continue;
             }
             SlashParsed::Usage(usage) => {
