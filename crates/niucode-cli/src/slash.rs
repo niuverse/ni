@@ -5,7 +5,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("/init", "propose AGENTS.md; /init apply writes it"),
     (
         "/clear",
-        "new conversation; keep plan/goal (old log is kept)",
+        "new conversation; keep plan/goal (old log is kept); alias /new",
     ),
     (
         "/reset",
@@ -182,7 +182,7 @@ pub fn parse(input: &str) -> Parsed {
     let command = match name {
         "help" | "?" => Command::Help,
         "last" => Command::Last,
-        "clear" => Command::Clear,
+        "clear" | "new" => Command::Clear,
         "reset" => Command::Reset,
         "reload" => Command::Reload,
         "resume" => Command::Resume(if rest.is_empty() {
@@ -291,6 +291,8 @@ mod tests {
     #[test]
     fn reports_unknown_and_usage_errors() {
         assert_eq!(parse("/nope"), Parsed::Unknown("nope".into()));
+        assert_eq!(parse("/new"), Parsed::Command(Command::Clear));
+        assert_eq!(parse("/new extra"), Parsed::Usage("/clear".into()));
         assert_eq!(parse("/clear extra"), Parsed::Usage("/clear".into()));
         assert_eq!(parse("/reset"), Parsed::Command(Command::Reset));
         assert_eq!(parse("/reload"), Parsed::Command(Command::Reload));
