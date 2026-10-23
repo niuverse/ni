@@ -1,0 +1,19 @@
+[package]
+name = "niucode-computer-macos"
+description = "macOS native backend for niucode computer use"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+niucode-computer = { path = "../niucode-computer", version = "0.1.7" }
+sha2.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
+core-graphics = { version = "0.25", features = ["highsierra"] }
+png = "0.17"

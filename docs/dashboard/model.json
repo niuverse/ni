@@ -4676,6 +4676,26 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>Stopping computer use relied on setting policy off; held modifiers/buttons were\nnot released, and Ctrl-C only cancelled the turn without stopping the computer\nsession.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add <code>ComputerBackend::emergency_stop</code> (default no-op).</li>\n<li>X11 releases Shift/Ctrl/Alt/Super and mouse buttons 1–7 via XTEST.</li>\n<li>Add <code>ComputerRuntime::emergency_stop</code>: policy off + disarm + backend release.</li>\n<li>Route exec/TUI Ctrl-C and <code>/computer stop</code> through it.</li>\n<li>Keep the existing turn cancellation semantics (exit 130 in exec).</li>\n<li>Tests for policy/disarm/release flag and an Xvfb release call.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nEmergency stop always turns policy off and disarms.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nX11 releases common modifiers and buttons; repeated calls are safe.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nCtrl-C in exec and both TUI paths triggers it.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n<code>/computer stop</code> uses the same path.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nRelease failures are reported but never block disarming.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass.</li>\n</ul>\n<h2>Notes</h2>\n<p>The hotkey is Ctrl-C, not a configurable global shortcut. XTEST calls are\nsynchronous, so there is no mid-call interruption; release runs immediately\nafter control returns.</p>\n",
       "path": "docs/board/M9-101-emergency-stop.md"
+    },
+    {
+      "id": "M9-102",
+      "title": "macOS native computer backend",
+      "status": "done",
+      "milestone": "M9",
+      "module": "tools",
+      "size": "L",
+      "priority": "P0",
+      "updated": "2026-10-23",
+      "completed": "2026-10-23",
+      "depends_on": [
+        "M9-101"
+      ],
+      "docs": [
+        "adr-0037"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>Computer use was Linux-only; the second product platform had no window\nenumeration, capture, or input.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add <code>niucode-computer-macos</code> (macOS-only).</li>\n<li>CoreGraphics window list: id, app, title, bounds.</li>\n<li>Window snapshot to PNG; observation hash/expiry/scale.</li>\n<li>CGEvent click, Unicode text, named keys/modifiers, scroll.</li>\n<li>Screen Recording preflight at connect; Accessibility checked before input.</li>\n<li>Emergency stop releases modifiers and mouse buttons.</li>\n<li>Wire <code>--computer</code> through the shared CLI configuration on macOS.</li>\n<li>Unit tests for classification/key mapping; cross-target <code>cargo check/clippy</code>\nlocally and macOS CI compilation.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nWindow enumeration and PNG capture compile against macOS SDK types.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nInput is observation-bound and geometry-checked.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTCC checks fail closed with actionable errors.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nEmergency stop is implemented.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nLinux/macOS target cfg separation stays clean.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass; macOS CI is the runtime gate.</li>\n</ul>\n<h2>Notes</h2>\n<p>The first slice uses CoreGraphics <code>CGWindowListCreateImage</code>; ScreenCaptureKit is\na later upgrade. TCC cannot be granted programmatically. Actual macOS runtime\ninteraction still needs a signed, permission-granted dogfood run.</p>\n",
+      "path": "docs/board/M9-102-macos-backend.md"
     }
   ],
   "docs": [
@@ -6167,7 +6187,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 182,
+    "cards": 183,
     "modules": 15,
     "docs": 59,
     "generator": "cargo xtask dashboard"

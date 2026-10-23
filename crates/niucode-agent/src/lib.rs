@@ -518,7 +518,7 @@ async fn run_engine(
         let description = if policy == ComputerPolicy::Off {
             "Native desktop control is present but the session policy is off; ask the user to arm it."
         } else {
-            "Observe the Linux desktop and perform observation-bound click/type/key/scroll actions. Every input action is permission-checked and may require approval."
+            "Observe the native desktop and perform observation-bound click/type/key/scroll actions. Every input action is permission-checked and may require approval."
         };
         tools.push(ToolSpec::function(
             "computer",

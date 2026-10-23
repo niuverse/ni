@@ -10,6 +10,7 @@ order=(
     niucode-core
     niucode-computer
     niucode-computer-x11
+    niucode-computer-macos
     niucode-attachments
     niucode-auth
     niucode-provider

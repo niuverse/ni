@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use niucode_agent::ComputerRuntime;
 use niucode_agent::{
     project_history, run_with_attachments, run_with_history, AgentConfig, ApprovalMode,
@@ -15,7 +15,7 @@ use niucode_agent::{
 };
 use niucode_attachments::{AttachmentKind, AttachmentStore};
 use niucode_auth::AuthStore;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use niucode_computer::ComputerPolicy;
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog};
 use niucode_extension::{discover_in, ExtensionHost};
@@ -1432,7 +1432,7 @@ pub(crate) fn stop_computer(config: &AgentConfig) {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> {
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let _ = &mut *config;
     if policy == "off" {
         return Ok(());
@@ -1455,9 +1455,27 @@ pub(crate) fn configure_computer(config: &mut AgentConfig, policy: &str) -> Resu
             Err(error) => eprintln!("warning: computer unavailable: {error}"),
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
-        eprintln!("warning: computer use is Linux-only in this build (got {policy:?})");
+        let policy: ComputerPolicy = policy
+            .parse()
+            .with_context(|| format!("invalid --computer policy {policy:?}"))?;
+        match niucode_computer_macos::MacBackend::connect(None) {
+            Ok(backend) => {
+                let mut runtime = ComputerRuntime::new(Box::new(backend), policy);
+                runtime.arm().context("arm computer use for this session")?;
+                config.computer = Some(Arc::new(std::sync::Mutex::new(runtime)));
+                eprintln!(
+                    "computer: policy={} armed (macOS: Screen Recording + Accessibility required)",
+                    policy.as_str()
+                );
+            }
+            Err(error) => eprintln!("warning: computer unavailable: {error}"),
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        eprintln!("warning: computer use is not supported in this build (got {policy:?})");
     }
     Ok(())
 }
