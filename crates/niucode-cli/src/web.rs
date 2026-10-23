@@ -65,6 +65,7 @@ struct State {
     context_provider: Option<ContextProvider>,
     brand: String,
     allow_new: bool,
+    allow_session: AtomicBool,
     new_session_provider: Option<NewSessionProvider>,
     switch_session_provider: Option<SwitchSessionProvider>,
     busy: AtomicBool,
@@ -150,6 +151,7 @@ pub async fn serve(options: Options) -> Result<()> {
             context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
             allow_new: options.allow_new,
+            allow_session: AtomicBool::new(false),
             new_session_provider: options.new_session_provider,
             switch_session_provider: options.switch_session_provider,
             busy: AtomicBool::new(false),
@@ -318,6 +320,14 @@ async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Resul
         .get("allowed")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    if allowed
+        && value
+            .get("session")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        state.allow_session.store(true, Ordering::SeqCst);
+    }
     let sender = state.pending.lock().unwrap().remove(id);
     match sender {
         Some(sender) => {
@@ -381,6 +391,7 @@ async fn switch_session(mut stream: TcpStream, state: Arc<State>, body: &str) ->
             let snapshot = session_snapshot(&path)?;
             *state.path.lock().unwrap() = path.clone();
             *state.snapshot.lock().unwrap() = snapshot;
+            state.allow_session.store(false, Ordering::SeqCst);
             let _ = state.live.send(json!({"type": "session_switched"}));
             send(
                 &mut stream,
@@ -447,6 +458,7 @@ async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     state.busy.store(false, Ordering::SeqCst);
     match result {
         Ok(path) => {
+            state.allow_session.store(false, Ordering::SeqCst);
             let body = serde_json::to_vec(&json!({
                 "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
                 "path": path.display().to_string(),
@@ -528,6 +540,9 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
         config.system_prompt = prompt.clone();
     }
     let mut approver = |request: &niucode_agent::ApprovalRequest| {
+        if approval_state.allow_session.load(Ordering::Relaxed) {
+            return true;
+        }
         let id = format!(
             "a-{}",
             approval_state.next_approval.fetch_add(1, Ordering::SeqCst)
@@ -979,6 +994,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
+            allow_session: AtomicBool::new(false),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1006,6 +1022,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new,
+            allow_session: AtomicBool::new(false),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1169,6 +1186,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
+            allow_session: AtomicBool::new(false),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1386,6 +1404,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                allow_session: AtomicBool::new(false),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1462,6 +1481,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                allow_session: AtomicBool::new(false),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1539,13 +1559,14 @@ mod tests {
     #[tokio::test]
     async fn approval_post_releases_a_pending_turn() {
         let state = state();
+        let state_for_assert = state.clone();
         let (sender, receiver) = mpsc::channel();
         state.pending.lock().unwrap().insert("a-1".into(), sender);
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let task = tokio::spawn(serve_listener(listener, state));
         let mut stream = TcpStream::connect(address).await.unwrap();
-        let body = br#"{"id":"a-1","allowed":true}"#;
+        let body = br#"{"id":"a-1","allowed":true,"session":true}"#;
         stream
             .write_all(
                 format!(
@@ -1565,6 +1586,7 @@ mod tests {
             String::from_utf8_lossy(&reply)
         );
         assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
+        assert!(state_for_assert.allow_session.load(Ordering::SeqCst));
         task.abort();
     }
 
@@ -1611,6 +1633,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                allow_session: AtomicBool::new(false),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1737,6 +1760,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
+        assert!(INDEX.contains("Allow session"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(INDEX.contains("diff-line"));
@@ -1773,6 +1797,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
+        assert!(INDEX.contains("Allow session"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(!INDEX.contains("http://"));

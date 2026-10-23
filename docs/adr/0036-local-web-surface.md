@@ -27,8 +27,9 @@ the missing piece is a local transport and a rendering client.
    `POST /api/prompt` for one read-only turn at a time (202/409). Runtime deltas
    are broadcast as ephemeral SSE events while the append-only log remains the
    durable source. Browser prompts use `workspace-write` + `ApprovalMode::Ask`;
-   an approval event blocks the turn until `POST /api/approval` allows or denies
-   it (300s timeout fails closed). Assistant text is rendered to HTML
+   an approval event blocks the turn until `POST /api/approval` allows, allows
+   for the session, or denies it (300s timeout fails closed); session allow is
+   cleared on new/switch. Assistant text is rendered to HTML
    server-side with raw HTML escaped and `javascript:` links blocked; the web
    client uses that HTML only for final messages. Math uses native MathML from
    `latex2mathml`, with escaped fallback and no remote assets. An embedder may

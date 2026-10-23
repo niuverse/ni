@@ -104,6 +104,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 .diff-line.remove { background:#2d1214; color:#ffb3ba; }
 .diff-num { color:#6e7681; min-width:3ch; text-align:right; user-select:none; }
 .approval button { margin-right:8px; } .deny { background:var(--panel2); color:var(--text); }
+.allow-session { background:var(--panel2) !important; color:var(--accent) !important; border:1px solid var(--accent); }
 </style>
 </head>
 <body>
@@ -270,17 +271,18 @@ function renderApproval(e) {
   card.appendChild(node('div','meta',e.summary || ''));
   if (e.preview) card.appendChild(renderPreview(e.preview));
   const allow = node('button',null,'Allow');
+  const always = node('button','allow-session','Allow session');
   const deny = node('button','deny','Deny');
-  const finish = async allowed => {
-    allow.disabled = deny.disabled = true;
+  const finish = async (allowed, session = false) => {
+    allow.disabled = always.disabled = deny.disabled = true;
     try {
-      const r = await fetch('/api/approval', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:e.id, allowed})});
+      const r = await fetch('/api/approval', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:e.id, allowed, session})});
       if (!r.ok) throw new Error('approval failed');
-      card.appendChild(node('div','meta', allowed ? 'allowed' : 'denied'));
+      card.appendChild(node('div','meta', allowed ? (session ? 'allowed for this session' : 'allowed') : 'denied'));
     } catch (err) { card.appendChild(node('div','meta','error: '+err.message)); }
   };
-  allow.onclick = () => finish(true); deny.onclick = () => finish(false);
-  card.appendChild(allow); card.appendChild(deny);
+  allow.onclick = () => finish(true); always.onclick = () => finish(true, true); deny.onclick = () => finish(false);
+  card.appendChild(allow); card.appendChild(always); card.appendChild(deny);
   log.appendChild(card);
 }
 async function refreshStatus() {
