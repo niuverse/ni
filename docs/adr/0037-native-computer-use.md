@@ -46,7 +46,9 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    before XTEST dispatch.
 5. **Lifecycle.** After the session is armed, the model may start/stop
    observation. The agent advertises `computer` only when a runtime is
-   configured; `niucode exec --computer` connects to X11 and arms it. Input still follows policy. The user can stop or downgrade at
+   configured; `niucode exec --computer` and `niucode tui --computer` connect to
+   X11 and arm it. The TUI `/computer` command reports state, re-arms, or stops
+   (policy off + disarm). Input still follows policy. The user can stop or downgrade at
    any time; a global emergency stop releases held keys/buttons. Observation is
    never a hidden background capture.
 6. **Multimodal.** Provider content gains `text | image` parts. First transport

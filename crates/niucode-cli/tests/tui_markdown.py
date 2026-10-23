@@ -89,6 +89,9 @@ def main():
         pane = Pane(sys.argv[1], root)
         try:
             pane.wait_for(b"\x1b[?2004h")
+            os.write(pane.master, b"/computer\r")
+            pane.wait_for(b"computer: off")
+            time.sleep(0.2)
             os.write(pane.master, f"/attach {image}\r".encode())
             pane.wait_for("Image · shot.png".encode())
             time.sleep(0.4)

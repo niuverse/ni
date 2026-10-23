@@ -237,6 +237,7 @@ pub struct TuiOptions {
     pub allow_subagent_inheritance: bool,
     pub approval_keys: ApprovalKeys,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
+    pub computer: String,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
 }
@@ -261,6 +262,7 @@ impl Default for TuiOptions {
             allow_subagent_inheritance: false,
             approval_keys: ApprovalKeys::default(),
             extra_tools: Vec::new(),
+            computer: "off".into(),
             mcp_config: None,
             allow_mcp_write: false,
         }
@@ -488,6 +490,9 @@ enum Command {
         /// Start in read-only plan mode
         #[arg(long)]
         plan: bool,
+        /// Native desktop policy: off, observe, control, or autonomous
+        #[arg(long, default_value = "off", value_parser = ["off", "observe", "control", "autonomous"])]
+        computer: String,
         /// Explicitly allow subagent profile=inherit
         #[arg(long)]
         allow_subagent_inheritance: bool,
@@ -677,6 +682,7 @@ pub async fn run() -> Result<()> {
             network,
             replay,
             plan,
+            computer,
             allow_subagent_inheritance,
         }) => {
             run_tui(
@@ -695,6 +701,7 @@ pub async fn run() -> Result<()> {
                     network,
                     replay,
                     plan,
+                    computer,
                     allow_subagent_inheritance,
                     approval_keys: ApprovalKeys::default(),
                     extra_tools: Vec::new(),
@@ -1163,6 +1170,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         session_dir,
         resume,
         sandbox,
+        computer,
         approval,
         network,
         replay,
@@ -1317,6 +1325,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
+    configure_computer(&mut agent_config, &computer)?;
     let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, false).await;
     if let Some(host) = &mcp_host {
         record_mcp_mounts(&session, host)?;
@@ -1406,7 +1415,36 @@ async fn run_actor_once(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn ingest_attachments(
+pub(crate) fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> {
+    if policy == "off" {
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let policy: ComputerPolicy = policy
+            .parse()
+            .with_context(|| format!("invalid --computer policy {policy:?}"))?;
+        match niucode_computer_x11::X11Backend::connect(None) {
+            Ok(backend) => {
+                let mut runtime = ComputerRuntime::new(Box::new(backend), policy);
+                runtime.arm().context("arm computer use for this session")?;
+                config.computer = Some(Arc::new(std::sync::Mutex::new(runtime)));
+                eprintln!(
+                    "computer: policy={} armed · /computer status|stop|arm",
+                    policy.as_str()
+                );
+            }
+            Err(error) => eprintln!("warning: computer unavailable: {error}"),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        eprintln!("warning: computer use is Linux-only in this build (got {policy:?})");
+    }
+    Ok(())
+}
+
+fn ingest_attachments(
     paths: &[PathBuf],
     expected: Option<AttachmentKind>,
     store: &AttachmentStore,
@@ -1693,43 +1731,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         agent_config.mcp_host = Some(host.clone());
     }
     agent_config.allowed_tools = tools;
-    if computer != "off" {
-        #[cfg(target_os = "linux")]
-        {
-            let policy: ComputerPolicy = computer
-                .parse()
-                .with_context(|| format!("invalid --computer policy {computer:?}"))?;
-            match niucode_computer_x11::X11Backend::connect(None) {
-                Ok(backend) => {
-                    let mut runtime = ComputerRuntime::new(Box::new(backend), policy);
-                    runtime.arm().context("arm computer use for this session")?;
-                    agent_config.computer = Some(Arc::new(std::sync::Mutex::new(runtime)));
-                    if !json {
-                        eprintln!("computer: policy={} armed", policy.as_str());
-                    }
-                }
-                Err(error) => {
-                    if json {
-                        emit_json(
-                            json!({"type": "warning", "message": format!("computer unavailable: {error}")}),
-                        );
-                    } else {
-                        eprintln!("warning: computer unavailable: {error}");
-                    }
-                }
-            }
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            if json {
-                emit_json(
-                    json!({"type": "warning", "message": "computer use is Linux-only in this build"}),
-                );
-            } else {
-                eprintln!("warning: computer use is Linux-only in this build");
-            }
-        }
-    }
+    configure_computer(&mut agent_config, &computer)?;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);
         if !block.is_empty() {
@@ -2360,6 +2362,11 @@ mod tests {
         };
         assert_eq!(computer, "observe");
         assert!(Cli::try_parse_from(["niucode", "exec", "look", "--computer", "banana"]).is_err());
+        let cli = Cli::try_parse_from(["niucode", "tui", "--computer", "control"]).expect("tui");
+        let Some(Command::Tui { computer, .. }) = cli.command else {
+            panic!("expected tui");
+        };
+        assert_eq!(computer, "control");
     }
 
     #[test]

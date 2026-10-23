@@ -31,6 +31,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("/session", "show the current session path and event count"),
     ("/attach", "attach an image or text file to the next turn"),
     ("/detach", "remove pending attachments [index]"),
+    ("/computer", "show, arm, or stop native computer use"),
     ("/last", "expand the most recent tool output"),
     ("/help", "show this help"),
     ("/exit", "leave the session"),
@@ -95,6 +96,7 @@ pub enum Command {
     Help,
     Attach(PathBuf),
     Detach(Option<usize>),
+    Computer(ComputerCommand),
     Last,
     Init { apply: bool },
     Clear,
@@ -112,6 +114,13 @@ pub enum Command {
     Status,
     Session,
     Exit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComputerCommand {
+    Status,
+    Arm,
+    Stop,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,6 +190,15 @@ pub fn parse(input: &str) -> Parsed {
                 Ok(index) if index > 0 => Parsed::Command(Command::Detach(Some(index))),
                 _ => Parsed::Usage("/detach [index]".into()),
             },
+        };
+    }
+
+    if name == "computer" {
+        return match rest {
+            "" | "status" => Parsed::Command(Command::Computer(ComputerCommand::Status)),
+            "arm" => Parsed::Command(Command::Computer(ComputerCommand::Arm)),
+            "stop" | "off" => Parsed::Command(Command::Computer(ComputerCommand::Stop)),
+            _ => Parsed::Usage("/computer [status|arm|stop]".into()),
         };
     }
 
@@ -266,6 +284,7 @@ fn usage(command: &Command) -> String {
         Command::Help => "/help".into(),
         Command::Attach(_) => "/attach <path>".into(),
         Command::Detach(_) => "/detach [index]".into(),
+        Command::Computer(_) => "/computer [status|arm|stop]".into(),
         Command::Last => "/last".into(),
         Command::Init { .. } => "/init".into(),
         Command::Clear => "/clear".into(),
@@ -311,6 +330,18 @@ mod tests {
             Parsed::Command(Command::Detach(Some(2)))
         );
         assert_eq!(parse("/detach"), Parsed::Command(Command::Detach(None)));
+        assert_eq!(
+            parse("/computer"),
+            Parsed::Command(Command::Computer(ComputerCommand::Status))
+        );
+        assert_eq!(
+            parse("/computer arm"),
+            Parsed::Command(Command::Computer(ComputerCommand::Arm))
+        );
+        assert_eq!(
+            parse("/computer stop"),
+            Parsed::Command(Command::Computer(ComputerCommand::Stop))
+        );
         assert_eq!(parse(":help"), Parsed::Command(Command::Help));
         assert_eq!(parse("/q"), Parsed::Command(Command::Exit));
         assert_eq!(parse(":q"), Parsed::Command(Command::Exit));

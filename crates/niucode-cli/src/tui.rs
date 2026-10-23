@@ -35,7 +35,8 @@ use crate::review::{choice_for_key, review_diff, ApprovalChoice};
 use crate::session_ops;
 use crate::skills;
 use crate::slash::{
-    self, Command as SlashCommand, CommandRegistry, GoalAction, Parsed as SlashParsed, PlanAction,
+    self, Command as SlashCommand, CommandRegistry, ComputerCommand, GoalAction,
+    Parsed as SlashParsed, PlanAction,
 };
 use crate::text_layout::clean_text;
 use crate::theme::{self, Theme, Tone};
@@ -406,6 +407,33 @@ pub async fn run(
                     continue;
                 }
             }
+        }
+        if let SlashParsed::Command(SlashCommand::Computer(command)) = slash::parse(&prompt_owned) {
+            match config.computer.as_ref() {
+                Some(runtime) => {
+                    let mut runtime = runtime.lock().unwrap();
+                    match command {
+                        ComputerCommand::Status => eprintln!(
+                            "computer: policy={} armed={}",
+                            runtime.policy().as_str(),
+                            runtime.is_armed()
+                        ),
+                        ComputerCommand::Arm => match runtime.arm() {
+                            Ok(()) => eprintln!("computer: armed"),
+                            Err(error) => eprintln!("computer: cannot arm: {error}"),
+                        },
+                        ComputerCommand::Stop => {
+                            runtime.set_policy(niucode_computer::ComputerPolicy::Off);
+                            runtime.disarm();
+                            eprintln!("computer: stopped and disarmed");
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("computer: off (start with --computer observe|control|autonomous)")
+                }
+            }
+            continue;
         }
         if prompt_owned.is_empty() {
             continue;
@@ -923,7 +951,7 @@ async fn handle_command(
     err: Theme,
 ) -> Result<CommandOutcome> {
     match command {
-        SlashCommand::Attach(_) | SlashCommand::Detach(_) => {}
+        SlashCommand::Attach(_) | SlashCommand::Detach(_) | SlashCommand::Computer(_) => {}
         SlashCommand::Help => print_help(out, commands),
         SlashCommand::Last => {
             if std::io::stdout().is_terminal() {
