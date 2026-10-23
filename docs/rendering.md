@@ -65,7 +65,7 @@ client — without turning the event log into presentation data.
   assets. KaTeX remains an optional upgrade.
 - **Code (M9-022)**: fenced code keeps its language and token colors in the
   browser via escaped server-rendered HTML. **M9-026** carries multi-line
-  block-comment state in both surfaces.
+  block-comment state; **M9-028** keeps triple-quoted strings across lines.
 - **Streaming (M9-023)**: each text delta carries accumulated rendered HTML, so
   Markdown forms while the turn is still running.
 - **Tools (M9-025)**: collapsible call/result cards with escaped, bounded

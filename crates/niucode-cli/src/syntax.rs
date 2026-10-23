@@ -79,6 +79,7 @@ const KEYWORDS: &[&str] = &[
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Highlighter {
     block_comment: bool,
+    triple: Option<char>,
 }
 
 impl Highlighter {
@@ -92,6 +93,23 @@ impl Highlighter {
         let mut tokens = Vec::new();
         let mut plain = String::new();
         let mut index = 0;
+        if let Some(quote) = self.triple {
+            let marker = format!("{quote}{quote}{quote}");
+            if let Some(end) = line.find(&marker) {
+                tokens.push(Token {
+                    text: line[..end + marker.len()].to_string(),
+                    kind: TokenKind::String,
+                });
+                self.triple = None;
+                index = line[..end + marker.len()].chars().count();
+            } else {
+                tokens.push(Token {
+                    text: line.to_string(),
+                    kind: TokenKind::String,
+                });
+                return tokens;
+            }
+        }
         if self.block_comment {
             if let Some(end) = line.find("*/") {
                 tokens.push(Token {
@@ -150,6 +168,32 @@ impl Highlighter {
                     kind: TokenKind::Comment,
                 });
                 break;
+            }
+            if matches!(ch, '"' | '\'')
+                && chars.get(index + 1) == Some(&ch)
+                && chars.get(index + 2) == Some(&ch)
+            {
+                flush(&mut tokens, &mut plain);
+                let start = index;
+                index += 3;
+                let mut closed = false;
+                while index + 2 < chars.len() {
+                    if chars[index] == ch && chars[index + 1] == ch && chars[index + 2] == ch {
+                        index += 3;
+                        closed = true;
+                        break;
+                    }
+                    index += 1;
+                }
+                if !closed {
+                    index = chars.len();
+                    self.triple = Some(ch);
+                }
+                tokens.push(Token {
+                    text: chars[start..index].iter().collect(),
+                    kind: TokenKind::String,
+                });
+                continue;
             }
             if matches!(ch, '"' | '\'' | '`') {
                 flush(&mut tokens, &mut plain);
@@ -268,6 +312,26 @@ mod tests {
             .map(|token| token.text)
             .collect();
         assert_eq!(rebuilt, "/* startstill */ let x = 1;");
+    }
+
+    #[test]
+    fn triple_quoted_strings_span_lines() {
+        let mut highlighter = Highlighter::new();
+        let first = highlighter.line("text = \"\"\"start");
+        assert!(first.iter().any(|token| token.kind == TokenKind::String));
+        let second = highlighter.line("still inside");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].kind, TokenKind::String);
+        let third = highlighter.line("end\"\"\" + 1");
+        assert!(third.iter().any(|token| token.kind == TokenKind::String));
+        assert!(third.iter().any(|token| token.kind == TokenKind::Number));
+        let rebuilt: String = first
+            .into_iter()
+            .chain(second)
+            .chain(third)
+            .map(|token| token.text)
+            .collect();
+        assert_eq!(rebuilt, "text = \"\"\"startstill insideend\"\"\" + 1");
     }
 
     #[test]

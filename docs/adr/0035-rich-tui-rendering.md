@@ -37,8 +37,8 @@ use a real Markdown/KaTeX renderer.
 4. Code fences bypass Markdown parsing; the fence markers are replaced by a
    `▎ language` label. A line-based token classifier colors keywords, strings,
    comments, numbers, and calls without changing text or width. Stateful block
-   comments span lines; the web renderer shares that classifier and emits token
-   classes in escaped HTML.
+   comments and triple-quoted strings span lines; the web renderer shares that
+   classifier and emits token classes in escaped HTML.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,
    `\alpha`, `\frac`, `\sqrt`); `$$` blocks are buffered and lose their
    fences, and unmatched `$` stays literal. A web surface may render full TeX.

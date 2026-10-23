@@ -678,6 +678,14 @@ mod tests {
     }
 
     #[test]
+    fn fenced_triple_strings_keep_their_state() {
+        let html = markdown_html("```python\ntext = \"\"\"start\nstill inside\nend\"\"\" + 1\n```");
+        let strings = html.matches("tok-string").count();
+        assert!(strings >= 2, "{html}");
+        assert!(html.contains("tok-number"), "{html}");
+    }
+
+    #[test]
     fn fenced_block_comments_keep_their_state() {
         let html = markdown_html("```rust\n/* start\nstill */ let x = 1;\n```");
         let comments = html.matches("tok-comment").count();
