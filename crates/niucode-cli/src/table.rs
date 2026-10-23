@@ -2,9 +2,23 @@
 //!
 //! Rows are buffered by the transcript until the block ends, because column
 //! widths need the whole table. Cell text is inline-Markdown-stripped here;
-//! styling inside cells is a later pass.
+//! header/border tone is carried as line metadata, while styling inside cells
+//! is a later pass.
 
 use unicode_width::UnicodeWidthStr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableLineKind {
+    Border,
+    Header,
+    Row,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableLine {
+    pub text: String,
+    pub kind: TableLineKind,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Align {
@@ -65,7 +79,7 @@ fn separator(cells: &[String]) -> Option<Vec<Align>> {
 
 /// Render a table block. The returned lines contain no ANSI styling; the
 /// terminal applies the row tone once, so width stays stable.
-pub fn render(lines: &[String], max_width: usize) -> Vec<String> {
+pub fn render(lines: &[String], max_width: usize) -> Vec<TableLine> {
     let mut rows: Vec<Vec<String>> = lines
         .iter()
         .filter(|line| is_row(line))
@@ -112,7 +126,10 @@ pub fn render(lines: &[String], max_width: usize) -> Vec<String> {
         }
         line
     };
-    let mut out = vec![border_line("┌", "┬", "┐")];
+    let mut out = vec![TableLine {
+        text: border_line("┌", "┬", "┐"),
+        kind: TableLineKind::Border,
+    }];
     for (row_index, row) in rows.iter().enumerate() {
         let mut line = String::from("│");
         for (index, width) in widths.iter().enumerate() {
@@ -135,12 +152,25 @@ pub fn render(lines: &[String], max_width: usize) -> Vec<String> {
             line.push(' ');
             line.push('│');
         }
-        out.push(line);
+        out.push(TableLine {
+            text: line,
+            kind: if row_index == 0 {
+                TableLineKind::Header
+            } else {
+                TableLineKind::Row
+            },
+        });
         if row_index == 0 {
-            out.push(border_line("├", "┼", "┤"));
+            out.push(TableLine {
+                text: border_line("├", "┼", "┤"),
+                kind: TableLineKind::Border,
+            });
         }
     }
-    out.push(border_line("└", "┴", "┘"));
+    out.push(TableLine {
+        text: border_line("└", "┴", "┘"),
+        kind: TableLineKind::Border,
+    });
     out
 }
 
@@ -190,31 +220,34 @@ mod tests {
     #[test]
     fn renders_borders_header_and_alignment() {
         let lines = render(&block(), 80);
-        assert!(lines[0].starts_with('┌'));
-        assert!(lines[1].contains("name"));
-        assert!(lines[2].starts_with('├'));
-        assert!(lines.last().unwrap().starts_with('└'));
+        assert!(lines[0].text.starts_with('┌'));
+        assert!(lines[1].text.contains("name"));
+        assert!(lines[2].text.starts_with('├'));
+        assert!(lines.last().unwrap().text.starts_with('└'));
         // Right-aligned value column keeps 1 and 22 flush right.
-        assert!(lines[3].contains("1 │"));
-        assert!(lines[4].contains("22 │"));
+        assert!(lines[3].text.contains("1 │"));
+        assert!(lines[4].text.contains("22 │"));
         assert_eq!(lines.len(), 6);
+        assert_eq!(lines[0].kind, TableLineKind::Border);
+        assert_eq!(lines[1].kind, TableLineKind::Header);
+        assert_eq!(lines[3].kind, TableLineKind::Row);
     }
 
     #[test]
     fn inline_markers_are_stripped_from_cells() {
         let lines = render(&["| **bold** | `code` |".into()], 80);
-        assert!(lines[1].contains("bold"));
-        assert!(lines[1].contains("code"));
-        assert!(!lines[1].contains('*'));
-        assert!(!lines[1].contains('`'));
+        assert!(lines[1].text.contains("bold"));
+        assert!(lines[1].text.contains("code"));
+        assert!(!lines[1].text.contains('*'));
+        assert!(!lines[1].text.contains('`'));
     }
 
     #[test]
     fn narrow_width_truncates_with_ellipsis() {
         let lines = render(&["| a very long cell | b |".into()], 15);
-        assert!(lines.iter().any(|line| line.contains('…')));
+        assert!(lines.iter().any(|line| line.text.contains('…')));
         for line in &lines {
-            assert!(line.width() <= 16, "{}", line.width());
+            assert!(line.text.width() <= 16, "{}", line.text.width());
         }
     }
 }

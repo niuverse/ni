@@ -30,8 +30,9 @@ use a real Markdown/KaTeX renderer.
 2. Strip ATX heading markers and render the heading with the accent style.
    List markers become bullets/tasks, and `>` becomes a muted quote bar.
 3. Buffer consecutive pipe-table lines and render them as a box table only when
-   the block ends. Column widths are cell-width based and capped to the
-   viewport.
+   the block ends. Column widths are cell-width based and capped to the viewport.
+   Header rows are bold and borders dim via line metadata; styling never changes
+   cell width. Cell inline styling remains a later pass.
 4. Code fences bypass Markdown parsing and keep the existing syntax highlight;
    the fence markers are replaced by a `▎ language` label.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,

@@ -224,6 +224,40 @@ impl Theme {
 
     /// The same spans feed linear ANSI and ratatui, so highlighting cannot
     /// change width or leak terminal control characters between renderers.
+    pub fn table_row(
+        self,
+        text: &str,
+        kind: crate::table::TableLineKind,
+    ) -> ratatui::text::Line<'static> {
+        use ratatui::style::Modifier;
+        let mut line = self.row(text, false);
+        if self.ansi {
+            let modifier = match kind {
+                crate::table::TableLineKind::Header => Some(Modifier::BOLD),
+                crate::table::TableLineKind::Border => Some(Modifier::DIM),
+                crate::table::TableLineKind::Row => None,
+            };
+            if let Some(modifier) = modifier {
+                for span in &mut line.spans {
+                    span.style = span.style.add_modifier(modifier);
+                }
+            }
+        }
+        line
+    }
+
+    pub fn render_table_row(self, text: &str, kind: crate::table::TableLineKind) -> String {
+        if !self.ansi {
+            return self.render_row(text, false);
+        }
+        let row = self.render_row(text, false);
+        match kind {
+            crate::table::TableLineKind::Header => format!("\x1b[1m{row}\x1b[0m"),
+            crate::table::TableLineKind::Border => format!("\x1b[2m{row}\x1b[0m"),
+            crate::table::TableLineKind::Row => row,
+        }
+    }
+
     pub fn render_row(self, text: &str, code: bool) -> String {
         use ratatui::style::{Color, Modifier};
         let row = self.row(text, code);
@@ -307,6 +341,27 @@ mod tests {
             assert!(!symbol.is_empty());
         }
     }
+    #[test]
+    fn table_header_and_border_get_modifiers() {
+        use ratatui::style::Modifier;
+        let theme = Theme::ansi_forced();
+        let header = theme.table_row("│ name │", crate::table::TableLineKind::Header);
+        assert!(header
+            .spans
+            .iter()
+            .all(|span| span.style.add_modifier.contains(Modifier::BOLD)));
+        let border = theme.table_row("┌────┐", crate::table::TableLineKind::Border);
+        assert!(border
+            .spans
+            .iter()
+            .all(|span| span.style.add_modifier == Modifier::DIM));
+        assert!(Theme::plain()
+            .table_row("│ name │", crate::table::TableLineKind::Header)
+            .spans
+            .iter()
+            .all(|span| span.style.add_modifier.is_empty()));
+    }
+
     #[test]
     fn highlighted_code_and_markdown_preserve_text_and_sanitize_controls() {
         let theme = Theme::ansi_forced();

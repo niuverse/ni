@@ -215,9 +215,30 @@ impl TerminalSession {
         let width = self.size().0;
         let rows = std::mem::take(&mut self.table);
         for line in crate::table::render(&rows, width) {
-            self.emit_line(&line)?;
+            self.emit_table_line(&line.text, line.kind)?;
         }
         stdout().flush()?;
+        Ok(())
+    }
+
+    fn emit_table_line(&mut self, line: &str, kind: crate::table::TableLineKind) -> io::Result<()> {
+        let theme = if self.ansi {
+            Theme::detect_stdout()
+        } else {
+            Theme::plain()
+        };
+        if let Some(t) = &mut self.inline {
+            let width = t.size()?.width.saturating_sub(1).max(1) as usize;
+            for row in wrap(line, width) {
+                let row = theme.table_row(&row, kind);
+                t.insert_before(1, |buf| {
+                    Paragraph::new(row).render(buf.area, buf);
+                    collapse_wide_continuations(buf);
+                })?;
+            }
+        } else {
+            write!(stdout(), "{}\r\n", theme.render_table_row(line, kind))?;
+        }
         Ok(())
     }
 
