@@ -177,6 +177,21 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         };
         return send(&mut stream, "200 OK", "application/json", body).await;
     }
+    if method == "GET" && path == "/api/export" {
+        let markdown = match load(&state.path) {
+            Ok(loaded) => export_markdown(&loaded.events),
+            Err(error) => {
+                return send(
+                    &mut stream,
+                    "500 Internal Server Error",
+                    "application/json",
+                    serde_json::to_vec(&json!({"error": error.to_string()}))?,
+                )
+                .await;
+            }
+        };
+        return send_download(&mut stream, markdown).await;
+    }
     if method == "GET" && path == "/api/status" {
         let status = json!({
             "brand": state.brand,
@@ -619,6 +634,68 @@ fn escape_html(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
+fn export_markdown(events: &[Event]) -> String {
+    let mut out = String::from("# niucode session\n\n");
+    for event in events {
+        match event {
+            Event::SessionStart {
+                cwd,
+                model,
+                provider,
+                ..
+            } => {
+                out.push_str(&format!(
+                    "- cwd: `{cwd}`\n- model: `{model}`\n- provider: `{provider}`\n\n"
+                ));
+            }
+            Event::UserMessage { text, .. } => {
+                out.push_str("## User\n\n");
+                out.push_str(text);
+                out.push_str("\n\n");
+            }
+            Event::AssistantMessage { text, .. } => {
+                if !text.trim().is_empty() {
+                    out.push_str("## Assistant\n\n");
+                    out.push_str(text);
+                    out.push_str("\n\n");
+                }
+            }
+            Event::ToolResult { ok, output, .. } => {
+                out.push_str(&format!(
+                    "### Tool result ({})\n\n````text\n",
+                    if *ok { "ok" } else { "error" }
+                ));
+                out.push_str(output);
+                out.push_str("\n````\n\n");
+            }
+            Event::TurnEnd { usage, .. } => {
+                out.push_str(&format!(
+                    "_tokens: {} in / {} out / {} cached_\n\n",
+                    usage.input_tokens, usage.output_tokens, usage.cached_tokens
+                ));
+            }
+            Event::Compaction { summary, .. } => {
+                out.push_str("## Compaction summary\n\n");
+                out.push_str(summary);
+                out.push_str("\n\n");
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+async fn send_download(stream: &mut TcpStream, markdown: String) -> Result<()> {
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/markdown; charset=utf-8\r\nContent-Disposition: attachment; filename=\"niucode-session.md\"\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\n\r\n",
+        markdown.len()
+    );
+    stream.write_all(head.as_bytes()).await?;
+    stream.write_all(markdown.as_bytes()).await?;
+    stream.shutdown().await?;
+    Ok(())
+}
+
 fn response(method: &str, path: &str, snapshot: &[u8]) -> (&'static str, &'static str, Vec<u8>) {
     match (method, path) {
         ("GET", "/") => (
@@ -668,6 +745,41 @@ mod tests {
 
     fn state() -> Arc<State> {
         state_with(br#"{}"#.to_vec())
+    }
+
+    #[test]
+    fn export_markdown_keeps_user_assistant_and_tool_output() {
+        let events = vec![
+            Event::SessionStart {
+                id: "s".into(),
+                cwd: "/w".into(),
+                model: "m".into(),
+                provider: "deepseek".into(),
+                ts: 0,
+            },
+            Event::UserMessage {
+                text: "hello".into(),
+                ts: 0,
+            },
+            Event::AssistantMessage {
+                text: "world".into(),
+                reasoning: None,
+                tool_calls: vec![],
+                ts: 0,
+            },
+            Event::ToolResult {
+                call_id: "c".into(),
+                ok: true,
+                output: "output".into(),
+                ts: 0,
+            },
+        ];
+        let markdown = export_markdown(&events);
+        assert!(markdown.starts_with("# niucode session"));
+        assert!(markdown.contains("## User\n\nhello"));
+        assert!(markdown.contains("## Assistant\n\nworld"));
+        assert!(markdown.contains("````text\noutput\n````"));
+        assert!(markdown.contains("cwd: `/w`"));
     }
 
     #[test]
@@ -1141,6 +1253,7 @@ mod tests {
         assert!(INDEX.contains("cmd-menu"));
         assert!(INDEX.contains("session log unchanged"));
         assert!(INDEX.contains("usageTotals"));
+        assert!(INDEX.contains("/api/export"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1163,6 +1276,7 @@ mod tests {
         assert!(INDEX.contains("cmd-menu"));
         assert!(INDEX.contains("session log unchanged"));
         assert!(INDEX.contains("usageTotals"));
+        assert!(INDEX.contains("/api/export"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

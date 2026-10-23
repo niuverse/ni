@@ -81,7 +81,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="download" class="chip" title="download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <main id="log"></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
@@ -294,6 +294,18 @@ function filterContext() {
   }
 }
 document.getElementById('ctx-filter').addEventListener('input', filterContext);
+document.getElementById('download').onclick = async () => {
+  try {
+    const response = await fetch('/api/export');
+    if (!response.ok) throw new Error('export failed');
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'niucode-session.md';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) { document.getElementById('status').textContent = 'export: ' + error.message; }
+};
 document.getElementById('toggle-context').onclick = () => {
   document.getElementById('context').classList.toggle('hidden');
 };

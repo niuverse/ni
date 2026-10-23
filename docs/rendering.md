@@ -50,7 +50,7 @@ client — without turning the event log into presentation data.
 ### P4 · Web surface
 
 - **v0 (M9-007)**: loopback-only read-only viewer, embedded static client,
-  `/api/session`.
+  `/api/session`; **M9-040** adds a derived Markdown download.
 - **Live tail (M9-008)**: `/api/events` chunked SSE, initial log + appended
   lines.
 - **Read-only chat (M9-009)**: `POST /api/prompt`, one turn at a time, hard-coded
