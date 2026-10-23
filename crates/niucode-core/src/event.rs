@@ -286,6 +286,15 @@ pub enum Event {
         workers: u64,
         ts: Timestamp,
     },
+    /// An MCP server was mounted. Records the config hash and the mutating
+    /// tool allowlist, not the environment values.
+    McpMount {
+        server: String,
+        config_hash: String,
+        #[serde(default)]
+        write_tools: Vec<String>,
+        ts: Timestamp,
+    },
     /// A sidecar extension was unmounted.
     ExtensionUnmount {
         name: String,
@@ -379,6 +388,7 @@ impl Event {
             Self::ModelChange { .. } => "model_change",
             Self::PermissionChange { .. } => "permission_change",
             Self::ExtensionMount { .. } => "extension_mount",
+            Self::McpMount { .. } => "mcp_mount",
             Self::ExtensionUnmount { .. } => "extension_unmount",
             Self::ExtensionError { .. } => "extension_error",
             Self::InitProposal { .. } => "init_proposal",
@@ -415,6 +425,7 @@ impl Event {
             | Self::ModelChange { ts, .. }
             | Self::PermissionChange { ts, .. }
             | Self::ExtensionMount { ts, .. }
+            | Self::McpMount { ts, .. }
             | Self::ExtensionUnmount { ts, .. }
             | Self::ExtensionError { ts, .. }
             | Self::Instructions { ts, .. }
@@ -554,6 +565,28 @@ mod tests {
             decoded,
             Event::Verification { command, ok: false, output, step: Some(step), ts: 11 }
                 if command == "cargo test" && output == "one failure" && step == "p-2"
+        ));
+    }
+
+    #[test]
+    fn mcp_mount_event_roundtrips() {
+        let event = Event::McpMount {
+            server: "notes".into(),
+            config_hash: "0123456789abcdef".into(),
+            write_tools: vec!["mcp__notes__create_note".into()],
+            ts: 12,
+        };
+        assert_eq!(event.kind(), "mcp_mount");
+        assert_eq!(event.ts(), 12);
+        let encoded = serde_json::to_value(&event).unwrap();
+        assert_eq!(encoded["type"], "mcp_mount");
+        let decoded: Event = serde_json::from_value(encoded).unwrap();
+        assert!(matches!(
+            decoded,
+            Event::McpMount { server, config_hash, write_tools, ts: 12 }
+                if server == "notes"
+                    && config_hash == "0123456789abcdef"
+                    && write_tools == ["mcp__notes__create_note"]
         ));
     }
 

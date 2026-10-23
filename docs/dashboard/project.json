@@ -105,7 +105,7 @@
     {
       "id": "M8",
       "title": "Connected harness",
-      "status": "planned",
+      "status": "done",
       "goal": "通过标准、可审计的连接器让 harness 访问外部工具，而不为每个服务写一套 sidecar。",
       "exit": [
         "stdio MCP 客户端支持 initialize/tools/list/tools/call，超时与进程组清理可验证",

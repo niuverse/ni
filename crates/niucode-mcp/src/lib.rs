@@ -355,8 +355,33 @@ impl Drop for McpClient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpMount {
     pub server: String,
+    pub config_hash: String,
     pub tools: Vec<String>,
     pub write_tools: Vec<String>,
+}
+
+fn config_hash(spec: &McpServerSpec) -> String {
+    // Stable local audit value. Env keys only: values may be secrets.
+    let mut hash: u64 = 0xcbf29ce484222325;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    };
+    feed(spec.name.as_bytes());
+    feed(spec.command.as_bytes());
+    for arg in &spec.args {
+        feed(arg.as_bytes());
+    }
+    feed(&[u8::from(spec.read_only)]);
+    for tool in &spec.write_tools {
+        feed(tool.as_bytes());
+    }
+    for key in spec.env.keys() {
+        feed(key.as_bytes());
+    }
+    format!("{hash:016x}")
 }
 
 struct HostTool {
@@ -372,6 +397,7 @@ pub struct McpHost {
     clients: Vec<Mutex<McpClient>>,
     tools: Vec<HostTool>,
     servers: Vec<String>,
+    hashes: Vec<String>,
 }
 
 impl McpHost {
@@ -389,6 +415,7 @@ impl McpHost {
         let mut clients: Vec<Mutex<McpClient>> = Vec::new();
         let mut tools = Vec::new();
         let mut server_names: Vec<String> = Vec::new();
+        let mut hashes: Vec<String> = Vec::new();
         let mut names = HashSet::new();
         for server in servers {
             server.validate_policy(allow_write)?;
@@ -433,11 +460,13 @@ impl McpHost {
             }
             clients.push(Mutex::new(client));
             server_names.push(server.name.clone());
+            hashes.push(config_hash(server));
         }
         Ok(Self {
             clients,
             tools,
             servers: server_names,
+            hashes,
         })
     }
 
@@ -463,8 +492,10 @@ impl McpHost {
         let mut mounts: Vec<McpMount> = self
             .servers
             .iter()
-            .map(|server| McpMount {
+            .enumerate()
+            .map(|(index, server)| McpMount {
                 server: server.clone(),
+                config_hash: self.hashes.get(index).cloned().unwrap_or_default(),
                 tools: Vec::new(),
                 write_tools: Vec::new(),
             })

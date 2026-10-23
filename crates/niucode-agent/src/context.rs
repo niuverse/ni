@@ -158,6 +158,7 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::ModelChange { .. }
             | Event::PermissionChange { .. }
             | Event::ExtensionMount { .. }
+            | Event::McpMount { .. }
             | Event::ExtensionUnmount { .. }
             | Event::ExtensionError { .. }
             | Event::Instructions { .. }

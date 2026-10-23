@@ -435,6 +435,9 @@ fn subagent_config(parent: &AgentConfig, task: &TaskSpec) -> AgentConfig {
     config.context.compact_at_percent = 75;
     config.context.keep_recent_turns = 1;
     config.extension_host = parent.extension_host.clone();
+    // ADR-0034: mutating MCP is never inherited. A worker needs its own
+    // approval design before it can see these tools.
+    config.mcp_host = None;
     config.write_lock = parent.write_lock.clone();
     config.read_roots = parent.read_roots.clone();
 
@@ -594,6 +597,7 @@ mod tests {
 #[cfg(test)]
 mod worktree_tests {
     use super::*;
+    use std::sync::Arc;
 
     fn temp_dir(tag: &str) -> PathBuf {
         let stamp = std::time::SystemTime::now()
@@ -659,6 +663,26 @@ mod worktree_tests {
             "worker worktree leaked into parent"
         );
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[tokio::test]
+    async fn subagent_config_never_inherits_mcp_host() {
+        let host = Arc::new(
+            niucode_mcp::McpHost::mount(&[], std::time::Duration::from_secs(1))
+                .await
+                .expect("empty host"),
+        );
+        let mut parent = AgentConfig::new("test", ".");
+        parent.mcp_host = Some(host);
+        let task = TaskSpec {
+            prompt: "parent".into(),
+            profile: SubagentProfile::Explore,
+            write_scope: None,
+            worktree: false,
+            max_steps: 1,
+            timeout_secs: 30,
+        };
+        assert!(subagent_config(&parent, &task).mcp_host.is_none());
     }
 
     #[tokio::test]

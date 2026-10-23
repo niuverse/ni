@@ -809,6 +809,18 @@ fn removed_old_sessions(directory: &Path, days: u64, keep: usize) {
     }
 }
 
+fn record_mcp_mounts(session: &SessionLog, host: &McpHost) -> Result<()> {
+    for mount in host.mounts() {
+        session.append(&Event::McpMount {
+            server: mount.server,
+            config_hash: mount.config_hash,
+            write_tools: mount.write_tools,
+            ts: now_ms(),
+        })?;
+    }
+    Ok(())
+}
+
 async fn mount_mcp(
     config: Option<PathBuf>,
     allow_write: bool,
@@ -1230,6 +1242,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     agent_config.extra_tools = extra_tools;
     let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, false).await;
     if let Some(host) = &mcp_host {
+        record_mcp_mounts(&session, host)?;
         agent_config.mcp_host = Some(host.clone());
     }
     if let Some(hooks) = hooks.as_ref() {
@@ -1505,6 +1518,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     agent_config.extra_tools = extra_tools;
     let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, json).await;
     if let Some(host) = &mcp_host {
+        record_mcp_mounts(&session, host)?;
         agent_config.mcp_host = Some(host.clone());
     }
     agent_config.allowed_tools = tools;
@@ -2198,6 +2212,25 @@ PATH = "/usr/bin:/bin"
             .await
             .expect("write mount");
         assert!(host.is_mutating("mcp__fixture__echo"));
+        let session = SessionLog::create(directory.path()).unwrap();
+        record_mcp_mounts(&session, &host).unwrap();
+        let loaded = niucode_core::load(session.path()).unwrap();
+        let mount = loaded
+            .events
+            .iter()
+            .find_map(|event| match event {
+                Event::McpMount {
+                    server,
+                    config_hash,
+                    write_tools,
+                    ..
+                } => Some((server.clone(), config_hash.clone(), write_tools.clone())),
+                _ => None,
+            })
+            .expect("mcp mount event");
+        assert_eq!(mount.0, "fixture");
+        assert_eq!(mount.1.len(), 16);
+        assert!(mount.2.contains(&"mcp__fixture__echo".to_string()));
         host.shutdown().await.unwrap();
     }
 
