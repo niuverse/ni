@@ -5367,6 +5367,28 @@
       "excerpt": "Draft notes for the next niucode release: local web surface, streaming Markdown, approvals, TUI rendering, and verification evidence."
     },
     {
+      "id": "release-0.1.8",
+      "title": "Release 0.1.8 (draft)",
+      "kind": "release",
+      "status": "draft",
+      "order": 71,
+      "summary": "Draft notes: native Linux X11 and macOS computer use, observation-bound input, approvals/emergency stop, and multimodal attachment memory.",
+      "body_html": "<h2>Status</h2>\n<p>Prepared 2026-10-23. The workspace is <code>0.1.8</code>; publication is pending an\nexplicit maintainer go-ahead. Nothing has been uploaded for this version.</p>\n<h2>Highlights</h2>\n<ul>\n<li><strong>Native computer use</strong>: new <code>niucode-computer</code> protocol, Linux X11\n(<code>x11rb</code> + XTEST), and macOS (CoreGraphics + CGEvent) backends.</li>\n<li><strong>Observation-bound actions</strong>: click/type/key/scroll carry an observation\nid, window id, image-relative coordinates, expiry, and geometry rechecks.</li>\n<li><strong>Permissions</strong>: <code>off | observe | control | autonomous</code>, explicit arm,\nper-action approval for control, terminal/sensitive red lines, Ctrl-C\nemergency stop and input release.</li>\n<li><strong>Agent tool</strong>: <code>computer</code> returns the screenshot as a tool image part;\naction failures stay ToolResults; approvals are audited.</li>\n<li><strong>Product surfaces</strong>: <code>niucode</code>/<code>niuse</code> exec, TUI, REPL, and web expose\n<code>--computer</code>; TUI/REPL <code>/computer stop|arm</code>, web status chip.</li>\n<li><strong>Multimodal attachments</strong>: OpenAI-compatible image parts, capability gate,\ncontent-addressed store, budgeted text/image turns, TUI <code>/attach</code>/<code>@path</code>,\nWeb upload/drop/paste, CLI <code>--attach</code>/<code>--image</code>.</li>\n<li><strong>Memory evidence</strong>: context projection, reopened attachment-store history,\nand reopened Markdown memory in a second session.</li>\n</ul>\n<h2>Verification</h2>\n<pre><code class=\"language-sh\">cargo test --workspace\ncargo clippy --workspace --all-targets -- -D warnings\ncargo xtask dashboard --check\n./scripts/publish-niucode.sh --check\n</code></pre>\n<p>The Linux X11 path is exercised under Xvfb in CI. macOS compiles and runs unit\ntests on the macOS runner; real TCC/dogfood interaction remains manual.</p>\n<h2>Release order</h2>\n<ol>\n<li>Publish <code>niucode-core</code>, <code>niucode-computer</code>, <code>niucode-computer-x11</code>,\n<code>niucode-computer-macos</code>, <code>niucode-attachments</code>, <code>niucode-auth</code>,\n<code>niucode-provider</code>, <code>niucode-tools</code>, <code>niucode-extension</code>, <code>niucode-mcp</code>,\n<code>niucode-agent</code>, then <code>niucode</code>.</li>\n<li>Wait for each new crate to appear in the sparse index before publishing\ndependents.</li>\n<li>Verify a clean <code>cargo install niucode --version 0.1.8</code>.</li>\n<li>Bump niuse to <code>0.1.14</code>, require <code>niucode = 0.1.8</code>, publish.</li>\n</ol>\n<h2>Caveats</h2>\n<ul>\n<li>Pre-release package verification for the new crates cannot succeed against\nregistry <code>0.1.8</code> until the dependency order has been published.</li>\n<li>macOS runtime evidence requires a signed/permission-granted Mac.</li>\n</ul>\n",
+      "path": "docs/release-0.1.8.md",
+      "excerpt": "Draft notes: native Linux X11 and macOS computer use, observation-bound input, approvals/emergency stop, and multimodal attachment memory."
+    },
+    {
+      "id": "publish-0.1.8-dry-run",
+      "title": "0.1.8 publish dry run",
+      "kind": "evidence",
+      "status": "living",
+      "order": 72,
+      "summary": "Pre-publication checks for 0.1.8: version/license/token/order, the new protocol package, and the expected dependency-order blocker.",
+      "body_html": "<h2><code>publish-niucode.sh --check</code></h2>\n<pre><code class=\"language-text\">version: 0.1.8\nlicense: license = \"MIT OR Apache-2.0\"\ntoken:   /home/galbot/.cargo/credentials.toml\norder:   niucode-core niucode-computer niucode-computer-x11\n         niucode-computer-macos niucode-attachments niucode-auth\n         niucode-provider niucode-tools niucode-extension niucode-mcp\n         niucode-agent niucode\ncheck only; pass --execute to publish\n</code></pre>\n<h2>Package check</h2>\n<p><code>cargo package -p niucode-computer --allow-dirty --no-verify</code> succeeded:</p>\n<pre><code class=\"language-text\">Packaged 6 files, 35.5KiB (9.0KiB compressed)\n</code></pre>\n<p><code>niucode-computer-x11</code> cannot package before its dependency exists in the\nregistry:</p>\n<pre><code class=\"language-text\">no matching package named `niucode-computer` found\n</code></pre>\n<p>This is the expected publish-order blocker, not a source failure. Publish\n<code>niucode-computer</code> first, wait for the sparse index, then package/publish X11\nand macOS.</p>\n<h2>Not done</h2>\n<p>No <code>cargo publish</code> ran. Publication needs an explicit maintainer go-ahead.</p>\n",
+      "path": "docs/evidence/publish-0.1.8-dry-run.md",
+      "excerpt": "Pre-publication checks for 0.1.8: version/license/token/order, the new protocol package, and the expected dependency-order blocker."
+    },
+    {
       "id": "readme",
       "title": "看板维护指南",
       "kind": "guide",
@@ -6229,7 +6251,7 @@
     "schema_version": 1,
     "cards": 185,
     "modules": 15,
-    "docs": 59,
+    "docs": 61,
     "generator": "cargo xtask dashboard"
   }
 }
