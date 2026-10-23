@@ -104,8 +104,18 @@ impl Theme {
             }
         };
         if !code {
-            if let Some(heading) = crate::markdown::heading(&text) {
-                return vec![Span::styled(heading, style(Tone::Accent))].into();
+            if let Some((level, heading)) = crate::markdown::heading_with_level(&text) {
+                let mut heading_style = style(Tone::Accent);
+                if self.ansi {
+                    if level == 1 {
+                        heading_style = heading_style.add_modifier(Modifier::UNDERLINED);
+                    } else if level >= 3 {
+                        heading_style = heading_style
+                            .fg(Color::Cyan)
+                            .remove_modifier(Modifier::BOLD);
+                    }
+                }
+                return vec![Span::styled(heading, heading_style)].into();
             }
         }
         let (text, block_style) = if code {
@@ -466,6 +476,21 @@ mod tests {
             .map(|span| span.content.as_ref())
             .collect::<String>()
             .contains("bold"));
+    }
+
+    #[test]
+    fn heading_levels_get_distinct_emphasis() {
+        use ratatui::style::Modifier;
+        let theme = Theme::ansi_forced();
+        let h1 = theme.row("# One", false);
+        assert!(h1.spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::UNDERLINED));
+        let h3 = theme.row("### Three", false);
+        assert!(!h3.spans[0].style.add_modifier.contains(Modifier::BOLD));
+        assert_eq!(h1.spans[0].content, "One");
+        assert_eq!(h3.spans[0].content, "Three");
     }
 
     #[test]

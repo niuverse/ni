@@ -18,7 +18,8 @@ client — without turning the event log into presentation data.
 ### P1 · Inline Markdown and tables (in progress)
 
 - `markdown::inline`: bold, italic, inline code, links, strikethrough.
-- ATX headings lose their `#` markers.
+- ATX headings lose their `#` markers and carry level-aware emphasis
+  (**M9-047**).
 - `table::render`: buffered pipe tables, borders, alignment, width cap.
 - Both linear ANSI and ratatui spans use the same spans.
 - Tests: parser edge cases, table widths, PTY visible output.

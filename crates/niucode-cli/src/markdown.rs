@@ -34,8 +34,8 @@ pub struct Span {
     pub style: Style,
 }
 
-/// Strip an ATX heading marker (`#` through `######`) and return its text.
-pub fn heading(text: &str) -> Option<String> {
+/// Return the ATX heading level and its text.
+pub fn heading_with_level(text: &str) -> Option<(u8, String)> {
     let trimmed = text.trim_start();
     let hashes = trimmed
         .chars()
@@ -48,7 +48,13 @@ pub fn heading(text: &str) -> Option<String> {
     if !rest.is_empty() && !rest.starts_with(' ') {
         return None;
     }
-    Some(rest.trim_start().to_string())
+    Some((hashes as u8, rest.trim_start().to_string()))
+}
+
+/// Strip an ATX heading marker (`#` through `######`) and return its text.
+#[cfg(test)]
+fn heading(text: &str) -> Option<String> {
+    heading_with_level(text).map(|(_, text)| text)
 }
 
 /// Parse one line of inline Markdown. Markers are removed when balanced and
@@ -419,6 +425,14 @@ mod tests {
         assert_eq!(text(&inline("2 * 3 and **open")), "2 * 3 and **open");
         assert_eq!(text(&inline(r"\*literal\*")), "*literal*");
         assert_eq!(text(&inline("snake_case_name")), "snake_case_name");
+    }
+
+    #[test]
+    fn heading_levels_are_preserved() {
+        assert_eq!(heading_with_level("# one"), Some((1, "one".into())));
+        assert_eq!(heading_with_level("### three"), Some((3, "three".into())));
+        assert_eq!(heading_with_level("####### seven"), None);
+        assert_eq!(heading_with_level("#no-space"), None);
     }
 
     #[test]
