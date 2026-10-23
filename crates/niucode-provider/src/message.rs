@@ -161,6 +161,28 @@ impl ChatMessage {
             tool_call_id: Some(call_id.into()),
         }
     }
+
+    /// Tool output with image parts. Used by computer observe; the model sees
+    /// the screenshot in the same tool message as the metadata.
+    pub fn tool_with_images(
+        call_id: impl Into<String>,
+        output: impl Into<String>,
+        images: Vec<String>,
+    ) -> Self {
+        let mut parts = vec![ContentPart::Text {
+            text: output.into(),
+        }];
+        parts.extend(images.into_iter().map(|url| ContentPart::ImageUrl {
+            image_url: ImageUrl { url, detail: None },
+        }));
+        Self {
+            role: Role::Tool,
+            content: Some(MessageContent::Parts(parts)),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: Some(call_id.into()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

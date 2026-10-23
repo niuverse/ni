@@ -11,8 +11,12 @@ rust-version.workspace = true
 name = "niucode"
 path = "src/main.rs"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+niucode-computer-x11 = { path = "../niucode-computer-x11", version = "0.1.7" }
+
 [dependencies]
 anyhow.workspace = true
+niucode-computer = { path = "../niucode-computer", version = "0.1.7" }
 base64.workspace = true
 clap.workspace = true
 crossterm.workspace = true

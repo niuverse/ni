@@ -11,8 +11,13 @@ use std::time::Duration;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+use base64::Engine;
 use futures_util::StreamExt;
 use niucode_attachments::{check_budget, AttachmentStore};
+use niucode_computer::{
+    parse_action, ComputerAction, ComputerBackend, ComputerPolicy, ComputerSession, PolicyDecision,
+    WindowId,
+};
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::{
     ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent, ToolSpec,
@@ -77,6 +82,76 @@ pub struct ApprovalRequest {
 /// The loop advertises the spec and dispatches by name. v1 accepts only
 /// read-only tools: they do not ask for approval, do not write through the
 /// sandbox, and are not inherited by subagents.
+pub struct ComputerRuntime {
+    backend: Box<dyn ComputerBackend>,
+    session: ComputerSession,
+}
+
+impl ComputerRuntime {
+    pub fn new(backend: Box<dyn ComputerBackend>, policy: ComputerPolicy) -> Self {
+        Self {
+            backend,
+            session: ComputerSession::new(policy),
+        }
+    }
+
+    pub fn policy(&self) -> ComputerPolicy {
+        self.session.policy()
+    }
+
+    pub fn set_policy(&mut self, policy: ComputerPolicy) {
+        self.session.set_policy(policy);
+    }
+
+    pub fn arm(&mut self) -> anyhow::Result<()> {
+        self.session.arm().map_err(Into::into)
+    }
+
+    pub fn is_armed(&self) -> bool {
+        self.session.is_armed()
+    }
+
+    pub fn observe(&mut self, window: Option<WindowId>) -> Result<niucode_computer::Capture> {
+        let capture = self
+            .backend
+            .observe(window)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        self.session.remember(capture.observation.clone());
+        Ok(capture)
+    }
+
+    pub fn decide(&self, action: &ComputerAction) -> Result<PolicyDecision> {
+        self.session.decide(action).map_err(Into::into)
+    }
+
+    pub fn validate(
+        &self,
+        action: &ComputerAction,
+        now_ms: u64,
+    ) -> Result<niucode_computer::Observation> {
+        Ok(self.session.validate(action, now_ms)?.clone())
+    }
+
+    pub fn perform(
+        &mut self,
+        action: &ComputerAction,
+        observation: &niucode_computer::Observation,
+    ) -> Result<()> {
+        self.backend
+            .perform(action, observation)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn window_for(&self, action: &ComputerAction) -> Option<niucode_computer::WindowInfo> {
+        let id = action.observation_id()?;
+        self.session
+            .observation(id)
+            .ok()
+            .map(|observation| observation.window.clone())
+    }
+}
+
 #[async_trait]
 pub trait EmbedderTool: Send + Sync + std::fmt::Debug {
     fn spec(&self) -> ToolSpec;
@@ -113,6 +188,8 @@ pub struct AgentConfig {
     /// Read-only tools supplied by an embedder. Dispatched after built-ins and
     /// the extension host; not inherited by subagents.
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
+    /// Native desktop controller. Advertised as the `computer` tool when set.
+    pub computer: Option<Arc<std::sync::Mutex<ComputerRuntime>>>,
     /// Mounted read-only MCP servers. Dispatched after built-ins and the
     /// extension host; not inherited by subagents.
     pub mcp_host: Option<Arc<niucode_mcp::McpHost>>,
@@ -161,6 +238,7 @@ impl AgentConfig {
             goal: None,
             extension_host: None,
             extra_tools: Vec::new(),
+            computer: None,
             mcp_host: None,
             write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
@@ -420,6 +498,19 @@ async fn run_engine(
             );
         }
         tools.push(spec);
+    }
+    if let Some(runtime) = &config.computer {
+        let policy = runtime.lock().unwrap().policy();
+        let description = if policy == ComputerPolicy::Off {
+            "Native desktop control is present but the session policy is off; ask the user to arm it."
+        } else {
+            "Observe the Linux desktop and perform observation-bound click/type/key/scroll actions. Every input action is permission-checked and may require approval."
+        };
+        tools.push(ToolSpec::function(
+            "computer",
+            description,
+            niucode_computer::tool_spec(),
+        ));
     }
     let tools = match &config.allowed_tools {
         Some(allowed) => tools
@@ -682,6 +773,7 @@ async fn run_engine(
                 .is_none_or(|allowed| allowed.iter().any(|name| name == &call.name));
             io.observe(AgentEvent::Phase(LoopPhase::Tool)).await?;
             let scope_allowed = write_in_scope(config, &call);
+            let mut tool_images = Vec::new();
             let mut result = if !available {
                 niucode_tools::ToolResult {
                     ok: false,
@@ -701,6 +793,10 @@ async fn run_engine(
                     subagent::run_tool(provider, session, config, &call),
                 )
                 .await?
+            } else if call.name == "computer" {
+                let execution = execute_computer(provider, session, config, io, &call).await?;
+                tool_images = execution.images;
+                execution.result
             } else if let Some(host) = config
                 .extension_host
                 .as_ref()
@@ -803,7 +899,15 @@ async fn run_engine(
             })
             .await?;
 
-            messages.push(ChatMessage::tool(call.id, result.output));
+            if tool_images.is_empty() {
+                messages.push(ChatMessage::tool(call.id, result.output));
+            } else {
+                messages.push(ChatMessage::tool_with_images(
+                    call.id,
+                    result.output,
+                    tool_images,
+                ));
+            }
         }
     }
 
@@ -814,6 +918,184 @@ async fn run_engine(
             "max steps reached ({}); the task is not complete",
             config.max_steps
         )
+    }
+}
+
+struct ComputerExecution {
+    result: niucode_tools::ToolResult,
+    images: Vec<String>,
+}
+
+async fn execute_computer(
+    _provider: &dyn Provider,
+    session: &SessionLog,
+    config: &AgentConfig,
+    io: &mut runtime::RunIo<'_>,
+    call: &ToolCall,
+) -> Result<ComputerExecution> {
+    let Some(runtime) = &config.computer else {
+        return Ok(ComputerExecution {
+            result: niucode_tools::ToolResult {
+                ok: false,
+                output: "computer tool is not configured".into(),
+            },
+            images: Vec::new(),
+        });
+    };
+    let action = match parse_action(&call.input) {
+        Ok(action) => action,
+        Err(error) => {
+            return Ok(ComputerExecution {
+                result: niucode_tools::ToolResult {
+                    ok: false,
+                    output: format!("computer input rejected: {error}"),
+                },
+                images: Vec::new(),
+            });
+        }
+    };
+    let purpose = call
+        .input
+        .get("purpose")
+        .and_then(Value::as_str)
+        .unwrap_or("no purpose provided")
+        .to_string();
+    let decision = match runtime.lock().unwrap().decide(&action) {
+        Ok(decision) => decision,
+        Err(error) => {
+            return Ok(ComputerExecution {
+                result: niucode_tools::ToolResult {
+                    ok: false,
+                    output: format!("computer action rejected: {error}"),
+                },
+                images: Vec::new(),
+            });
+        }
+    };
+    match decision {
+        PolicyDecision::Denied => {
+            return Ok(ComputerExecution {
+                result: niucode_tools::ToolResult {
+                    ok: false,
+                    output: "computer permission denied; ask the user to arm computer use and grant the required policy".into(),
+                },
+                images: Vec::new(),
+            });
+        }
+        PolicyDecision::NeedsApproval => {
+            let window = runtime
+                .lock()
+                .unwrap()
+                .window_for(&action)
+                .map(|window| format!("{} — {}", window.app, window.title))
+                .unwrap_or_else(|| "unobserved window".into());
+            let summary = format!(
+                "computer {} on {window}. Purpose: {purpose}",
+                action_label(&action)
+            );
+            if !io
+                .approve(
+                    session,
+                    &call.id,
+                    ApprovalRequest {
+                        tool: "computer".into(),
+                        summary,
+                        preview: None,
+                    },
+                )
+                .await?
+            {
+                session.append(&Event::Approval {
+                    tool: "computer".into(),
+                    allowed: false,
+                    ts: now_ms(),
+                })?;
+                return Ok(ComputerExecution {
+                    result: niucode_tools::ToolResult {
+                        ok: false,
+                        output: "computer action denied by user".into(),
+                    },
+                    images: Vec::new(),
+                });
+            }
+            session.append(&Event::Approval {
+                tool: "computer".into(),
+                allowed: true,
+                ts: now_ms(),
+            })?;
+        }
+        PolicyDecision::Allowed => {}
+    }
+
+    let mut runtime = runtime.lock().unwrap();
+    match &action {
+        ComputerAction::Observe { window_id } => match runtime.observe(*window_id) {
+            Ok(capture) => {
+                let encoded = base64::engine::general_purpose::STANDARD.encode(&capture.png);
+                let data_url = format!("data:image/png;base64,{encoded}");
+                let output = format!(
+                    "observation {} · window {} · {} — {} · {}x{} · expires_at_ms={}",
+                    capture.observation.id,
+                    capture.observation.window.id.0,
+                    capture.observation.window.app,
+                    capture.observation.window.title,
+                    capture.observation.image.width,
+                    capture.observation.image.height,
+                    capture.observation.expires_at_ms
+                );
+                Ok(ComputerExecution {
+                    result: niucode_tools::ToolResult { ok: true, output },
+                    images: vec![data_url],
+                })
+            }
+            Err(error) => Ok(ComputerExecution {
+                result: niucode_tools::ToolResult {
+                    ok: false,
+                    output: format!("computer observe failed: {error:#}"),
+                },
+                images: Vec::new(),
+            }),
+        },
+        _ => {
+            let observation = match runtime.validate(&action, now_ms()) {
+                Ok(observation) => observation,
+                Err(error) => {
+                    return Ok(ComputerExecution {
+                        result: niucode_tools::ToolResult {
+                            ok: false,
+                            output: format!("computer observation rejected: {error}"),
+                        },
+                        images: Vec::new(),
+                    });
+                }
+            };
+            if let Err(error) = runtime.perform(&action, &observation) {
+                return Ok(ComputerExecution {
+                    result: niucode_tools::ToolResult {
+                        ok: false,
+                        output: format!("computer action failed: {error:#}"),
+                    },
+                    images: Vec::new(),
+                });
+            }
+            Ok(ComputerExecution {
+                result: niucode_tools::ToolResult {
+                    ok: true,
+                    output: format!("computer {} completed", action_label(&action)),
+                },
+                images: Vec::new(),
+            })
+        }
+    }
+}
+
+fn action_label(action: &ComputerAction) -> &'static str {
+    match action {
+        ComputerAction::Observe { .. } => "observe",
+        ComputerAction::Click { .. } => "click",
+        ComputerAction::Type { .. } => "type",
+        ComputerAction::Scroll { .. } => "scroll",
+        ComputerAction::Key { .. } => "key",
     }
 }
 
@@ -1246,6 +1528,187 @@ mod tests {
             .any(|event| matches!(event, Event::Approval { allowed: false, .. })));
 
         fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[derive(Default)]
+    struct FakeComputer {
+        performed: Vec<ComputerAction>,
+    }
+
+    impl niucode_computer::ComputerBackend for FakeComputer {
+        fn observe(
+            &mut self,
+            _window: Option<WindowId>,
+        ) -> Result<niucode_computer::Capture, Box<dyn std::error::Error + Send + Sync>> {
+            let now = now_ms();
+            Ok(niucode_computer::Capture {
+                observation: niucode_computer::Observation {
+                    id: niucode_computer::ObservationId::new("obs-1"),
+                    window: niucode_computer::WindowInfo {
+                        id: WindowId(7),
+                        app: "editor".into(),
+                        title: "notes".into(),
+                        class: None,
+                        kind: niucode_computer::WindowKind::Normal,
+                        bounds: niucode_computer::Rect {
+                            x: 0,
+                            y: 0,
+                            width: 10,
+                            height: 10,
+                        },
+                    },
+                    image: niucode_computer::ImageMeta {
+                        width: 10,
+                        height: 10,
+                        scale_percent: 100,
+                        sha256: "abc".into(),
+                        bytes: 3,
+                    },
+                    captured_at_ms: now,
+                    expires_at_ms: now + 60_000,
+                },
+                png: b"png".to_vec(),
+            })
+        }
+
+        fn perform(
+            &mut self,
+            action: &ComputerAction,
+            _observation: &niucode_computer::Observation,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.performed.push(action.clone());
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn computer_observe_is_advertised_and_returns_an_image_part() {
+        let directory = temp_dir("computer-observe");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let mut config = test_config(&directory);
+        let runtime = Arc::new(std::sync::Mutex::new(ComputerRuntime::new(
+            Box::<FakeComputer>::default(),
+            ComputerPolicy::Control,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime);
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("call_computer".into()),
+                    name: Some("computer".into()),
+                    arguments: r#"{"action":"observe","purpose":"inspect"}"#.to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("done".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "observe the desktop",
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+
+        let requests = provider.requests();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0]
+            .tools
+            .iter()
+            .any(|tool| tool.function.name == "computer"));
+        let tool_message = requests[1]
+            .messages
+            .iter()
+            .find(|message| message.role == Role::Tool)
+            .expect("tool message");
+        assert!(tool_message.has_images());
+        let text = match tool_message.content.as_ref().expect("content") {
+            niucode_provider::MessageContent::Parts(parts) => parts
+                .iter()
+                .find_map(|part| match part {
+                    niucode_provider::ContentPart::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .expect("text part"),
+            niucode_provider::MessageContent::Text(text) => text,
+        };
+        assert!(text.contains("observation obs-1"));
+    }
+
+    #[tokio::test]
+    async fn computer_input_requires_and_records_approval() {
+        let directory = temp_dir("computer-input");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let mut config = test_config(&directory);
+        let runtime = Arc::new(std::sync::Mutex::new(ComputerRuntime::new(
+            Box::<FakeComputer>::default(),
+            ComputerPolicy::Control,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime);
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("observe".into()),
+                    name: Some("computer".into()),
+                    arguments: r#"{"action":"observe"}"#.to_string(),
+                }),
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 1,
+                    id: Some("click".into()),
+                    name: Some("computer".into()),
+                    arguments:
+                        r#"{"action":"click","observation_id":"obs-1","window_id":7,"x":5,"y":5}"#
+                            .to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("done".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        let mut approvals = 0;
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "click the window",
+            &mut |_| {
+                approvals += 1;
+                true
+            },
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        assert_eq!(approvals, 1);
+        let loaded = niucode_core::load(session.path()).expect("load");
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::Approval { tool, allowed: true, .. } if tool == "computer"
+        )));
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::ToolResult { call_id, ok: true, .. } if call_id == "click"
+        )));
     }
 
     #[tokio::test]

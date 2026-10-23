@@ -45,7 +45,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    rather than executing an approximate click. Input is revalidated immediately
    before XTEST dispatch.
 5. **Lifecycle.** After the session is armed, the model may start/stop
-   observation. Input still follows policy. The user can stop or downgrade at
+   observation. The agent advertises `computer` only when a runtime is
+   configured; `niucode exec --computer` connects to X11 and arms it. Input still follows policy. The user can stop or downgrade at
    any time; a global emergency stop releases held keys/buttons. Observation is
    never a hidden background capture.
 6. **Multimodal.** Provider content gains `text | image` parts. First transport

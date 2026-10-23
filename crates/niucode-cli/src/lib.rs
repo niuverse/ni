@@ -9,10 +9,11 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use niucode_agent::{
     project_history, run_with_attachments, run_with_history, AgentConfig, ApprovalMode,
-    ApprovalRequest,
+    ApprovalRequest, ComputerRuntime,
 };
 use niucode_attachments::{AttachmentKind, AttachmentStore};
 use niucode_auth::AuthStore;
+use niucode_computer::ComputerPolicy;
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog};
 use niucode_extension::{discover_in, ExtensionHost};
 use niucode_mcp::{McpConfig, McpHost};
@@ -168,6 +169,7 @@ pub struct ExecOptions {
     pub max_goal_turns: usize,
     pub attach: Vec<PathBuf>,
     pub image: Vec<PathBuf>,
+    pub computer: String,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
@@ -198,6 +200,7 @@ impl Default for ExecOptions {
             max_goal_turns: 6,
             attach: Vec::new(),
             image: Vec::new(),
+            computer: "off".into(),
             extra_tools: Vec::new(),
             mcp_config: None,
             allow_mcp_write: false,
@@ -357,6 +360,9 @@ enum Command {
         /// Image file to attach to this turn (repeatable, max 4)
         #[arg(long, value_name = "PATH")]
         image: Vec<PathBuf>,
+        /// Native desktop policy: off, observe, control, or autonomous
+        #[arg(long, default_value = "off", value_parser = ["off", "observe", "control", "autonomous"])]
+        computer: String,
         /// Provider preset: deepseek or openai
         #[arg(long, default_value = "deepseek")]
         preset: String,
@@ -569,6 +575,7 @@ pub async fn run() -> Result<()> {
             prompt,
             attach,
             image,
+            computer,
             preset,
             model,
             max_steps,
@@ -613,6 +620,7 @@ pub async fn run() -> Result<()> {
                     max_goal_turns,
                     attach,
                     image,
+                    computer,
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
                     allow_mcp_write: cli.allow_mcp_write,
@@ -1450,6 +1458,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         max_goal_turns,
         attach,
         image,
+        computer,
         extra_tools,
         mcp_config,
         allow_mcp_write,
@@ -1681,6 +1690,43 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         agent_config.mcp_host = Some(host.clone());
     }
     agent_config.allowed_tools = tools;
+    if computer != "off" {
+        let policy: ComputerPolicy = computer
+            .parse()
+            .with_context(|| format!("invalid --computer policy {computer:?}"))?;
+        #[cfg(target_os = "linux")]
+        {
+            match niucode_computer_x11::X11Backend::connect(None) {
+                Ok(backend) => {
+                    let mut runtime = ComputerRuntime::new(Box::new(backend), policy);
+                    runtime.arm().context("arm computer use for this session")?;
+                    agent_config.computer = Some(Arc::new(std::sync::Mutex::new(runtime)));
+                    if !json {
+                        eprintln!("computer: policy={} armed", policy.as_str());
+                    }
+                }
+                Err(error) => {
+                    if json {
+                        emit_json(
+                            json!({"type": "warning", "message": format!("computer unavailable: {error}")}),
+                        );
+                    } else {
+                        eprintln!("warning: computer unavailable: {error}");
+                    }
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            if json {
+                emit_json(
+                    json!({"type": "warning", "message": "computer use is Linux-only in this build"}),
+                );
+            } else {
+                eprintln!("warning: computer use is Linux-only in this build");
+            }
+        }
+    }
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);
         if !block.is_empty() {
@@ -2301,6 +2347,17 @@ fn preset_env(preset: Preset, base: bool) -> Option<String> {
 mod tests {
     use super::*;
     use niucode_core::Usage;
+
+    #[test]
+    fn exec_parses_computer_policy() {
+        let cli = Cli::try_parse_from(["niucode", "exec", "look", "--computer", "observe"])
+            .expect("parse");
+        let Some(Command::Exec { computer, .. }) = cli.command else {
+            panic!("expected exec");
+        };
+        assert_eq!(computer, "observe");
+        assert!(Cli::try_parse_from(["niucode", "exec", "look", "--computer", "banana"]).is_err());
+    }
 
     #[test]
     fn exec_parses_repeatable_attachment_flags() {
