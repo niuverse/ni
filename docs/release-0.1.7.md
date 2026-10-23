@@ -9,8 +9,9 @@ summary = "Draft notes for the next niucode release: local web surface, streamin
 
 ## Status
 
-Draft. Not published. Version numbers in the workspace are still 0.1.6; a
-release requires a coordinated bump and publication order.
+Published 2026-10-23. The workspace is `0.1.7`; all eight publishable crates are
+on crates.io, verified by the registry index and a clean `cargo install
+niucode --version 0.1.7`.
 
 ## Highlights
 
@@ -61,8 +62,6 @@ includes `assets/web.html` and `src/web.rs`.
 
 ## Blockers
 
-- Human approval to publish.
-- Version bump has not been applied.
-- `niuse --features web` against registry 0.1.6 fails exactly at missing
-  `niucode::web`; publish 0.1.7 first, then re-run the niuse feature dry run.
-- Version bump has not been applied; nothing has been uploaded.
+- None. Published with explicit human approval.
+- `niuse 0.1.13` now requires this release; its `web` feature verifies against
+  the registry.
