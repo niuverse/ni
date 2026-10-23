@@ -723,6 +723,35 @@ fn preview_json(preview: Option<&niucode_tools::ChangePreview>) -> Value {
     })
 }
 
+fn strip_images(html: &str) -> String {
+    let mut output = String::new();
+    let mut rest = html;
+    while let Some(index) = rest.find("<img") {
+        output.push_str(&rest[..index]);
+        let tag = &rest[index..];
+        let Some(end) = tag.find('>') else {
+            output.push_str(tag);
+            return output;
+        };
+        let tag = &tag[..=end];
+        let alt = tag
+            .find("alt=\"")
+            .and_then(|start| {
+                let rest = &tag[start + 5..];
+                rest.find('"').map(|end| &rest[..end])
+            })
+            .unwrap_or("");
+        if alt.is_empty() {
+            output.push_str("<span class=\"image-alt\">[image]</span>");
+        } else {
+            output.push_str(&format!("<span class=\"image-alt\">[image: {alt}]</span>"));
+        }
+        rest = &rest[index + end + 1..];
+    }
+    output.push_str(rest);
+    output
+}
+
 fn add_html(value: &mut Value) {
     if value.get("type").and_then(Value::as_str) != Some("assistant_message") {
         return;
@@ -745,6 +774,7 @@ fn markdown_html(text: &str) -> String {
     });
     let mut output = String::new();
     html::push_html(&mut output, parser);
+    output = strip_images(&output);
     for (index, rendered) in math.into_iter().enumerate() {
         output = output.replace(&format!("@@NIUMATH{index}@@"), &rendered);
     }
@@ -1094,6 +1124,14 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn remote_images_do_not_load() {
+        let html = markdown_html("![tracker](https://example.invalid/pixel.png)");
+        assert!(!html.contains("<img"), "{html}");
+        assert!(!html.contains("https://example.invalid"), "{html}");
+        assert!(html.contains("image: tracker"), "{html}");
     }
 
     #[test]

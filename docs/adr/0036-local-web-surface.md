@@ -30,8 +30,9 @@ the missing piece is a local transport and a rendering client.
    an approval event blocks the turn until `POST /api/approval` allows, allows
    for the tool session, or denies it (300s timeout fails closed); the card shows
    a matching countdown, and the tool allowlist is cleared on new/switch. Assistant text is rendered to HTML
-   server-side with raw HTML escaped and `javascript:` links blocked; the web
-   client uses that HTML only for final messages. Math uses native MathML from
+   server-side with raw HTML escaped, `javascript:` links blocked, and remote
+   Markdown images stripped to alt text so the page never fetches third-party
+   resources; the web client uses that HTML only for final messages. Math uses native MathML from
    `latex2mathml`, with escaped fallback and no remote assets. An embedder may
    supply `brand` and `context`; a live `context_provider` is called per
    `/api/context` request, feeding a collapsible/filterable sidebar, and
