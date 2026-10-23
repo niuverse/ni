@@ -66,6 +66,8 @@ client — without turning the event log into presentation data.
   browser via escaped server-rendered HTML.
 - **Streaming (M9-023)**: each text delta carries accumulated rendered HTML, so
   Markdown forms while the turn is still running.
+- **Tools (M9-025)**: collapsible call/result cards with escaped, bounded
+  input/output.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
 - **Status (M9-016)**: model/cwd/policy chips from `/api/status`.
 - **Turn timer (M9-017)**: SSE phases drive a busy chip and elapsed timer; the

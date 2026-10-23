@@ -1065,6 +1065,8 @@ mod tests {
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
         assert!(INDEX.contains("renderPreview"));
+        assert!(INDEX.contains("renderToolCall"));
+        assert!(INDEX.contains("tool-card"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
