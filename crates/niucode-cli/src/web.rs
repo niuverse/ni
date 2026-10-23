@@ -38,6 +38,8 @@ pub struct Options {
     pub brand: Option<String>,
     /// Optional product context: title, brand, and sidebar sections.
     pub context: Option<Value>,
+    /// Optional live context. When set, `/api/context` calls it per request.
+    pub context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
 }
 
 struct State {
@@ -50,6 +52,7 @@ struct State {
     max_steps: usize,
     system_prompt: Option<String>,
     context: Vec<u8>,
+    context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
     brand: String,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
@@ -131,6 +134,7 @@ pub async fn serve(options: Options) -> Result<()> {
             context: serde_json::to_vec(&options.context.unwrap_or_else(
                 || json!({"brand": options.brand.clone().unwrap_or_else(|| "niucode".into())}),
             ))?,
+            context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
             busy: AtomicBool::new(false),
             live,
@@ -166,13 +170,12 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         return prompt(stream, state, body).await;
     }
     if method == "GET" && path == "/api/context" {
-        return send(
-            &mut stream,
-            "200 OK",
-            "application/json",
-            state.context.clone(),
-        )
-        .await;
+        let body = if let Some(provider) = &state.context_provider {
+            serde_json::to_vec(&provider())?
+        } else {
+            state.context.clone()
+        };
+        return send(&mut stream, "200 OK", "application/json", body).await;
     }
     if method == "GET" && path == "/api/status" {
         let status = json!({
@@ -653,6 +656,7 @@ mod tests {
             max_steps: 1,
             system_prompt: None,
             context,
+            context_provider: None,
             brand: "niucode".into(),
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
@@ -767,6 +771,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn live_context_provider_is_called_per_request() {
+        use std::sync::atomic::AtomicUsize;
+        let mut state = state_with(Vec::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        Arc::get_mut(&mut state).unwrap().context_provider = Some(Arc::new(move || {
+            let n = count.fetch_add(1, Ordering::SeqCst) + 1;
+            json!({"brand": format!("live-{n}")})
+        }));
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+        for expected in ["live-1", "live-2"] {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            stream
+                .write_all(b"GET /api/context HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                .await
+                .unwrap();
+            let mut reply = Vec::new();
+            stream.read_to_end(&mut reply).await.unwrap();
+            let text = String::from_utf8_lossy(&reply);
+            assert!(text.contains(expected), "{text}");
+        }
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn serves_model_and_policy_status() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -805,6 +836,7 @@ mod tests {
                 max_steps: 1,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                context_provider: None,
                 brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
@@ -877,6 +909,7 @@ mod tests {
                 max_steps: 1,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                context_provider: None,
                 brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
@@ -1010,6 +1043,7 @@ mod tests {
                 max_steps: 2,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                context_provider: None,
                 brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
@@ -1094,6 +1128,8 @@ mod tests {
         assert!(INDEX.contains("toggle-context"));
         assert!(INDEX.contains("ctx-filter"));
         assert!(INDEX.contains("ctx-section"));
+        assert!(INDEX.contains("loadContext"));
+        assert!(INDEX.contains("localStorage"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

@@ -135,7 +135,7 @@ function render(e) {
   else if (e.type === 'tool_result') renderToolResult(e);
   else if (e.type === 'approval') { beginTurn('approval'); renderApproval(e); }
   else if (e.type === 'phase') { if (e.phase === 'done') endTurn(); else beginTurn(e.phase); }
-  else if (e.type === 'turn_end') { const elapsed = endTurn(); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); }
+  else if (e.type === 'turn_end') { const elapsed = endTurn(); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); setTimeout(loadContext, 600); }
 }
 function renderToolCall(e) {
   const card = node('details','tool-card');
@@ -211,26 +211,43 @@ async function refreshStatus() {
   } catch (_) {}
 }
 refreshStatus(); setInterval(refreshStatus, 2500);
-fetch('/api/context').then(r=>r.json()).then(ctx=>{
-  if (ctx.brand) document.getElementById('brand').textContent = ctx.brand;
-  if (ctx.title) document.title = ctx.title;
-  const body = document.getElementById('ctx-body');
-  body.textContent = '';
-  if (!ctx.sections || !ctx.sections.length) {
-    body.appendChild(node('div','ctx-empty','no product context'));
-    return;
-  }
-  for (const section of ctx.sections) {
-    const details = node('details','ctx-section');
-    details.open = true;
-    const summary = node('summary',null,section.title || '');
-    summary.appendChild(node('span',null,String((section.lines || []).length)));
-    details.appendChild(summary);
-    for (const line of section.lines || []) details.appendChild(node('p',null,line));
-    body.appendChild(details);
-  }
-  filterContext();
-}).catch(()=>{});
+const CTX_KEY = 'niucode.context.collapsed';
+function collapsedSections() {
+  try { return JSON.parse(localStorage.getItem(CTX_KEY) || '{}'); } catch (_) { return {}; }
+}
+async function loadContext() {
+  try {
+    const ctx = await fetch('/api/context').then(r=>r.json());
+    if (ctx.brand) document.getElementById('brand').textContent = ctx.brand;
+    if (ctx.title) document.title = ctx.title;
+    const body = document.getElementById('ctx-body');
+    body.textContent = '';
+    if (!ctx.sections || !ctx.sections.length) {
+      body.appendChild(node('div','ctx-empty','no product context'));
+      return;
+    }
+    const collapsed = collapsedSections();
+    for (const section of ctx.sections) {
+      const title = section.title || '';
+      const details = node('details','ctx-section');
+      details.dataset.title = title;
+      details.open = !collapsed[title];
+      const summary = node('summary',null,title);
+      summary.appendChild(node('span',null,String((section.lines || []).length)));
+      details.appendChild(summary);
+      for (const line of section.lines || []) details.appendChild(node('p',null,line));
+      details.addEventListener('toggle', () => {
+        const state = collapsedSections();
+        if (details.open) delete state[title]; else state[title] = true;
+        try { localStorage.setItem(CTX_KEY, JSON.stringify(state)); } catch (_) {}
+      });
+      body.appendChild(details);
+    }
+    filterContext();
+  } catch (_) {}
+}
+loadContext();
+setInterval(loadContext, 15000);
 function filterContext() {
   const query = document.getElementById('ctx-filter').value.trim().toLowerCase();
   for (const section of document.querySelectorAll('.ctx-section')) {

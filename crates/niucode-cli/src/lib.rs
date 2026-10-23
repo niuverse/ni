@@ -627,6 +627,7 @@ pub async fn run() -> Result<()> {
                 system_prompt: None,
                 brand: None,
                 context: None,
+                context_provider: None,
             })
             .await?;
             Ok(())

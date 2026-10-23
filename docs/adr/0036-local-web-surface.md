@@ -32,8 +32,9 @@ the missing piece is a local transport and a rendering client.
    server-side with raw HTML escaped and `javascript:` links blocked; the web
    client uses that HTML only for final messages. Math uses native MathML from
    `latex2mathml`, with escaped fallback and no remote assets. An embedder may
-   supply `brand` and `context`; `/api/context` feeds a generic, collapsible and
-   filterable sidebar and `/api/status` exposes model/cwd/policy for the header. Approval previews and
+   supply `brand` and `context`; a live `context_provider` is called per
+   `/api/context` request, feeding a collapsible/filterable sidebar, and
+   `/api/status` exposes model/cwd/policy for the header. Approval previews and
    tool calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase` events
    drive a client-side turn timer; `text_delta` carries accumulated rendered
    HTML, and the durable usage comes from `turn_end`. Read-only remains the
