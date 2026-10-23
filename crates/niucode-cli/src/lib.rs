@@ -8,10 +8,12 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use niucode_agent::{
-    project_history, run_with_history, AgentConfig, ApprovalMode, ApprovalRequest,
+    project_history, run_with_attachments, run_with_history, AgentConfig, ApprovalMode,
+    ApprovalRequest,
 };
+use niucode_attachments::{AttachmentKind, AttachmentStore};
 use niucode_auth::AuthStore;
-use niucode_core::{now_ms, Event, SessionLog};
+use niucode_core::{now_ms, AttachmentRef, Event, SessionLog};
 use niucode_extension::{discover_in, ExtensionHost};
 use niucode_mcp::{McpConfig, McpHost};
 use niucode_provider::{
@@ -164,6 +166,8 @@ pub struct ExecOptions {
     pub tools: Option<Vec<String>>,
     pub goal: Option<String>,
     pub max_goal_turns: usize,
+    pub attach: Vec<PathBuf>,
+    pub image: Vec<PathBuf>,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
@@ -192,6 +196,8 @@ impl Default for ExecOptions {
             tools: None,
             goal: None,
             max_goal_turns: 6,
+            attach: Vec::new(),
+            image: Vec::new(),
             extra_tools: Vec::new(),
             mcp_config: None,
             allow_mcp_write: false,
@@ -345,6 +351,12 @@ enum Command {
     Exec {
         /// Task for the agent
         prompt: String,
+        /// Text file to attach to this turn (repeatable, max 4)
+        #[arg(long, value_name = "PATH")]
+        attach: Vec<PathBuf>,
+        /// Image file to attach to this turn (repeatable, max 4)
+        #[arg(long, value_name = "PATH")]
+        image: Vec<PathBuf>,
         /// Provider preset: deepseek or openai
         #[arg(long, default_value = "deepseek")]
         preset: String,
@@ -555,6 +567,8 @@ pub async fn run() -> Result<()> {
         Some(Command::Auth { command }) => run_auth(command),
         Some(Command::Exec {
             prompt,
+            attach,
+            image,
             preset,
             model,
             max_steps,
@@ -597,6 +611,8 @@ pub async fn run() -> Result<()> {
                     tools,
                     goal,
                     max_goal_turns,
+                    attach,
+                    image,
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
                     allow_mcp_write: cli.allow_mcp_write,
@@ -1346,12 +1362,31 @@ async fn run_actor_once(
     config: &AgentConfig,
     prompt: &str,
     history: Vec<ChatMessage>,
+    attachments: &[AttachmentRef],
+    store: Option<&AttachmentStore>,
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Option<Result<niucode_agent::RunOutcome>> {
-    let run = run_with_history(
-        provider, session, config, prompt, history, approver, observer,
-    );
+    let run = async {
+        if let Some(store) = store {
+            run_with_attachments(
+                provider,
+                session,
+                config,
+                prompt,
+                attachments.to_vec(),
+                store,
+                approver,
+                observer,
+            )
+            .await
+        } else {
+            run_with_history(
+                provider, session, config, prompt, history, approver, observer,
+            )
+            .await
+        }
+    };
     tokio::pin!(run);
     tokio::select! {
         result = &mut run => Some(result),
@@ -1360,6 +1395,37 @@ async fn run_actor_once(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn ingest_attachments(
+    paths: &[PathBuf],
+    expected: Option<AttachmentKind>,
+    store: &AttachmentStore,
+) -> Result<Vec<AttachmentRef>> {
+    let mut references = Vec::new();
+    for path in paths {
+        let bytes =
+            std::fs::read(path).with_context(|| format!("read attachment {}", path.display()))?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("attachment");
+        let reference = store
+            .put(&bytes, Some(name), None)
+            .with_context(|| format!("ingest attachment {}", path.display()))?;
+        if let Some(expected) = expected {
+            if reference.kind != expected {
+                bail!(
+                    "{} is {:?}, not {:?}; use the matching --attach/--image flag",
+                    path.display(),
+                    reference.kind,
+                    expected
+                );
+            }
+        }
+        references.push(reference);
+    }
+    Ok(references)
+}
+
 async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -> Result<i32> {
     let ExecOptions {
         prompt,
@@ -1382,6 +1448,8 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         tools,
         goal,
         max_goal_turns,
+        attach,
+        image,
         extra_tools,
         mcp_config,
         allow_mcp_write,
@@ -1521,6 +1589,33 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         (session, Vec::new())
     };
 
+    let mut attachments = Vec::new();
+    let attachment_store = if attach.is_empty() && image.is_empty() {
+        None
+    } else {
+        if replay.is_some() {
+            bail!("--attach/--image cannot be combined with --replay");
+        }
+        let root = session
+            .path()
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("attachments");
+        let store = AttachmentStore::open(&root)
+            .with_context(|| format!("open attachment store {}", root.display()))?;
+        attachments.extend(ingest_attachments(
+            &attach,
+            Some(AttachmentKind::Text),
+            &store,
+        )?);
+        attachments.extend(ingest_attachments(
+            &image,
+            Some(AttachmentKind::Image),
+            &store,
+        )?);
+        Some(store)
+    };
+
     session.append(&Event::Policy {
         sandbox: policy.mode.as_str().into(),
         approval: approval_mode.as_str().into(),
@@ -1547,6 +1642,20 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         }
         if !history.is_empty() {
             eprintln!("resumed: {} messages", history.len());
+        }
+        if !attachments.is_empty() {
+            eprintln!(
+                "attachments: {} (images {}, text {})",
+                attachments.len(),
+                attachments
+                    .iter()
+                    .filter(|attachment| attachment.kind == AttachmentKind::Image)
+                    .count(),
+                attachments
+                    .iter()
+                    .filter(|attachment| attachment.kind == AttachmentKind::Text)
+                    .count()
+            );
         }
         eprintln!("session: {}", session.path().display());
     }
@@ -1705,6 +1814,8 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         &agent_config,
         &prompt,
         history,
+        &attachments,
+        attachment_store.as_ref(),
         &mut approver,
         &mut observer,
     )
@@ -1809,6 +1920,8 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
                         &agent_config,
                         &goal::continue_prompt(condition),
                         history,
+                        &[],
+                        None,
                         &mut approver,
                         &mut observer,
                     )
@@ -2188,6 +2301,43 @@ fn preset_env(preset: Preset, base: bool) -> Option<String> {
 mod tests {
     use super::*;
     use niucode_core::Usage;
+
+    #[test]
+    fn exec_parses_repeatable_attachment_flags() {
+        let cli = Cli::try_parse_from([
+            "niucode", "exec", "look", "--attach", "notes.md", "--image", "shot.png",
+        ])
+        .expect("parse");
+        let Some(Command::Exec { attach, image, .. }) = cli.command else {
+            panic!("expected exec");
+        };
+        assert_eq!(attach, [PathBuf::from("notes.md")]);
+        assert_eq!(image, [PathBuf::from("shot.png")]);
+    }
+
+    #[test]
+    fn attachment_ingestion_enforces_the_flag_kind() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AttachmentStore::open(directory.path().join("attachments")).unwrap();
+        let text = directory.path().join("note.txt");
+        let image = directory.path().join("shot.png");
+        std::fs::write(&text, "hello").unwrap();
+        std::fs::write(&image, b"\x89PNG\r\n\x1a\nimage").unwrap();
+
+        let refs = ingest_attachments(
+            std::slice::from_ref(&text),
+            Some(AttachmentKind::Text),
+            &store,
+        )
+        .unwrap();
+        assert_eq!(refs[0].kind, AttachmentKind::Text);
+        assert!(ingest_attachments(
+            std::slice::from_ref(&text),
+            Some(AttachmentKind::Image),
+            &store
+        )
+        .is_err());
+    }
 
     #[test]
     fn json_protocol_maps_agent_events() {

@@ -18,6 +18,7 @@ crossterm.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
 niucode-agent = { path = "../niucode-agent", version = "0.1.7" }
+niucode-attachments = { path = "../niucode-attachments", version = "0.1.7" }
 niucode-auth = { path = "../niucode-auth", version = "0.1.7" }
 niucode-core = { path = "../niucode-core", version = "0.1.7" }
 niucode-extension = { path = "../niucode-extension", version = "0.1.7" }

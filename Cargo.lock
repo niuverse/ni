@@ -1467,6 +1467,7 @@ dependencies = [
  "ignore",
  "latex2mathml",
  "niucode-agent",
+ "niucode-attachments",
  "niucode-auth",
  "niucode-core",
  "niucode-extension",
