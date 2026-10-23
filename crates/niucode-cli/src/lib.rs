@@ -173,6 +173,7 @@ pub struct ExecOptions {
     pub attach: Vec<PathBuf>,
     pub image: Vec<PathBuf>,
     pub computer: String,
+    pub computer_log_input: bool,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
@@ -204,6 +205,7 @@ impl Default for ExecOptions {
             attach: Vec::new(),
             image: Vec::new(),
             computer: "off".into(),
+            computer_log_input: false,
             extra_tools: Vec::new(),
             mcp_config: None,
             allow_mcp_write: false,
@@ -238,6 +240,7 @@ pub struct TuiOptions {
     pub approval_keys: ApprovalKeys,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub computer: String,
+    pub computer_log_input: bool,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
 }
@@ -263,6 +266,7 @@ impl Default for TuiOptions {
             approval_keys: ApprovalKeys::default(),
             extra_tools: Vec::new(),
             computer: "off".into(),
+            computer_log_input: false,
             mcp_config: None,
             allow_mcp_write: false,
         }
@@ -368,6 +372,9 @@ enum Command {
         /// Native desktop policy: off, observe, control, or autonomous
         #[arg(long, default_value = "off", value_parser = ["off", "observe", "control", "autonomous"])]
         computer: String,
+        /// Persist full typed computer text in the session log (default: length + SHA-256 only)
+        #[arg(long)]
+        computer_log_input: bool,
         /// Provider preset: deepseek or openai
         #[arg(long, default_value = "deepseek")]
         preset: String,
@@ -496,6 +503,9 @@ enum Command {
         /// Native desktop policy: off, observe, control, or autonomous
         #[arg(long, default_value = "off", value_parser = ["off", "observe", "control", "autonomous"])]
         computer: String,
+        /// Persist full typed computer text in the session log (default: length + SHA-256 only)
+        #[arg(long)]
+        computer_log_input: bool,
         /// Explicitly allow subagent profile=inherit
         #[arg(long)]
         allow_subagent_inheritance: bool,
@@ -587,6 +597,7 @@ pub async fn run() -> Result<()> {
             attach,
             image,
             computer,
+            computer_log_input,
             preset,
             model,
             max_steps,
@@ -632,6 +643,7 @@ pub async fn run() -> Result<()> {
                     attach,
                     image,
                     computer,
+                    computer_log_input,
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
                     allow_mcp_write: cli.allow_mcp_write,
@@ -688,6 +700,7 @@ pub async fn run() -> Result<()> {
             replay,
             plan,
             computer,
+            computer_log_input,
             allow_subagent_inheritance,
         }) => {
             run_tui(
@@ -707,6 +720,7 @@ pub async fn run() -> Result<()> {
                     replay,
                     plan,
                     computer,
+                    computer_log_input,
                     allow_subagent_inheritance,
                     approval_keys: ApprovalKeys::default(),
                     extra_tools: Vec::new(),
@@ -1176,6 +1190,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         resume,
         sandbox,
         computer,
+        computer_log_input,
         approval,
         network,
         replay,
@@ -1330,6 +1345,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
+    agent_config.computer_log_input = computer_log_input;
     configure_computer(&mut agent_config, &computer)?;
     let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, false).await;
     if let Some(host) = &mcp_host {
@@ -1445,6 +1461,11 @@ pub fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> 
     if policy == "off" {
         return Ok(());
     }
+    if config.computer_log_input {
+        eprintln!(
+            "warning: --computer-log-input persists full typed desktop text in the session JSONL"
+        );
+    }
     #[cfg(target_os = "linux")]
     {
         let policy: ComputerPolicy = policy
@@ -1544,6 +1565,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         attach,
         image,
         computer,
+        computer_log_input,
         extra_tools,
         mcp_config,
         allow_mcp_write,
@@ -1775,6 +1797,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         agent_config.mcp_host = Some(host.clone());
     }
     agent_config.allowed_tools = tools;
+    agent_config.computer_log_input = computer_log_input;
     configure_computer(&mut agent_config, &computer)?;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);
@@ -2406,6 +2429,22 @@ mod tests {
         };
         assert_eq!(computer, "observe");
         assert!(Cli::try_parse_from(["niucode", "exec", "look", "--computer", "banana"]).is_err());
+        let cli = Cli::try_parse_from([
+            "niucode",
+            "exec",
+            "look",
+            "--computer",
+            "control",
+            "--computer-log-input",
+        ])
+        .expect("log input");
+        let Some(Command::Exec {
+            computer_log_input, ..
+        }) = cli.command
+        else {
+            panic!("expected exec");
+        };
+        assert!(computer_log_input);
         let cli = Cli::try_parse_from(["niucode", "tui", "--computer", "control"]).expect("tui");
         let Some(Command::Tui { computer, .. }) = cli.command else {
             panic!("expected tui");

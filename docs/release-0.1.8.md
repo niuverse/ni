@@ -23,7 +23,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   emergency stop and input release.
 - **Agent tool**: `computer` returns the screenshot as a tool image part;
   action failures stay ToolResults; approvals show safe action details and are
-  audited, and typed text is persisted only as length + SHA-256.
+  audited, and typed text is persisted only as length + SHA-256 unless
+  `--computer-log-input` is explicit.
 - **Product surfaces**: `niucode`/`niuse` exec, TUI, REPL, and web expose
   `--computer`; TUI/REPL `/computer stop|arm`, web status chip and
   token-gated arm/stop control.

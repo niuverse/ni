@@ -206,6 +206,9 @@ pub struct AgentConfig {
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     /// Native desktop controller. Advertised as the `computer` tool when set.
     pub computer: Option<Arc<std::sync::Mutex<ComputerRuntime>>>,
+    /// Persist full typed computer text in the JSONL. Off by default; the
+    /// assistant tool call is otherwise reduced to length + SHA-256.
+    pub computer_log_input: bool,
     /// Mounted read-only MCP servers. Dispatched after built-ins and the
     /// extension host; not inherited by subagents.
     pub mcp_host: Option<Arc<niucode_mcp::McpHost>>,
@@ -255,6 +258,7 @@ impl AgentConfig {
             extension_host: None,
             extra_tools: Vec::new(),
             computer: None,
+            computer_log_input: false,
             mcp_host: None,
             write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
@@ -741,7 +745,7 @@ async fn run_engine(
         };
 
         let mut logged_calls = tool_calls.clone();
-        redact_tool_calls_for_log(&mut logged_calls);
+        redact_tool_calls_for_log(&mut logged_calls, config.computer_log_input);
         session.append(&Event::AssistantMessage {
             text: text.clone(),
             reasoning: non_empty(reasoning.clone()),
@@ -1426,7 +1430,10 @@ struct PendingCall {
 
 /// Typed computer text is sensitive; the JSONL keeps length + SHA-256 rather
 /// than the literal keystrokes. The live call still executes with the original.
-fn redact_tool_calls_for_log(calls: &mut [ToolCall]) {
+fn redact_tool_calls_for_log(calls: &mut [ToolCall], log_input: bool) {
+    if log_input {
+        return;
+    }
     for call in calls {
         if call.name != "computer"
             || call.input.get("action").and_then(Value::as_str) != Some("type")
@@ -1771,6 +1778,24 @@ mod tests {
             self.flag.0.store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
+    }
+
+    #[test]
+    fn log_input_opt_in_keeps_typed_text() {
+        let call = || ToolCall {
+            id: "type".into(),
+            name: "computer".into(),
+            input: json!({"action": "type", "text": "hunter2"}),
+        };
+        let mut redacted = vec![call()];
+        redact_tool_calls_for_log(&mut redacted, false);
+        assert!(!redacted[0].input["text"]
+            .as_str()
+            .unwrap()
+            .contains("hunter2"));
+        let mut plain = vec![call()];
+        redact_tool_calls_for_log(&mut plain, true);
+        assert_eq!(plain[0].input["text"], "hunter2");
     }
 
     #[test]
