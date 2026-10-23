@@ -4312,6 +4312,26 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>A client could send headers with a large <code>Content-Length</code> and then stall,\nholding a server task and socket open indefinitely.</p>\n<h2>Scope</h2>\n<ul>\n<li>Wrap request reads in a 5s timeout (200ms in tests).</li>\n<li>Return <code>408 Request Timeout</code> JSON.</li>\n<li>Keep the 1MiB body cap and complete-body read.</li>\n<li>Test a stalled partial body.</li>\n<li>No change to SSE/turn execution timeouts.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nStalled body returns 408.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTest server responds within its 200ms test timeout.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNormal complete bodies still work.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nExisting HTTP/token/approval tests pass.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo new dependency.</li>\n</ul>\n<h2>Notes</h2>\n<p>This bounds request ingestion, not model/tool execution. SSE streams and turns\nkeep their own lifecycle.</p>\n",
       "path": "docs/board/M9-083-request-timeout.md"
+    },
+    {
+      "id": "M9-084",
+      "title": "PTY coverage for task and alert Markdown",
+      "status": "done",
+      "milestone": "M9",
+      "module": "tui",
+      "size": "S",
+      "priority": "P1",
+      "updated": "2026-10-23",
+      "completed": "2026-10-23",
+      "depends_on": [
+        "M9-081"
+      ],
+      "docs": [
+        "adr-0035"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>The PTY regression covered headings, emphasis, tables, code, math, lists, and a\nplain quote, but not GFM alert labels or the absence of raw alert markers.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add <code>&gt; [!WARNING] careful</code> to the replay fixture.</li>\n<li>Assert the rendered <code>│ warning · careful</code> line.</li>\n<li>Assert <code>[!WARNING]</code> never leaks to the terminal.</li>\n<li>Keep task-list coverage.</li>\n<li>No renderer change.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nPTY test passes with the warning quote.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nAlert label renders.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nRaw marker is absent.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nExisting heading/table/code/math assertions pass.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo fixed-width rule assumption in PTY.</li>\n</ul>\n<h2>Notes</h2>\n<p>The rule-width expansion remains covered by the terminal unit test; the PTY\nfixture deliberately avoids coupling to viewport width.</p>\n",
+      "path": "docs/board/M9-084-pty-alerts.md"
     }
   ],
   "docs": [
@@ -5781,7 +5801,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 164,
+    "cards": 165,
     "modules": 15,
     "docs": 57,
     "generator": "cargo xtask dashboard"

@@ -71,6 +71,7 @@ def main():
             "2. second numbered\n"
             "---\n"
             "> quoted line\n\n"
+            "> [!WARNING] careful\n\n"
             "```rust\n"
             "/* start\n"
             "still */ fn main() {}\n"
@@ -99,6 +100,8 @@ def main():
             pane.wait_for("2. second numbered".encode())
             pane.wait_for("────".encode())
             pane.wait_for("│ quoted line".encode())
+            pane.wait_for("│ warning · careful".encode())
+            pane.wait_for(("─" * 10).encode())
             pane.wait_for("▎ rust".encode())
             pane.wait_for(b"still */ fn main")
             pane.wait_for("α + β = γ".encode())
@@ -108,6 +111,7 @@ def main():
             decoded = pane.transcript.decode("utf-8", "replace")
             assert "├" in decoded and "│ alpha" in decoded, decoded[-3000:]
             assert "**bold**" not in decoded, "bold markers leaked to the terminal"
+            assert "[!WARNING]" not in decoded, "alert marker leaked to the terminal"
             assert "| name | value |" not in decoded, "raw table line leaked"
             assert "```" not in decoded, "code fence leaked to the terminal"
             assert "$$" not in decoded, "display math markers leaked to the terminal"
