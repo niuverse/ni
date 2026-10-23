@@ -1457,6 +1457,8 @@ mod tests {
         assert!(INDEX.contains("/api/export"));
         assert!(INDEX.contains("filterTranscript"));
         assert!(INDEX.contains("scrollToLatest"));
+        assert!(INDEX.contains("prefers-reduced-motion"));
+        assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
@@ -1483,6 +1485,8 @@ mod tests {
         assert!(INDEX.contains("/api/export"));
         assert!(INDEX.contains("filterTranscript"));
         assert!(INDEX.contains("scrollToLatest"));
+        assert!(INDEX.contains("prefers-reduced-motion"));
+        assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
