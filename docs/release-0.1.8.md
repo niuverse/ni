@@ -29,8 +29,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   `--computer-log-input` is explicit, and screenshots stay ephemeral unless
   `--computer-keep-frames` is explicit.
 - **Product surfaces**: `niucode`/`niuse` exec, TUI, REPL, and web expose
-  `--computer`; TUI/REPL `/computer stop|arm`, web status chip and
-  token-gated arm/stop control.
+  `--computer`; TUI/REPL `/computer stop|arm`, a persistent TUI footer badge,
+  web status chip and token-gated arm/stop control.
 - **Multimodal attachments**: OpenAI-compatible image parts, capability gate,
   content-addressed store, budgeted text/image turns, a four-image
   per-request visual cap, TUI `/attach`/`@path`, Web upload/drop/paste, CLI

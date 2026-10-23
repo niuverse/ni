@@ -1778,6 +1778,14 @@ fn editor_footer(state: &SessionUiState, config: &AgentConfig) -> String {
         let goal = goal.chars().take(40).collect::<String>();
         footer.push_str(&format!(" · goal {goal}"));
     }
+    if let Some(runtime) = &config.computer {
+        let runtime = runtime.lock().unwrap();
+        let state = if runtime.is_armed() { "✓" } else { "paused" };
+        footer.push_str(&format!(
+            " · computer {} {state}",
+            runtime.policy().as_str()
+        ));
+    }
     footer
 }
 
