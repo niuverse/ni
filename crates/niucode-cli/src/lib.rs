@@ -1431,7 +1431,10 @@ pub(crate) fn stop_computer(config: &AgentConfig) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> {
+/// Attach the platform computer backend to an agent config. `off` is a no-op;
+/// Linux uses X11 and macOS uses CoreGraphics/CGEvent. A missing display or TCC
+/// permission warns but does not abort the session.
+pub fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let _ = &mut *config;
     if policy == "off" {
