@@ -46,7 +46,8 @@ the missing piece is a local transport and a rendering client.
    `context_changed` so the sidebar refetches. Approval previews and tool
    calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase`
    events drive a client-side turn timer; `text_delta` carries accumulated
-   rendered HTML, and the durable usage comes from `turn_end`. The composer is a
+   rendered HTML at a bounded rate, the durable assistant event renders the
+   final text, and usage comes from `turn_end`. The composer is a
    multi-line textarea with local prompt history and `/help` `/status` `/report`
    `/clear` commands; whole messages, code blocks, tool output, and command
    previews have Copy buttons; the session can be downloaded as derived Markdown (including
