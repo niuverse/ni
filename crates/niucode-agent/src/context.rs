@@ -516,6 +516,7 @@ mod tests {
     fn user(text: &str) -> Event {
         Event::UserMessage {
             text: text.into(),
+            attachments: Vec::new(),
             ts: 1,
         }
     }

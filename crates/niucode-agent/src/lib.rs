@@ -1138,6 +1138,7 @@ mod tests {
         let events = vec![
             Event::UserMessage {
                 text: "first".into(),
+                attachments: Vec::new(),
                 ts: 1,
             },
             Event::AssistantMessage {
@@ -1188,6 +1189,7 @@ mod tests {
             Event::SessionEnd { ts: 2 },
             Event::UserMessage {
                 text: "next".into(),
+                attachments: Vec::new(),
                 ts: 3,
             },
         ];

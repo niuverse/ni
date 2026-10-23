@@ -1362,6 +1362,7 @@ mod tests {
             },
             Event::UserMessage {
                 text: "hello".into(),
+                attachments: Vec::new(),
                 ts: 0,
             },
             Event::AssistantMessage {

@@ -228,6 +228,7 @@ mod tests {
             },
             Event::UserMessage {
                 text: "fix the failing test".into(),
+                attachments: Vec::new(),
                 ts,
             },
             Event::AssistantMessage {
@@ -299,6 +300,7 @@ mod tests {
         let path = dir.join("session.jsonl");
         let good = serde_json::to_string(&Event::UserMessage {
             text: "hello".into(),
+            attachments: Vec::new(),
             ts: 1,
         })
         .expect("serialize");
@@ -319,6 +321,7 @@ mod tests {
         let path = log.path().to_path_buf();
         log.append(&Event::UserMessage {
             text: "first".into(),
+            attachments: Vec::new(),
             ts: 1,
         })
         .expect("append");

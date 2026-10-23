@@ -141,6 +141,8 @@ pub enum Event {
     },
     UserMessage {
         text: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<crate::AttachmentRef>,
         ts: Timestamp,
     },
     AssistantMessage {
@@ -588,6 +590,48 @@ mod tests {
                     && config_hash == "0123456789abcdef"
                     && write_tools == ["mcp__notes__create_note"]
         ));
+    }
+
+    #[test]
+    fn old_user_messages_decode_without_attachments() {
+        let old = serde_json::json!({"type": "user_message", "text": "hello", "ts": 1});
+        let event: Event = serde_json::from_value(old).unwrap();
+        assert!(matches!(
+            &event,
+            Event::UserMessage {
+                attachments,
+                ..
+            } if attachments.is_empty()
+        ));
+        let encoded = serde_json::to_value(event).unwrap();
+        assert!(encoded.get("attachments").is_none());
+    }
+
+    #[test]
+    fn user_attachments_roundtrip_with_metadata_only() {
+        let event = Event::UserMessage {
+            text: "look".into(),
+            attachments: vec![crate::AttachmentRef {
+                sha256: "a".repeat(64),
+                media_type: "image/png".into(),
+                kind: crate::AttachmentKind::Image,
+                bytes: 42,
+                text_chars: 0,
+                name: Some("shot.png".into()),
+                alt: Some("desktop".into()),
+            }],
+            ts: 3,
+        };
+        let encoded = serde_json::to_value(&event).unwrap();
+        assert_eq!(
+            encoded["attachments"][0]["sha256"].as_str().unwrap().len(),
+            64
+        );
+        assert!(encoded["attachments"][0].get("data").is_none());
+        let decoded: Event = serde_json::from_value(encoded).unwrap();
+        assert!(
+            matches!(decoded, Event::UserMessage { attachments, .. } if attachments.len() == 1)
+        );
     }
 
     #[test]

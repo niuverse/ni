@@ -372,6 +372,7 @@ impl<'a> RunIo<'a> {
         } else {
             session.append(&Event::UserMessage {
                 text: prompt.into(),
+                attachments: Vec::new(),
                 ts: now_ms(),
             })
         }
