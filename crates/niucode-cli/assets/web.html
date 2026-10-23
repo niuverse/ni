@@ -8,9 +8,14 @@
 :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --dim:#8b949e; --accent:#58a6ff; --err:#ff7b72; }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-header { position:sticky; top:0; background:var(--panel); border-bottom:1px solid #30363d; padding:12px 18px; display:flex; gap:12px; align-items:center; }
+header { position:sticky; top:0; z-index:2; background:var(--panel); border-bottom:1px solid #30363d; padding:12px 18px; display:flex; gap:12px; align-items:center; }
 header b { color:var(--accent); }
 main { max-width:900px; margin:0 auto; padding:24px 18px 140px; }
+aside { position:fixed; top:53px; bottom:70px; left:0; width:260px; overflow:auto; border-right:1px solid #30363d; padding:14px; background:#10151c; display:none; }
+aside h4 { margin:14px 0 4px; color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+aside p { margin:2px 0; font-size:12px; color:var(--text); overflow-wrap:anywhere; white-space:pre-wrap; }
+.ctx-empty { color:var(--dim); font-size:12px; }
+@media (min-width: 980px) { aside { display:block; } main { margin-left:280px; } footer { padding-left:280px; } }
 .msg { border-left:3px solid #30363d; padding:8px 14px; margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .msg.user { border-color:var(--accent); }
 .msg.assistant { border-color:#3fb950; }
@@ -45,7 +50,8 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><b>niucode</b><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<header><b id="brand">niucode</b><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<aside id="context"><div class="ctx-empty">loading context…</div></aside>
 <main id="log"></main>
 <footer><form id="composer"><input id="prompt" autocomplete="off" placeholder="Ask for a read-only task…"><button id="send">Send</button></form><div id="status">Read-only local chat · bind 127.0.0.1</div></footer>
 <script>
@@ -101,6 +107,20 @@ function renderApproval(e) {
   card.appendChild(allow); card.appendChild(deny);
   log.appendChild(card);
 }
+fetch('/api/context').then(r=>r.json()).then(ctx=>{
+  if (ctx.brand) document.getElementById('brand').textContent = ctx.brand;
+  if (ctx.title) document.title = ctx.title;
+  const aside = document.getElementById('context');
+  aside.textContent = '';
+  if (!ctx.sections || !ctx.sections.length) {
+    aside.appendChild(node('div','ctx-empty','no product context'));
+    return;
+  }
+  for (const section of ctx.sections) {
+    aside.appendChild(node('h4',null,section.title || ''));
+    for (const line of section.lines || []) aside.appendChild(node('p',null,line));
+  }
+}).catch(()=>{});
 const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
 source.onerror = () => { live.textContent = '○ reconnecting'; live.className = 'live'; };

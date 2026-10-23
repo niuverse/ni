@@ -624,6 +624,8 @@ pub async fn run() -> Result<()> {
                 cwd: cwd.unwrap_or(std::env::current_dir()?),
                 max_steps,
                 system_prompt: None,
+                brand: None,
+                context: None,
             })
             .await?;
             Ok(())

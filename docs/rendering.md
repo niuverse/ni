@@ -59,8 +59,9 @@ client — without turning the event log into presentation data.
 - **Markdown (M9-012)**: server-rendered HTML with escaped raw HTML, tables, and
   safe links.
 - **Math (M9-013)**: native MathML from common TeX, escaped fallback, no remote
-  assets. KaTeX remains an optional upgrade. See
-  [ADR-0036](adr/0036-local-web-surface.md).
+  assets. KaTeX remains an optional upgrade.
+- **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
+  See [ADR-0036](adr/0036-local-web-surface.md).
 - A local HTTP + SSE server over the same agent loop and event log.
 - Static, no-build client; Markdown and KaTeX rendering.
 - Session list, streaming answer, tool/approval cards, cancel.

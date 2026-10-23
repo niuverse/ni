@@ -34,6 +34,10 @@ pub struct Options {
     pub max_steps: usize,
     /// Override the agent system prompt; used by niuse's product shell.
     pub system_prompt: Option<String>,
+    /// Product brand shown in the page header.
+    pub brand: Option<String>,
+    /// Optional product context: title, brand, and sidebar sections.
+    pub context: Option<Value>,
 }
 
 struct State {
@@ -45,6 +49,7 @@ struct State {
     cwd: PathBuf,
     max_steps: usize,
     system_prompt: Option<String>,
+    context: Vec<u8>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -122,6 +127,9 @@ pub async fn serve(options: Options) -> Result<()> {
             cwd: options.cwd,
             max_steps: options.max_steps,
             system_prompt: options.system_prompt,
+            context: serde_json::to_vec(&options.context.unwrap_or_else(
+                || json!({"brand": options.brand.clone().unwrap_or_else(|| "niucode".into())}),
+            ))?,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -154,6 +162,15 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     }
     if method == "POST" && path == "/api/prompt" {
         return prompt(stream, state, body).await;
+    }
+    if method == "GET" && path == "/api/context" {
+        return send(
+            &mut stream,
+            "200 OK",
+            "application/json",
+            state.context.clone(),
+        )
+        .await;
     }
     if method == "POST" && path == "/api/approval" {
         return approval(stream, state, body).await;
@@ -504,7 +521,7 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    fn state() -> Arc<State> {
+    fn state_with(context: Vec<u8>) -> Arc<State> {
         Arc::new(State {
             path: PathBuf::new(),
             snapshot: br#"{"events":[]}"#.to_vec(),
@@ -514,11 +531,16 @@ mod tests {
             cwd: PathBuf::from("."),
             max_steps: 1,
             system_prompt: None,
+            context,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
             next_approval: AtomicU64::new(1),
         })
+    }
+
+    fn state() -> Arc<State> {
+        state_with(br#"{}"#.to_vec())
     }
 
     #[test]
@@ -573,6 +595,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn serves_product_context_over_loopback() {
+        let state = state_with(
+            br#"{"brand":"niuse","sections":[{"title":"identity","lines":["persona"]}]}"#.to_vec(),
+        );
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /api/context HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("\"brand\":\"niuse\""), "{text}");
+        assert!(text.contains("persona"), "{text}");
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn sse_streams_the_initial_log_and_new_events() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("session.jsonl");
@@ -590,6 +634,7 @@ mod tests {
                 cwd: PathBuf::from("."),
                 max_steps: 1,
                 system_prompt: None,
+                context: br#"{}"#.to_vec(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -660,6 +705,7 @@ mod tests {
                 cwd: directory.path().to_path_buf(),
                 max_steps: 1,
                 system_prompt: None,
+                context: br#"{}"#.to_vec(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -789,6 +835,7 @@ mod tests {
                 cwd: directory.path().to_path_buf(),
                 max_steps: 2,
                 system_prompt: None,
+                context: br#"{}"#.to_vec(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -861,6 +908,7 @@ mod tests {
         assert!(INDEX.contains("renderApproval"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
+        assert!(INDEX.contains("/api/context"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

@@ -31,8 +31,9 @@ the missing piece is a local transport and a rendering client.
    it (300s timeout fails closed). Assistant text is rendered to HTML
    server-side with raw HTML escaped and `javascript:` links blocked; the web
    client uses that HTML only for final messages. Math uses native MathML from
-   `latex2mathml`, with escaped fallback and no remote assets. Read-only remains
-   the default for the CLI.
+   `latex2mathml`, with escaped fallback and no remote assets. An embedder may
+   supply `brand` and `context`; `/api/context` feeds a generic sidebar.
+   Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This
