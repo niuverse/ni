@@ -130,7 +130,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <div id="ctx-backdrop" hidden></div>
 <aside id="context" aria-label="Product context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off" aria-label="Filter product context"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off" aria-label="Search transcript"><span id="log-count"></span></div><div id="log" role="log" aria-live="polite" aria-label="Transcript"></div></main>
-<footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…" aria-label="Prompt"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
+<footer><form id="composer"><textarea id="prompt" maxlength="100000" rows="1" autocomplete="off" placeholder="Ask for a task…" aria-label="Prompt"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
 const id = document.getElementById('id');

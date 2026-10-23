@@ -182,16 +182,56 @@ async fn serve_listener(listener: TcpListener, state: Arc<State>) -> Result<()> 
     }
 }
 
-async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
-    let mut buffer = [0_u8; 16384];
-    let count = stream.read(&mut buffer).await?;
-    let request = String::from_utf8_lossy(&buffer[..count]);
+async fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String)> {
+    const MAX_REQUEST: usize = 1_048_576;
+    let mut bytes = Vec::with_capacity(8192);
+    let mut chunk = [0_u8; 8192];
+    let mut header_end = None;
+    let mut content_length = 0;
+    loop {
+        let count = stream.read(&mut chunk).await?;
+        if count == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+        if header_end.is_none() {
+            if let Some(position) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                header_end = Some(position);
+                let headers = String::from_utf8_lossy(&bytes[..position]);
+                content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.trim()
+                            .eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().ok())
+                            .flatten()
+                    })
+                    .unwrap_or(0)
+                    .min(MAX_REQUEST);
+            }
+        }
+        if let Some(position) = header_end {
+            if bytes.len() >= position + 4 + content_length {
+                break;
+            }
+        }
+        if bytes.len() > MAX_REQUEST {
+            break;
+        }
+    }
+    let request = String::from_utf8_lossy(&bytes);
     let (head, body) = request.split_once("\r\n\r\n").unwrap_or((&request, ""));
+    Ok((head.to_string(), body.to_string()))
+}
+
+async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
+    let (head, body) = read_request(&mut stream).await?;
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
     let route = path.split('?').next().unwrap_or(path);
-    if let Some(host) = header(head, "host") {
+    if let Some(host) = header(&head, "host") {
         if !loopback_host(host) {
             return send(
                 &mut stream,
@@ -203,7 +243,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         }
     }
     if method == "POST" {
-        if let Some(origin) = header(head, "origin") {
+        if let Some(origin) = header(&head, "origin") {
             if !loopback_origin(origin) {
                 return send(
                     &mut stream,
@@ -222,7 +262,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     let cookie_authorized = state
         .token
         .as_deref()
-        .is_some_and(|token| cookie_token(head) == Some(token));
+        .is_some_and(|token| cookie_token(&head) == Some(token));
     if state.token.is_some() && !query_authorized && !cookie_authorized {
         if route == "/" {
             return send(
@@ -246,7 +286,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         return stream_events(stream, current_path, state.live.subscribe()).await;
     }
     if method == "POST" && route == "/api/prompt" {
-        return prompt(stream, state, body).await;
+        return prompt(stream, state, &body).await;
     }
     if method == "GET" && route == "/api/context" {
         let body = if let Some(provider) = &state.context_provider {
@@ -295,10 +335,10 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         return new_session(stream, state).await;
     }
     if method == "POST" && route == "/api/switch" {
-        return switch_session(stream, state, body).await;
+        return switch_session(stream, state, &body).await;
     }
     if method == "POST" && route == "/api/approval" {
-        return approval(stream, state, body).await;
+        return approval(stream, state, &body).await;
     }
     let snapshot = state.snapshot.lock().unwrap().clone();
     if route == "/" && query_authorized && !cookie_authorized {
@@ -1356,6 +1396,32 @@ mod tests {
         assert!(loopback_origin("http://localhost:8799"));
         assert!(!loopback_origin("https://evil.example"));
         assert!(!loopback_origin("null"));
+    }
+
+    #[tokio::test]
+    async fn reads_complete_request_bodies_across_chunks() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            read_request(&mut stream).await.unwrap()
+        });
+        let mut client = TcpStream::connect(address).await.unwrap();
+        let body = "a".repeat(20_000);
+        client
+            .write_all(
+                format!(
+                    "POST /api/prompt HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let (head, received) = server.await.unwrap();
+        assert!(head.starts_with("POST /api/prompt"));
+        assert_eq!(received.len(), 20_000);
     }
 
     #[tokio::test]
