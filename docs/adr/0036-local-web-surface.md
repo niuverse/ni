@@ -54,8 +54,9 @@ the missing piece is a local transport and a rendering client.
    jump-to-latest control otherwise. A persisted dark/light/high-contrast toggle,
    first-run OS color/contrast preferences, and `prefers-reduced-motion` affect
    presentation only. Controls have accessible names; the transcript is a polite
-   log region. Sections tagged `threads` switch archived sessions through an
-   embedder allowlist, and successful new/switch operations broadcast
+   log region. The context sidebar is an overlay below 980px, toggled from
+   computed visibility. Sections tagged `threads` switch archived sessions
+   through an embedder allowlist, and successful new/switch operations broadcast
    `session_switched`. A Rust test checks DOM IDs and `getElementById`
    references in the embedded client; an optional headless-Chrome test loads the
    file with a stubbed SSE and asserts the log role, brand, and composer. A

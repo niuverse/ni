@@ -43,6 +43,7 @@ aside input { width:100%; margin:0 0 10px; background:var(--bg); color:var(--tex
 .thread-link:hover { background:var(--panel2); color:var(--accent); }
 .ctx-empty { color:var(--dim); font-size:12px; }
 @media (min-width: 980px) { aside { display:block; } main { margin-left:280px; } footer { padding-left:280px; } }
+@media (max-width: 979px) { aside { display:none; } aside.open { display:block; z-index:4; width:min(280px,85vw); box-shadow:8px 0 24px #0008; } }
 .msg { border-left:3px solid var(--border); padding:8px 14px; margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .msg.user { border-color:var(--accent); }
 .msg.assistant { border-color:#3fb950; }
@@ -425,7 +426,15 @@ async function downloadSession() {
 }
 document.getElementById('download').onclick = downloadSession;
 document.getElementById('toggle-context').onclick = () => {
-  document.getElementById('context').classList.toggle('hidden');
+  const aside = document.getElementById('context');
+  const visible = getComputedStyle(aside).display !== 'none';
+  if (visible) {
+    aside.classList.add('hidden');
+    aside.classList.remove('open');
+  } else {
+    aside.classList.remove('hidden');
+    aside.classList.add('open');
+  }
 };
 const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };

@@ -90,7 +90,8 @@ client — without turning the event log into presentation data.
 - **Tools (M9-025)**: collapsible call/result cards with escaped, bounded
   input/output.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
-  **M9-029** makes sections collapsible/filterable; **M9-030** refreshes them
+  **M9-029** makes sections collapsible/filterable and **M9-069** makes the
+  sidebar reachable as a mobile overlay; **M9-030** refreshes them
   after turns and remembers collapsed groups; **M9-034** emits
   `context_changed` for immediate reloads; **M9-039** shows page-local token
   usage in the header.

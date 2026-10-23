@@ -2119,6 +2119,8 @@ mod tests {
         assert!(INDEX.contains("role=\"log\""));
         assert!(INDEX.contains("prefers-contrast: more"));
         assert!(INDEX.contains("button.chip"));
+        assert!(INDEX.contains("aside.open"));
+        assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
@@ -2157,6 +2159,8 @@ mod tests {
         assert!(INDEX.contains("role=\"log\""));
         assert!(INDEX.contains("prefers-contrast: more"));
         assert!(INDEX.contains("button.chip"));
+        assert!(INDEX.contains("aside.open"));
+        assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
