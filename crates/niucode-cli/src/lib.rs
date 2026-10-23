@@ -7,12 +7,15 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
+#[cfg(target_os = "linux")]
+use niucode_agent::ComputerRuntime;
 use niucode_agent::{
     project_history, run_with_attachments, run_with_history, AgentConfig, ApprovalMode,
-    ApprovalRequest, ComputerRuntime,
+    ApprovalRequest,
 };
 use niucode_attachments::{AttachmentKind, AttachmentStore};
 use niucode_auth::AuthStore;
+#[cfg(target_os = "linux")]
 use niucode_computer::ComputerPolicy;
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog};
 use niucode_extension::{discover_in, ExtensionHost};
