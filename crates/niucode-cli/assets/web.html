@@ -81,7 +81,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <main id="log"></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
@@ -92,6 +92,20 @@ const live = document.getElementById('live');
 function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
 function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
 let count = 0, streaming = null, streamText = '';
+let usageTotals = { input: 0, output: 0, cached: 0 };
+function compactTokens(value) {
+  if (value >= 1000000) return (value / 1000000).toFixed(1) + 'm';
+  if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
+  return String(value);
+}
+function addUsage(usage) {
+  usageTotals.input += usage.input_tokens || 0;
+  usageTotals.output += usage.output_tokens || 0;
+  usageTotals.cached += usage.cached_tokens || 0;
+  const chip = document.getElementById('usage');
+  chip.textContent = compactTokens(usageTotals.input) + ' in / ' + compactTokens(usageTotals.output) + ' out';
+  chip.title = usageTotals.cached + ' cached input tokens';
+}
 let turnStart = null, turnTimer = null, turnPhase = 'working';
 function beginTurn(phase) {
   if (phase) turnPhase = phase;
@@ -143,7 +157,7 @@ function render(e) {
   else if (e.type === 'context_changed') loadContext();
   else if (e.type === 'approval') { beginTurn('approval'); renderApproval(e); }
   else if (e.type === 'phase') { if (e.phase === 'done') endTurn(); else beginTurn(e.phase); }
-  else if (e.type === 'turn_end') { const elapsed = endTurn(); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); setTimeout(loadContext, 600); }
+  else if (e.type === 'turn_end') { const elapsed = endTurn(); addUsage(e.usage || {}); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); setTimeout(loadContext, 600); }
 }
 function addCopyButtons(root) {
   for (const pre of root.querySelectorAll('pre.code')) {

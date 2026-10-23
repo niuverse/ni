@@ -1140,6 +1140,7 @@ mod tests {
         assert!(INDEX.contains("unknown command"));
         assert!(INDEX.contains("cmd-menu"));
         assert!(INDEX.contains("session log unchanged"));
+        assert!(INDEX.contains("usageTotals"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1161,6 +1162,7 @@ mod tests {
         assert!(INDEX.contains("unknown command"));
         assert!(INDEX.contains("cmd-menu"));
         assert!(INDEX.contains("session log unchanged"));
+        assert!(INDEX.contains("usageTotals"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
