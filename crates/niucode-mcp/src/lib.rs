@@ -1,9 +1,10 @@
-//! Minimal read-only MCP stdio client.
+//! Minimal MCP stdio client.
 //!
-//! This crate only speaks the subset in ADR-0033: `initialize`, `tools/list`,
-//! and `tools/call` over newline-delimited JSON on a child process's stdio.
-//! It does not inherit the parent environment and never exposes a mutating
-//! tool surface.
+//! This crate speaks the subset in ADR-0033 and ADR-0034: `initialize`,
+//! `tools/list`, and `tools/call` over newline-delimited JSON on a child
+//! process's stdio. Read-only servers mount by default. A server with
+//! `read_only = false` needs an explicit allowlist and an explicit allow flag;
+//! the caller is responsible for per-call approval (ADR-0034).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -32,6 +33,10 @@ pub struct McpServerSpec {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub read_only: bool,
+    /// Tools that may mutate. Every mutating tool must be named; an unlisted
+    /// tool from a write-enabled server stays read-only.
+    #[serde(default)]
+    pub write_tools: Vec<String>,
 }
 
 impl McpServerSpec {
@@ -42,9 +47,36 @@ impl McpServerSpec {
         if self.command.trim().is_empty() {
             bail!("MCP server {} has an empty command", self.name);
         }
-        if !self.read_only {
+        for tool in &self.write_tools {
+            if tool.trim().is_empty() {
+                bail!("MCP server {} has an empty write_tools entry", self.name);
+            }
+        }
+        if self.read_only && !self.write_tools.is_empty() {
             bail!(
-                "MCP server {} is not read_only; v1 only starts read-only servers",
+                "MCP server {} is read_only but names write_tools",
+                self.name
+            );
+        }
+        Ok(())
+    }
+
+    /// Validate the write policy. Read-only servers ignore the flag; a
+    /// write-enabled server needs both the flag and a non-empty allowlist.
+    pub fn validate_policy(&self, allow_write: bool) -> Result<()> {
+        self.validate()?;
+        if self.read_only {
+            return Ok(());
+        }
+        if !allow_write {
+            bail!(
+                "MCP server {} is not read_only; pass --allow-mcp-write to mount it",
+                self.name
+            );
+        }
+        if self.write_tools.is_empty() {
+            bail!(
+                "MCP server {} is not read_only but has no write_tools allowlist",
                 self.name
             );
         }
@@ -68,9 +100,25 @@ impl McpConfig {
         toml::from_str(&text).with_context(|| format!("parse MCP config {}", path.display()))
     }
 
+    /// Read-only validation used by the default mount path.
     pub fn validated(&self) -> Result<Vec<McpServerSpec>> {
         for server in &self.server {
             server.validate()?;
+            if !server.read_only {
+                bail!(
+                    "MCP server {} is not read_only; v1 only starts read-only servers without --allow-mcp-write",
+                    server.name
+                );
+            }
+        }
+        Ok(self.server.clone())
+    }
+
+    /// Validation with an explicit write flag. A write-enabled server still
+    /// needs a non-empty `write_tools` allowlist.
+    pub fn validated_with(&self, allow_write: bool) -> Result<Vec<McpServerSpec>> {
+        for server in &self.server {
+            server.validate_policy(allow_write)?;
         }
         Ok(self.server.clone())
     }
@@ -123,7 +171,15 @@ pub struct McpClient {
 
 impl McpClient {
     pub async fn connect(spec: &McpServerSpec, limit: Duration) -> Result<Self> {
-        spec.validate()?;
+        Self::connect_with(spec, limit, false).await
+    }
+
+    async fn connect_with(
+        spec: &McpServerSpec,
+        limit: Duration,
+        allow_write: bool,
+    ) -> Result<Self> {
+        spec.validate_policy(allow_write)?;
         let mut command = Command::new(&spec.command);
         command
             .args(&spec.args)
@@ -300,12 +356,14 @@ impl Drop for McpClient {
 pub struct McpMount {
     pub server: String,
     pub tools: Vec<String>,
+    pub write_tools: Vec<String>,
 }
 
 struct HostTool {
     server: usize,
     tool: String,
     spec: ToolSpec,
+    mutating: bool,
 }
 
 /// A set of mounted read-only MCP servers. Calls are serialized per server and
@@ -318,16 +376,40 @@ pub struct McpHost {
 
 impl McpHost {
     pub async fn mount(servers: &[McpServerSpec], limit: Duration) -> Result<Self> {
+        Self::mount_with(servers, limit, false).await
+    }
+
+    /// Mount with an explicit write flag. The caller must also approve every
+    /// mutating call; this method only enforces the manifest allowlist.
+    pub async fn mount_with(
+        servers: &[McpServerSpec],
+        limit: Duration,
+        allow_write: bool,
+    ) -> Result<Self> {
         let mut clients: Vec<Mutex<McpClient>> = Vec::new();
         let mut tools = Vec::new();
         let mut server_names: Vec<String> = Vec::new();
         let mut names = HashSet::new();
         for server in servers {
-            server.validate()?;
-            let mut client = McpClient::connect(server, limit).await?;
+            server.validate_policy(allow_write)?;
+            let mut client = McpClient::connect_with(server, limit, allow_write).await?;
             let listed = client.list_tools(limit).await?;
+            let listed_names = listed
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect::<HashSet<_>>();
+            for wanted in &server.write_tools {
+                if !listed_names.contains(wanted.as_str()) {
+                    bail!(
+                        "MCP server {} lists write tool {} but does not expose it",
+                        server.name,
+                        wanted
+                    );
+                }
+            }
             let server_index = clients.len();
             for tool in listed {
+                let mutating = !server.read_only && server.write_tools.contains(&tool.name);
                 let name = exposed_name(&server.name, &tool.name);
                 if !names.insert(name.clone()) {
                     bail!("MCP tool name collision: {name}");
@@ -346,6 +428,7 @@ impl McpHost {
                     server: server_index,
                     tool: tool.name,
                     spec: ToolSpec::function(name, description, schema),
+                    mutating,
                 });
             }
             clients.push(Mutex::new(client));
@@ -368,6 +451,14 @@ impl McpHost {
             .any(|tool| tool.spec.function.name == name)
     }
 
+    pub fn server_for(&self, name: &str) -> Option<&str> {
+        self.tools
+            .iter()
+            .find(|tool| tool.spec.function.name == name)
+            .and_then(|tool| self.servers.get(tool.server))
+            .map(String::as_str)
+    }
+
     pub fn mounts(&self) -> Vec<McpMount> {
         let mut mounts: Vec<McpMount> = self
             .servers
@@ -375,14 +466,34 @@ impl McpHost {
             .map(|server| McpMount {
                 server: server.clone(),
                 tools: Vec::new(),
+                write_tools: Vec::new(),
             })
             .collect();
         for tool in &self.tools {
             if let Some(mount) = mounts.get_mut(tool.server) {
                 mount.tools.push(tool.spec.function.name.clone());
+                if tool.mutating {
+                    mount.write_tools.push(tool.spec.function.name.clone());
+                }
             }
         }
         mounts
+    }
+
+    /// Whether the exposed tool was named in a write-enabled server's
+    /// allowlist. The agent must approve these calls before dispatch.
+    pub fn is_mutating(&self, name: &str) -> bool {
+        self.tools
+            .iter()
+            .any(|tool| tool.spec.function.name == name && tool.mutating)
+    }
+
+    pub fn mutating_tools(&self) -> Vec<String> {
+        self.tools
+            .iter()
+            .filter(|tool| tool.mutating)
+            .map(|tool| tool.spec.function.name.clone())
+            .collect()
     }
 
     pub async fn call(&self, name: &str, arguments: Value, limit: Duration) -> Result<McpCall> {
@@ -427,13 +538,29 @@ mod tests {
             args: vec![],
             env: BTreeMap::new(),
             read_only: false,
+            write_tools: Vec::new(),
         };
+        assert!(spec.validate().is_ok());
         assert!(spec
-            .validate()
+            .validate_policy(false)
             .unwrap_err()
             .to_string()
-            .contains("read_only"));
-        let config = McpConfig { server: vec![spec] };
+            .contains("allow-mcp-write"));
+        let config = McpConfig {
+            server: vec![spec.clone()],
+        };
+        assert!(config.validated().is_err());
+        assert!(config
+            .validated_with(true)
+            .unwrap_err()
+            .to_string()
+            .contains("write_tools"));
+        let mut allowed = spec;
+        allowed.write_tools = vec!["write_note".into()];
+        let config = McpConfig {
+            server: vec![allowed],
+        };
+        assert!(config.validated_with(true).is_ok());
         assert!(config.validated().is_err());
     }
 

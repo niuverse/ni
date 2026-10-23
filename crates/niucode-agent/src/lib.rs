@@ -606,21 +606,59 @@ async fn run_engine(
                 .as_ref()
                 .filter(|host| host.has_tool(&call.name))
             {
-                let result = io
-                    .wait(
-                        session,
-                        host.call(&call.name, call.input.clone(), MCP_CALL_TIMEOUT),
-                    )
-                    .await;
-                match result {
-                    Ok(Ok(call)) => ToolResult {
-                        ok: call.ok,
-                        output: call.output,
-                    },
-                    Ok(Err(error)) | Err(error) => ToolResult {
+                let mutating = host.is_mutating(&call.name);
+                if mutating && config.approval == ApprovalMode::Never {
+                    ToolResult {
                         ok: false,
-                        output: format!("mcp error: {error:#}"),
-                    },
+                        output:
+                            "mutating MCP requires an interactive approval mode; use --approval ask"
+                                .into(),
+                    }
+                } else {
+                    if mutating {
+                        let server = host.server_for(&call.name).unwrap_or("unknown");
+                        let preview = bounded_json(&call.input);
+                        let request = ApprovalRequest {
+                            tool: call.name.clone(),
+                            summary: format!(
+                                "mutating MCP call on {server}: {}. Effect is server-defined. Arguments: {preview}",
+                                call.name
+                            ),
+                            preview: None,
+                        };
+                        let allowed = io.approve(session, &call.id, request).await?;
+                        session.append(&Event::Approval {
+                            tool: call.name.clone(),
+                            allowed,
+                            ts: now_ms(),
+                        })?;
+                        if !allowed {
+                            ToolResult {
+                                ok: false,
+                                output: "approval denied by user".into(),
+                            }
+                        } else {
+                            let _guard = match &config.write_lock {
+                                Some(lock) => Some(io.wait(session, lock.lock()).await?),
+                                None => None,
+                            };
+                            mcp_call_result(
+                                io.wait(
+                                    session,
+                                    host.call(&call.name, call.input.clone(), MCP_CALL_TIMEOUT),
+                                )
+                                .await,
+                            )
+                        }
+                    } else {
+                        mcp_call_result(
+                            io.wait(
+                                session,
+                                host.call(&call.name, call.input.clone(), MCP_CALL_TIMEOUT),
+                            )
+                            .await,
+                        )
+                    }
                 }
             } else if let Some(tool) = config
                 .extra_tools
@@ -679,6 +717,39 @@ fn write_in_scope(config: &AgentConfig, call: &ToolCall) -> bool {
         let scope = scope.trim().trim_start_matches("./").trim_end_matches('/');
         !scope.is_empty() && (path == scope || path.starts_with(&format!("{scope}/")))
     })
+}
+
+fn bounded_json(value: &Value) -> String {
+    let rendered = serde_json::to_string(value).unwrap_or_default();
+    if rendered.len() <= 800 {
+        rendered
+    } else {
+        let mut end = 800;
+        while !rendered.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &rendered[..end])
+    }
+}
+
+fn mcp_call_result(result: Result<Result<niucode_mcp::McpCall>, anyhow::Error>) -> ToolResult {
+    match result {
+        Ok(Ok(call)) => ToolResult {
+            ok: call.ok,
+            output: call.output,
+        },
+        Ok(Err(error)) | Err(error) => {
+            let message = format!("mcp error: {error:#}");
+            let output = if message.to_ascii_lowercase().contains("timed out") {
+                format!(
+                    "{message}; the mutation outcome is unknown, do not retry without human confirmation"
+                )
+            } else {
+                message
+            };
+            ToolResult { ok: false, output }
+        }
+    }
 }
 
 async fn execute_builtin(
@@ -1350,6 +1421,18 @@ mod tests {
         assert!(output.starts_with("a"));
         assert!(output.ends_with('c'));
         assert!(output.contains("truncated"));
+    }
+
+    #[test]
+    fn mcp_timeout_result_tells_the_model_not_to_retry() {
+        let result = mcp_call_result(Ok(Err(anyhow::anyhow!("MCP response timed out"))));
+        assert!(!result.ok);
+        assert!(
+            result.output.contains("outcome is unknown"),
+            "{}",
+            result.output
+        );
+        assert!(result.output.contains("do not retry"), "{}", result.output);
     }
 
     #[test]

@@ -27,6 +27,7 @@ fn spec() -> McpServerSpec {
         args: vec![fixture().display().to_string()],
         env,
         read_only: true,
+        write_tools: Vec::new(),
     }
 }
 
@@ -86,5 +87,181 @@ async fn a_turn_calls_a_mounted_mcp_tool() {
         })
         .expect("tool result");
     assert_eq!(tool_output, "hello mcp");
+    host.shutdown().await.unwrap();
+}
+
+fn writable_spec() -> McpServerSpec {
+    let mut spec = spec();
+    spec.read_only = false;
+    spec.write_tools = vec!["echo".to_string()];
+    spec
+}
+
+fn scripted_call(name: &str, arguments: serde_json::Value) -> ScriptedProvider {
+    ScriptedProvider::from_turns(vec![
+        vec![
+            StreamEvent::ToolCallDelta(ToolCallDelta {
+                index: 0,
+                id: Some("call-write".into()),
+                name: Some(name.to_string()),
+                arguments: arguments.to_string(),
+            }),
+            StreamEvent::Done {
+                finish_reason: Some("tool_calls".into()),
+            },
+        ],
+        vec![
+            StreamEvent::TextDelta("finished".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ],
+    ])
+}
+
+#[tokio::test]
+async fn a_mutating_mcp_call_is_approved_before_dispatch() {
+    let directory = tempfile::tempdir().unwrap();
+    let host = Arc::new(
+        McpHost::mount_with(&[writable_spec()], Duration::from_secs(5), true)
+            .await
+            .expect("write mount"),
+    );
+    let provider = scripted_call("mcp__fixture__echo", json!({"text": "approved write"}));
+    let mut log = SessionLog::create(directory.path()).unwrap();
+    let mut config = AgentConfig::new("scripted", directory.path());
+    config.provider = "scripted".into();
+    config.approval = ApprovalMode::Ask;
+    config.mcp_host = Some(host.clone());
+    let mut seen: Option<ApprovalRequest> = None;
+
+    let outcome = run_with_history(
+        &provider,
+        &mut log,
+        &config,
+        "call the write tool",
+        Vec::new(),
+        &mut |request: &ApprovalRequest| {
+            seen = Some(request.clone());
+            true
+        },
+        &mut |_event| {},
+    )
+    .await
+    .unwrap();
+    assert_eq!(outcome.final_text, "finished");
+    let request = seen.expect("approval requested");
+    assert_eq!(request.tool, "mcp__fixture__echo");
+    assert!(
+        request.summary.contains("mutating MCP"),
+        "{}",
+        request.summary
+    );
+    assert!(
+        request.summary.contains("approved write"),
+        "{}",
+        request.summary
+    );
+
+    let loaded = load(log.path()).unwrap();
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::Approval { tool, allowed: true, .. } if tool == "mcp__fixture__echo"
+    )));
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::ToolResult { output, .. } if output == "approved write"
+    )));
+    host.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_denied_mutation_writes_no_tool_result_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let host = Arc::new(
+        McpHost::mount_with(&[writable_spec()], Duration::from_secs(5), true)
+            .await
+            .expect("write mount"),
+    );
+    let provider = scripted_call("mcp__fixture__echo", json!({"text": "must not land"}));
+    let mut log = SessionLog::create(directory.path()).unwrap();
+    let mut config = AgentConfig::new("scripted", directory.path());
+    config.provider = "scripted".into();
+    config.approval = ApprovalMode::Ask;
+    config.mcp_host = Some(host.clone());
+
+    run_with_history(
+        &provider,
+        &mut log,
+        &config,
+        "call the write tool",
+        Vec::new(),
+        &mut |_request: &ApprovalRequest| false,
+        &mut |_event| {},
+    )
+    .await
+    .unwrap();
+
+    let loaded = load(log.path()).unwrap();
+    assert!(loaded.events.iter().any(|event| matches!(
+        event,
+        Event::Approval { tool, allowed: false, .. } if tool == "mcp__fixture__echo"
+    )));
+    let output = loaded
+        .events
+        .iter()
+        .find_map(|event| match event {
+            Event::ToolResult { output, .. } => Some(output.as_str()),
+            _ => None,
+        })
+        .expect("denial result");
+    assert_eq!(output, "approval denied by user");
+    assert!(!loaded.events.iter().any(
+        |event| matches!(event, Event::ToolResult { output, .. } if output == "must not land")
+    ));
+    host.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn mutating_mcp_refuses_never_approval() {
+    let directory = tempfile::tempdir().unwrap();
+    let host = Arc::new(
+        McpHost::mount_with(&[writable_spec()], Duration::from_secs(5), true)
+            .await
+            .expect("write mount"),
+    );
+    let provider = scripted_call("mcp__fixture__echo", json!({"text": "no approval"}));
+    let mut log = SessionLog::create(directory.path()).unwrap();
+    let mut config = AgentConfig::new("scripted", directory.path());
+    config.provider = "scripted".into();
+    config.approval = ApprovalMode::Never;
+    config.mcp_host = Some(host.clone());
+
+    run_with_history(
+        &provider,
+        &mut log,
+        &config,
+        "call the write tool",
+        Vec::new(),
+        &mut |_request: &ApprovalRequest| true,
+        &mut |_event| {},
+    )
+    .await
+    .unwrap();
+
+    let loaded = load(log.path()).unwrap();
+    let output = loaded
+        .events
+        .iter()
+        .find_map(|event| match event {
+            Event::ToolResult { output, .. } => Some(output.as_str()),
+            _ => None,
+        })
+        .expect("refusal result");
+    assert!(output.contains("interactive approval"), "{output}");
+    assert!(!loaded
+        .events
+        .iter()
+        .any(|event| matches!(event, Event::Approval { .. })));
     host.shutdown().await.unwrap();
 }

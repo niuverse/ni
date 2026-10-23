@@ -23,6 +23,7 @@ fn spec(name: &str) -> McpServerSpec {
         args: vec![fixture().display().to_string()],
         env,
         read_only: true,
+        write_tools: Vec::new(),
     }
 }
 
@@ -50,6 +51,51 @@ async fn host_mounts_two_servers_and_dispatches_namespaced_tools() {
     assert!(call.ok);
     assert_eq!(call.output, "from b");
     host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn write_allowlist_marks_only_named_tools_as_mutating() {
+    let limit = Duration::from_secs(5);
+    let mut writable = spec("w");
+    writable.read_only = false;
+    writable.write_tools = vec!["echo".to_string()];
+
+    let error = McpHost::mount(&[writable.clone()], limit)
+        .await
+        .err()
+        .expect("default mount must refuse a write server");
+    assert!(error.to_string().contains("allow-mcp-write"), "{error}");
+
+    let error = McpHost::mount_with(&[writable.clone()], limit, false)
+        .await
+        .err()
+        .expect("false flag must refuse");
+    assert!(error.to_string().contains("allow-mcp-write"), "{error}");
+
+    let host = McpHost::mount_with(&[writable], limit, true)
+        .await
+        .expect("write mount with allowlist");
+    assert!(host.is_mutating("mcp__w__echo"));
+    assert!(!host.is_mutating("mcp__w__env"));
+    assert_eq!(host.mutating_tools(), vec!["mcp__w__echo".to_string()]);
+    assert_eq!(
+        host.mounts()[0].write_tools,
+        vec!["mcp__w__echo".to_string()]
+    );
+    host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn missing_allowlisted_tool_fails_the_mount() {
+    let limit = Duration::from_secs(5);
+    let mut writable = spec("w");
+    writable.read_only = false;
+    writable.write_tools = vec!["write_note".to_string()];
+    let error = McpHost::mount_with(&[writable], limit, true)
+        .await
+        .err()
+        .expect("missing write tool must fail");
+    assert!(error.to_string().contains("write_note"), "{error}");
 }
 
 #[tokio::test]

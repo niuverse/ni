@@ -162,6 +162,7 @@ pub struct ExecOptions {
     pub max_goal_turns: usize,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
+    pub allow_mcp_write: bool,
 }
 
 impl Default for ExecOptions {
@@ -189,6 +190,7 @@ impl Default for ExecOptions {
             max_goal_turns: 6,
             extra_tools: Vec::new(),
             mcp_config: None,
+            allow_mcp_write: false,
         }
     }
 }
@@ -220,6 +222,7 @@ pub struct TuiOptions {
     pub approval_keys: ApprovalKeys,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
+    pub allow_mcp_write: bool,
 }
 
 impl Default for TuiOptions {
@@ -243,6 +246,7 @@ impl Default for TuiOptions {
             approval_keys: ApprovalKeys::default(),
             extra_tools: Vec::new(),
             mcp_config: None,
+            allow_mcp_write: false,
         }
     }
 }
@@ -263,6 +267,9 @@ struct Cli {
     /// MCP trust config (defaults to ~/.niucode/mcp.toml)
     #[arg(long, global = true)]
     mcp_config: Option<PathBuf>,
+    /// Mount MCP servers whose manifest has read_only = false and write_tools
+    #[arg(long, global = true)]
+    allow_mcp_write: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -568,6 +575,7 @@ pub async fn run() -> Result<()> {
                     max_goal_turns,
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
+                    allow_mcp_write: cli.allow_mcp_write,
                 },
                 None,
             )
@@ -614,6 +622,7 @@ pub async fn run() -> Result<()> {
                     approval_keys: ApprovalKeys::default(),
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
+                    allow_mcp_write: cli.allow_mcp_write,
                 },
                 None,
             )
@@ -800,7 +809,12 @@ fn removed_old_sessions(directory: &Path, days: u64, keep: usize) {
     }
 }
 
-async fn mount_mcp(config: Option<PathBuf>) -> Option<Arc<McpHost>> {
+async fn mount_mcp(
+    config: Option<PathBuf>,
+    allow_write: bool,
+    approval: ApprovalMode,
+    json: bool,
+) -> Option<Arc<McpHost>> {
     let path = match config {
         Some(path) => path,
         None => match workspace::global_root() {
@@ -815,17 +829,43 @@ async fn mount_mcp(config: Option<PathBuf>) -> Option<Arc<McpHost>> {
             return None;
         }
     };
-    let servers = match parsed.validated() {
+    let write_interactive = allow_write && !json && approval != ApprovalMode::Never;
+    let all = match if allow_write {
+        parsed.validated_with(true)
+    } else {
+        parsed.validated()
+    } {
         Ok(servers) => servers,
         Err(error) => {
             eprintln!("warning: MCP disabled: {error:#}");
             return None;
         }
     };
+    let mut skipped_write = false;
+    let servers = if write_interactive {
+        all
+    } else {
+        all.into_iter()
+            .filter(|server| {
+                if server.read_only {
+                    true
+                } else {
+                    skipped_write = true;
+                    false
+                }
+            })
+            .collect()
+    };
+    if skipped_write {
+        eprintln!(
+            "warning: MCP write servers need --allow-mcp-write and an interactive approval mode (ask or on-failure); read-only servers only"
+        );
+    }
     if servers.is_empty() {
         return None;
     }
-    match McpHost::mount(&servers, std::time::Duration::from_secs(10)).await {
+    let mount_writes = write_interactive && servers.iter().any(|server| !server.read_only);
+    match McpHost::mount_with(&servers, std::time::Duration::from_secs(10), mount_writes).await {
         Ok(host) => {
             for mount in host.mounts() {
                 eprintln!("mcp: {} · {} tool(s)", mount.server, mount.tools.len());
@@ -1042,6 +1082,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         approval_keys,
         extra_tools,
         mcp_config,
+        allow_mcp_write,
     } = options;
     if context_budget != 0 && context_budget < 100 {
         bail!("--context-budget must be 0 (auto) or at least 100 tokens");
@@ -1187,7 +1228,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
-    let mcp_host = mount_mcp(mcp_config).await;
+    let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, false).await;
     if let Some(host) = &mcp_host {
         agent_config.mcp_host = Some(host.clone());
     }
@@ -1280,6 +1321,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         max_goal_turns,
         extra_tools,
         mcp_config,
+        allow_mcp_write,
     } = options;
     if record.is_some() && replay.is_some() {
         bail!("--record and --replay are mutually exclusive");
@@ -1461,7 +1503,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     let extension_host = mount_extensions(&workspace, &mut session).await?;
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
-    let mcp_host = mount_mcp(mcp_config).await;
+    let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, json).await;
     if let Some(host) = &mcp_host {
         agent_config.mcp_host = Some(host.clone());
     }
@@ -2111,6 +2153,52 @@ mod tests {
         assert_eq!(turn["type"], "turn_end");
         assert_eq!(turn["usage"]["cached_tokens"], 42);
         assert_eq!(turn["usage"]["cache_hit_percent"], 42);
+    }
+
+    #[tokio::test]
+    async fn mcp_write_mount_requires_flag_and_interactive_approval() {
+        let directory = tempfile::tempdir().unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../niucode-mcp/tests/fixture_server.py")
+            .display()
+            .to_string();
+        let path = directory.path().join("mcp.toml");
+        std::fs::write(
+            &path,
+            format!(
+                r#"
+[[server]]
+name = "fixture"
+command = "python3"
+args = ["{fixture}"]
+read_only = false
+write_tools = ["echo"]
+
+[server.env]
+PATH = "/usr/bin:/bin"
+"#
+            ),
+        )
+        .unwrap();
+
+        assert!(
+            mount_mcp(Some(path.clone()), false, ApprovalMode::Ask, false)
+                .await
+                .is_none()
+        );
+        assert!(
+            mount_mcp(Some(path.clone()), true, ApprovalMode::Never, false)
+                .await
+                .is_none()
+        );
+        assert!(mount_mcp(Some(path.clone()), true, ApprovalMode::Ask, true)
+            .await
+            .is_none());
+        let host = mount_mcp(Some(path), true, ApprovalMode::Ask, false)
+            .await
+            .expect("write mount");
+        assert!(host.is_mutating("mcp__fixture__echo"));
+        host.shutdown().await.unwrap();
     }
 
     #[test]

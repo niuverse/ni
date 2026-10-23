@@ -24,6 +24,7 @@ fn spec() -> McpServerSpec {
         args: vec![fixture().display().to_string()],
         env,
         read_only: true,
+        write_tools: Vec::new(),
     }
 }
 

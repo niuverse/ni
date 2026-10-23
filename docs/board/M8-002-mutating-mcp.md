@@ -1,7 +1,7 @@
 +++
 id = "M8-002"
 title = "Mutating MCP with per-call approval"
-status = "ready"
+status = "doing"
 milestone = "M8"
 module = "mcp"
 size = "L"
@@ -26,17 +26,18 @@ become the least-guarded surface in the harness.
 
 ## Acceptance
 
-- [ ] A write tool not in `write_tools` is not exposed as mutating.
-- [ ] A listed-but-missing tool fails the mount.
-- [ ] `--allow-mcp-write` without an interactive approval mode refuses to mount.
-- [ ] Approval shows the namespaced tool and arguments; denial writes no change.
-- [ ] A timed-out mutation is not retried automatically.
+- [x] A write tool not in `write_tools` is not exposed as mutating.
+- [x] A listed-but-missing tool fails the mount.
+- [x] `--allow-mcp-write` without an interactive approval mode refuses to mount.
+- [x] Approval shows the namespaced tool and arguments; denial writes no change.
+- [x] A timed-out mutation is not retried automatically (message test).
 - [ ] Subagents never see mutating MCP tools.
 - [ ] Offline tests cover allowlist, refusal, deny, timeout, and no-retry.
 
 ## Notes
 
-ADR-0034 was accepted by the human on 2026-10-23. The design is now settled:
-manifest allowlist, `--allow-mcp-write`, interactive approval only, args
-preview, shared write lock, no retry, no subagent inheritance. Implementation
-may proceed.
+ADR-0034 was accepted by the human on 2026-10-23. The first slice is in:
+`write_tools`, `--allow-mcp-write`, mount gating, mutating metadata, per-call
+approval, shared write lock, denial, and a no-retry timeout message. Remaining:
+a write fixture/pack, a subagent-inheritance test, and the config-hash audit
+event.

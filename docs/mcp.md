@@ -4,7 +4,7 @@ title = "MCP stdio client"
 kind = "doc"
 status = "living"
 order = 70
-summary = "Read-only MCP v1: the client crate, manifest shape, security rules, and what is still unmounted."
+summary = "MCP stdio: read-only by default, opt-in writes with an allowlist and per-call approval, manifest shape, and limits."
 +++
 
 ## Status
@@ -36,12 +36,28 @@ read_only = true
 NOTES_DIR = "/home/me/notes"
 ```
 
-Only `server.env` is passed to the child. `read_only = false` is refused before
-spawn; v1 has no mutating path. Mutating MCP is designed in
-[ADR-0034](adr/0034-mutating-mcp.md) but not implemented.
+Only `server.env` is passed to the child. `read_only = false` is refused unless
+the manifest names every mutating tool and the run passes `--allow-mcp-write`
+with an interactive approval mode (`ask` or `on-failure`). Unnamed tools from a
+write server stay read-only; a named tool the server does not expose fails the
+mount. `--json` and `--approval never` mount read-only servers only.
+
+```toml
+[[server]]
+name = "notes"
+command = "python3"
+args = ["/home/me/notes-server.py"]
+read_only = false
+write_tools = ["create_note", "update_note"]
+```
+
+Every mutating call is approved with the namespaced tool, server, and a bounded
+JSON argument preview. The prompt says the effect is server-defined; denial
+writes no change. A timeout is not retried [[ADR-0034](adr/0034-mutating-mcp.md)].
 
 ## Rules
 
+- mutating calls take the shared write lock and are never inherited by subagents.
 - stdio only; no HTTP/SSE.
 - tools only; no resources, prompts, sampling, or elicitation.
 - namespaced as `mcp__<server>__<tool>`; collisions are startup errors.
