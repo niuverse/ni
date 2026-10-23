@@ -9,6 +9,7 @@ mode="${1:---check}"
 order=(
     niucode-core
     niucode-computer
+    niucode-attachments
     niucode-auth
     niucode-provider
     niucode-tools

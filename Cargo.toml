@@ -6,6 +6,7 @@ members = [
     "crates/niucode-provider",
     "crates/niucode-tools",
     "crates/niucode-computer",
+    "crates/niucode-attachments",
     "crates/niucode-agent",
     "crates/niucode-extension",
     "crates/niucode-mcp",
