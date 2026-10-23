@@ -50,6 +50,7 @@ struct State {
     max_steps: usize,
     system_prompt: Option<String>,
     context: Vec<u8>,
+    brand: String,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -113,7 +114,7 @@ pub async fn serve(options: Options) -> Result<()> {
         .context("bind 127.0.0.1")?;
     let address = listener.local_addr()?;
     println!(
-        "web: http://{address}/ · {} events · read-only chat · Ctrl-C to stop",
+        "web: http://{address}/ · {} events · workspace-write + ask · Ctrl-C to stop",
         loaded.events.len()
     );
     serve_listener(
@@ -130,6 +131,7 @@ pub async fn serve(options: Options) -> Result<()> {
             context: serde_json::to_vec(&options.context.unwrap_or_else(
                 || json!({"brand": options.brand.clone().unwrap_or_else(|| "niucode".into())}),
             ))?,
+            brand: options.brand.unwrap_or_else(|| "niucode".into()),
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -169,6 +171,25 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
             "200 OK",
             "application/json",
             state.context.clone(),
+        )
+        .await;
+    }
+    if method == "GET" && path == "/api/status" {
+        let status = json!({
+            "brand": state.brand,
+            "provider": state.preset,
+            "model": state.model,
+            "cwd": state.cwd.display().to_string(),
+            "sandbox": "workspace-write",
+            "approval": "ask",
+            "network": "off",
+            "busy": state.busy.load(Ordering::Relaxed),
+        });
+        return send(
+            &mut stream,
+            "200 OK",
+            "application/json",
+            serde_json::to_vec(&status)?,
         )
         .await;
     }
@@ -532,6 +553,7 @@ mod tests {
             max_steps: 1,
             system_prompt: None,
             context,
+            brand: "niucode".into(),
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -617,6 +639,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn serves_model_and_policy_status() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state()));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /api/status HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("\"model\":\"deepseek-flash\""), "{text}");
+        assert!(text.contains("\"sandbox\":\"workspace-write\""), "{text}");
+        assert!(text.contains("\"approval\":\"ask\""), "{text}");
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn sse_streams_the_initial_log_and_new_events() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("session.jsonl");
@@ -635,6 +677,7 @@ mod tests {
                 max_steps: 1,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -706,6 +749,7 @@ mod tests {
                 max_steps: 1,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -836,6 +880,7 @@ mod tests {
                 max_steps: 2,
                 system_prompt: None,
                 context: br#"{}"#.to_vec(),
+                brand: "niucode".into(),
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -909,6 +954,7 @@ mod tests {
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
         assert!(INDEX.contains("/api/context"));
+        assert!(INDEX.contains("/api/status"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
