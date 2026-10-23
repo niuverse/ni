@@ -174,6 +174,7 @@ pub struct ExecOptions {
     pub image: Vec<PathBuf>,
     pub computer: String,
     pub computer_log_input: bool,
+    pub computer_keep_frames: bool,
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
@@ -206,6 +207,7 @@ impl Default for ExecOptions {
             image: Vec::new(),
             computer: "off".into(),
             computer_log_input: false,
+            computer_keep_frames: false,
             extra_tools: Vec::new(),
             mcp_config: None,
             allow_mcp_write: false,
@@ -241,6 +243,7 @@ pub struct TuiOptions {
     pub extra_tools: Vec<Arc<dyn EmbedderTool>>,
     pub computer: String,
     pub computer_log_input: bool,
+    pub computer_keep_frames: bool,
     pub mcp_config: Option<PathBuf>,
     pub allow_mcp_write: bool,
 }
@@ -267,6 +270,7 @@ impl Default for TuiOptions {
             extra_tools: Vec::new(),
             computer: "off".into(),
             computer_log_input: false,
+            computer_keep_frames: false,
             mcp_config: None,
             allow_mcp_write: false,
         }
@@ -375,6 +379,9 @@ enum Command {
         /// Persist full typed computer text in the session log (default: length + SHA-256 only)
         #[arg(long)]
         computer_log_input: bool,
+        /// Keep observation screenshots in the session attachment store
+        #[arg(long)]
+        computer_keep_frames: bool,
         /// Provider preset: deepseek or openai
         #[arg(long, default_value = "deepseek")]
         preset: String,
@@ -506,6 +513,9 @@ enum Command {
         /// Persist full typed computer text in the session log (default: length + SHA-256 only)
         #[arg(long)]
         computer_log_input: bool,
+        /// Keep observation screenshots in the session attachment store
+        #[arg(long)]
+        computer_keep_frames: bool,
         /// Explicitly allow subagent profile=inherit
         #[arg(long)]
         allow_subagent_inheritance: bool,
@@ -598,6 +608,7 @@ pub async fn run() -> Result<()> {
             image,
             computer,
             computer_log_input,
+            computer_keep_frames,
             preset,
             model,
             max_steps,
@@ -644,6 +655,7 @@ pub async fn run() -> Result<()> {
                     image,
                     computer,
                     computer_log_input,
+                    computer_keep_frames,
                     extra_tools: Vec::new(),
                     mcp_config: cli.mcp_config.clone(),
                     allow_mcp_write: cli.allow_mcp_write,
@@ -701,6 +713,7 @@ pub async fn run() -> Result<()> {
             plan,
             computer,
             computer_log_input,
+            computer_keep_frames,
             allow_subagent_inheritance,
         }) => {
             run_tui(
@@ -721,6 +734,7 @@ pub async fn run() -> Result<()> {
                     plan,
                     computer,
                     computer_log_input,
+                    computer_keep_frames,
                     allow_subagent_inheritance,
                     approval_keys: ApprovalKeys::default(),
                     extra_tools: Vec::new(),
@@ -1191,6 +1205,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
         sandbox,
         computer,
         computer_log_input,
+        computer_keep_frames,
         approval,
         network,
         replay,
@@ -1346,6 +1361,7 @@ async fn run_tui(options: TuiOptions, hooks: Option<SharedHooks>) -> Result<()> 
     agent_config.extension_host = extension_host.clone();
     agent_config.extra_tools = extra_tools;
     agent_config.computer_log_input = computer_log_input;
+    agent_config.computer_keep_frames = computer_keep_frames;
     configure_computer(&mut agent_config, &computer)?;
     let mcp_host = mount_mcp(mcp_config, allow_mcp_write, approval_mode, false).await;
     if let Some(host) = &mcp_host {
@@ -1466,6 +1482,11 @@ pub fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> 
             "warning: --computer-log-input persists full typed desktop text in the session JSONL"
         );
     }
+    if config.computer_keep_frames {
+        eprintln!(
+            "warning: --computer-keep-frames persists observation screenshots in the session attachment store"
+        );
+    }
     #[cfg(target_os = "linux")]
     {
         let policy: ComputerPolicy = policy
@@ -1566,6 +1587,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
         image,
         computer,
         computer_log_input,
+        computer_keep_frames,
         extra_tools,
         mcp_config,
         allow_mcp_write,
@@ -1798,6 +1820,7 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     }
     agent_config.allowed_tools = tools;
     agent_config.computer_log_input = computer_log_input;
+    agent_config.computer_keep_frames = computer_keep_frames;
     configure_computer(&mut agent_config, &computer)?;
     if let Ok(registry) = skills::Registry::discover(&workspace) {
         let (block, roots) = registry.activate(&prompt);

@@ -209,6 +209,9 @@ pub struct AgentConfig {
     /// Persist full typed computer text in the JSONL. Off by default; the
     /// assistant tool call is otherwise reduced to length + SHA-256.
     pub computer_log_input: bool,
+    /// Persist observation PNGs in the session attachment store. Off by
+    /// default; screenshots can contain secrets.
+    pub computer_keep_frames: bool,
     /// Mounted read-only MCP servers. Dispatched after built-ins and the
     /// extension host; not inherited by subagents.
     pub mcp_host: Option<Arc<niucode_mcp::McpHost>>,
@@ -259,6 +262,7 @@ impl AgentConfig {
             extra_tools: Vec::new(),
             computer: None,
             computer_log_input: false,
+            computer_keep_frames: false,
             mcp_host: None,
             write_lock: Some(Arc::new(tokio::sync::Mutex::new(()))),
             write_scope: None,
@@ -1062,7 +1066,7 @@ async fn execute_computer(
             Ok(capture) => {
                 let encoded = base64::engine::general_purpose::STANDARD.encode(&capture.png);
                 let data_url = format!("data:image/png;base64,{encoded}");
-                let output = format!(
+                let mut output = format!(
                     "observation {} · window {} · {} — {} · {}x{} · expires_at_ms={}",
                     capture.observation.id,
                     capture.observation.window.id.0,
@@ -1072,6 +1076,27 @@ async fn execute_computer(
                     capture.observation.image.height,
                     capture.observation.expires_at_ms
                 );
+                if config.computer_keep_frames {
+                    let root = session
+                        .path()
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join("attachments");
+                    match AttachmentStore::open(root).and_then(|store| {
+                        store.put(
+                            &capture.png,
+                            Some(&format!("{}.png", capture.observation.id)),
+                            Some("computer observation"),
+                        )
+                    }) {
+                        Ok(reference) => {
+                            output.push_str(&format!(" · frame_kept sha256={}", reference.sha256));
+                        }
+                        Err(error) => {
+                            output.push_str(&format!(" · frame_keep_failed={error}"));
+                        }
+                    }
+                }
                 Ok(ComputerExecution {
                     result: niucode_tools::ToolResult { ok: true, output },
                     images: vec![data_url],
@@ -1671,7 +1696,7 @@ mod tests {
                     captured_at_ms: now,
                     expires_at_ms: now + 60_000,
                 },
-                png: b"png".to_vec(),
+                png: b"\x89PNG\r\n\x1a\nimage".to_vec(),
             })
         }
 
@@ -1749,6 +1774,10 @@ mod tests {
             niucode_provider::MessageContent::Text(text) => text,
         };
         assert!(text.contains("observation obs-1"));
+        assert!(
+            !directory.join("attachments").exists(),
+            "frames must be opt-in"
+        );
     }
 
     #[derive(Clone, Default)]
@@ -1817,6 +1846,59 @@ mod tests {
         assert_eq!(runtime.policy(), ComputerPolicy::Off);
         assert!(!runtime.is_armed());
         assert!(flag.0.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn computer_observe_can_keep_a_frame() {
+        let directory = temp_dir("computer-frame");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let mut config = test_config(&directory);
+        config.computer_keep_frames = true;
+        let runtime = Arc::new(std::sync::Mutex::new(ComputerRuntime::new(
+            Box::<FakeComputer>::default(),
+            ComputerPolicy::Observe,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime);
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("observe".into()),
+                    name: Some("computer".into()),
+                    arguments: r#"{"action":"observe"}"#.to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("done".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "observe",
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        let attachments = directory.join("attachments");
+        assert!(
+            attachments.read_dir().unwrap().next().is_some(),
+            "kept frame was not stored"
+        );
+        let loaded = niucode_core::load(session.path()).expect("load");
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::ToolResult { output, .. } if output.contains("frame_kept sha256=")
+        )));
     }
 
     #[tokio::test]
