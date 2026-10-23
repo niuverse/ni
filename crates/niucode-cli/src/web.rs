@@ -1733,6 +1733,7 @@ mod tests {
         assert!(INDEX.contains("body.contrast"));
         assert!(INDEX.contains("role=\"log\""));
         assert!(INDEX.contains("prefers-contrast: more"));
+        assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));
@@ -1767,6 +1768,7 @@ mod tests {
         assert!(INDEX.contains("body.contrast"));
         assert!(INDEX.contains("role=\"log\""));
         assert!(INDEX.contains("prefers-contrast: more"));
+        assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));
