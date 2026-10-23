@@ -71,6 +71,7 @@ client — without turning the event log into presentation data.
 - **Tools (M9-025)**: collapsible call/result cards with escaped, bounded
   input/output.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
+  **M9-029** makes sections collapsible and filterable.
 - **Status (M9-016)**: model/cwd/policy chips from `/api/status`.
 - **Turn timer (M9-017)**: SSE phases drive a busy chip and elapsed timer; the
   context sidebar can be collapsed. See

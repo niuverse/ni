@@ -1092,6 +1092,8 @@ mod tests {
         assert!(INDEX.contains("/api/status"));
         assert!(INDEX.contains("beginTurn"));
         assert!(INDEX.contains("toggle-context"));
+        assert!(INDEX.contains("ctx-filter"));
+        assert!(INDEX.contains("ctx-section"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
