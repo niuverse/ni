@@ -1005,11 +1005,18 @@ async fn execute_computer(
                 .lock()
                 .unwrap()
                 .window_for(&action)
-                .map(|window| format!("{} — {}", window.app, window.title))
+                .map(|window| {
+                    format!(
+                        "{} — {}",
+                        clean_display(&window.app, 60),
+                        clean_display(&window.title, 80)
+                    )
+                })
                 .unwrap_or_else(|| "unobserved window".into());
             let summary = format!(
-                "computer {} on {window}. Purpose: {purpose}",
-                action_label(&action)
+                "computer {} on {window}. Purpose: {}",
+                action_detail(&action),
+                clean_display(&purpose, 200)
             );
             if !io
                 .approve(
@@ -1104,6 +1111,54 @@ async fn execute_computer(
                 images: Vec::new(),
             })
         }
+    }
+}
+
+fn clean_display(value: &str, max_chars: usize) -> String {
+    let mut out: String = value
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .take(max_chars)
+        .collect();
+    if value.chars().count() > max_chars {
+        out.push('…');
+    }
+    out
+}
+
+fn action_detail(action: &ComputerAction) -> String {
+    match action {
+        ComputerAction::Observe { .. } => "observe".into(),
+        ComputerAction::Click { point, button, .. } => {
+            format!("click {button:?} at ({}, {})", point.x, point.y)
+        }
+        ComputerAction::Type { text, .. } => {
+            format!("type {} character(s)", text.chars().count())
+        }
+        ComputerAction::Key { key, .. } => {
+            let mut parts = key
+                .modifiers
+                .iter()
+                .map(|modifier| format!("{modifier:?}"))
+                .collect::<Vec<_>>();
+            parts.push(clean_display(&key.key, 30));
+            format!("key {}", parts.join("+"))
+        }
+        ComputerAction::Scroll {
+            point,
+            direction,
+            amount,
+            ..
+        } => format!(
+            "scroll {direction:?} {amount} at ({}, {})",
+            point.x, point.y
+        ),
     }
 }
 
@@ -1719,6 +1774,13 @@ mod tests {
     }
 
     #[test]
+    fn approval_display_cleans_control_chars_and_truncates() {
+        assert_eq!(clean_display("a\nb\tc", 10), "a b c");
+        assert_eq!(clean_display("abcdef", 3), "abc…");
+        assert_eq!(clean_display("ok", 10), "ok");
+    }
+
+    #[test]
     fn emergency_stop_disarms_and_releases_input() {
         let flag = StopFlag::default();
         let mut runtime = ComputerRuntime::new(
@@ -1779,13 +1841,15 @@ mod tests {
             ],
         ]);
         let mut approvals = 0;
+        let mut summaries = Vec::new();
         run(
             &provider,
             &mut session,
             &config,
             "click the window",
-            &mut |_| {
+            &mut |request| {
                 approvals += 1;
+                summaries.push(request.summary.clone());
                 true
             },
             &mut |_| {},
@@ -1793,6 +1857,13 @@ mod tests {
         .await
         .expect("run");
         assert_eq!(approvals, 2);
+        assert!(summaries
+            .iter()
+            .any(|summary| summary.contains("click Left at (5, 5)")));
+        assert!(summaries
+            .iter()
+            .any(|summary| summary.contains("type 7 character(s)")));
+        assert!(!summaries.iter().any(|summary| summary.contains("hunter2")));
         let loaded = niucode_core::load(session.path()).expect("load");
         assert!(loaded.events.iter().any(|event| matches!(
             event,

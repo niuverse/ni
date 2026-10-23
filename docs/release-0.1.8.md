@@ -22,8 +22,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   per-action approval for control, terminal/sensitive red lines, Ctrl-C
   emergency stop and input release.
 - **Agent tool**: `computer` returns the screenshot as a tool image part;
-  action failures stay ToolResults; approvals are audited and typed text is
-  persisted only as length + SHA-256.
+  action failures stay ToolResults; approvals show safe action details and are
+  audited, and typed text is persisted only as length + SHA-256.
 - **Product surfaces**: `niucode`/`niuse` exec, TUI, REPL, and web expose
   `--computer`; TUI/REPL `/computer stop|arm`, web status chip and
   token-gated arm/stop control.
