@@ -57,7 +57,7 @@ client — without turning the event log into presentation data.
   read-only/never, embedded composer. **M9-031** makes it multi-line; **M9-032**
   adds local prompt history; **M9-035** adds local `/help` `/status` `/report`;
   **M9-036** rejects unknown slashes without a model turn; **M9-037** adds a
-  filtering completion menu.
+  filtering completion menu; **M9-038** adds a view-only `/clear`.
 - **Streaming (M9-010)**: runtime deltas broadcast over SSE and finalized by the
   durable assistant event.
 - **Approvals (M9-011)**: browser Allow/Deny releases a blocked approver; previews

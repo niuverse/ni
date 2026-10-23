@@ -294,6 +294,7 @@ const COMMANDS = [
   { name: '/help', description: 'list local commands' },
   { name: '/status', description: 'model, cwd, and policy' },
   { name: '/report', description: 'show the weekly report in context' },
+  { name: '/clear', description: 'clear the view only; session stays' },
 ];
 let commandItems = [], commandIndex = 0;
 const HISTORY_KEY = 'niucode.prompt.history';
@@ -378,7 +379,7 @@ form.onsubmit = async event => {
   rememberPrompt(prompt);
   const command = prompt.split(/\s+/)[0];
   if (command === '/help') {
-    add('meta','commands: /help · /status · /report · anything else goes to the agent');
+    add('meta','commands: /help · /status · /report · /clear · anything else goes to the agent');
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/status') {
@@ -394,6 +395,11 @@ form.onsubmit = async event => {
     await loadContext();
     status.textContent = 'local command · report shown in context';
     input.value = ''; growComposer(); return;
+  }
+  if (command === '/clear') {
+    log.textContent = ''; streaming = null; streamText = '';
+    add('meta','view cleared · session log unchanged');
+    input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command.startsWith('/')) {
     add('meta','unknown command ' + command + ' · /help');
