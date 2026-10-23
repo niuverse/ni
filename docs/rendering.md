@@ -38,7 +38,8 @@ client — without turning the event log into presentation data.
 
 ### P3 · Motion and progress
 
-- Streaming caret or shimmer that can be disabled.
+- Streaming caret or shimmer that can be disabled. **M9-006** adds a
+  `▍`/`▏` caret and a per-tool elapsed timer.
 - Per-tool progress with elapsed time and a stable collapsed line.
 - Completion transitions that do not reflow history.
 - Respect `NO_COLOR`, `TERM=dumb`, and reduced-motion environments.

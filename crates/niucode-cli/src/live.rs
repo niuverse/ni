@@ -291,6 +291,8 @@ pub async fn run(
     let input_run_id = niucode_core::now_ms();
     let mut sequence = 0_u64;
     let mut status = String::from("requesting");
+    let mut streaming = false;
+    let mut running_tool: Option<(String, Instant)> = None;
     let mut tools_completed = 0;
     let mut transcript = Transcript::new();
     let mut view: Option<View> = None;
@@ -312,16 +314,21 @@ pub async fn run(
                                 hooks.borrow_mut().filter_text(&mut text);
                             }
                             status = "responding".into();
+                            streaming = true;
                             transcript.delta(&mut terminal, view.is_some(), &text)?;
                         }
                         RuntimeEvent::Agent(AgentEvent::ReasoningDelta(_)) => status = "thinking · Ctrl-O recorded details".into(),
                         RuntimeEvent::Agent(AgentEvent::ToolCall { name, .. }) => {
                             transcript.flush(&mut terminal, view.is_some())?;
+                            streaming = false;
+                            running_tool = Some((name.clone(), Instant::now()));
                             status = format!("running {name}");
 
                         }
                         RuntimeEvent::Agent(AgentEvent::ToolResult { name, ok, summary, .. }) => {
                             tools_completed += 1;
+                            streaming = false;
+                            running_tool = None;
                             status = format!("{name} finished");
                             if !ok {
                                 let message = crate::text_layout::clip(&crate::text_layout::clean_text(&format!("! {name}: {summary} · Ctrl-O details")), terminal.size().0);
@@ -334,7 +341,11 @@ pub async fn run(
                         RuntimeEvent::Agent(AgentEvent::Compaction { before_tokens, after_tokens, .. }) => {
                             transcript.print(&mut terminal, view.is_some(), format!("⇣ context {before_tokens} → {after_tokens}"))?;
                         }
-                        RuntimeEvent::Agent(AgentEvent::TurnEnd { .. }) => transcript.flush(&mut terminal, view.is_some())?,
+                        RuntimeEvent::Agent(AgentEvent::TurnEnd { .. }) => {
+                            streaming = false;
+                            running_tool = None;
+                            transcript.flush(&mut terminal, view.is_some())?;
+                        }
                         RuntimeEvent::Agent(AgentEvent::Phase(phase)) => status = phase.as_str().into(),
                         RuntimeEvent::Input { id, queued, applied } => {
                             if let Some(index) = unacknowledged.iter().position(|(pending, _)| pending == &id) {
@@ -426,7 +437,12 @@ pub async fn run(
                 }
                 if let Some(active) = &mut view { active.draw()?; }
                 else {
-                    let footer = crate::presentation::activity(&status, tools_completed, started.elapsed().as_millis(), Theme::detect_stdout().is_ansi(), terminal.size().0);
+                    let footer_status = if let Some((name, since)) = &running_tool {
+                        format!("{name} · {:.1}s", since.elapsed().as_secs_f32())
+                    } else {
+                        status.clone()
+                    };
+                    let footer = crate::presentation::activity(&footer_status, tools_completed, started.elapsed().as_millis(), Theme::detect_stdout().is_ansi(), terminal.size().0, streaming);
                     editor.draw(&mut terminal, "niucode ▸ ", &footer, &transcript.pending)?;
                 }
             }

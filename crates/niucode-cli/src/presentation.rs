@@ -151,6 +151,7 @@ pub fn activity(
     elapsed_ms: u128,
     animate: bool,
     width: usize,
+    streaming: bool,
 ) -> String {
     const FRAMES: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
     let frame = if animate {
@@ -159,9 +160,18 @@ pub fn activity(
         "·"
     };
     let state = clip(&clean_text(state), width.saturating_sub(34).max(8));
+    let caret = if streaming {
+        if animate && (elapsed_ms / 250).is_multiple_of(2) {
+            " ▍"
+        } else {
+            " ▏"
+        }
+    } else {
+        ""
+    };
     clip(
         &format!(
-            "{frame} {state} · {}s · {tools} tools · Ctrl-C cancel",
+            "{frame} {state}{caret} · {}s · {tools} tools · Ctrl-C cancel",
             elapsed_ms / 1000
         ),
         width,
@@ -235,12 +245,17 @@ mod tests {
     #[test]
     fn animation_is_fixed_width_and_has_a_static_fallback() {
         assert_ne!(
-            activity("thinking", 0, 0, true, 80),
-            activity("thinking", 0, 125, true, 80)
+            activity("thinking", 0, 0, true, 80, false),
+            activity("thinking", 0, 125, true, 80, false)
         );
         assert_eq!(
-            activity("thinking", 0, 0, false, 80),
-            activity("thinking", 0, 125, false, 80)
+            activity("thinking", 0, 0, false, 80, false),
+            activity("thinking", 0, 125, false, 80, false)
         );
+        let first = activity("responding", 0, 0, true, 80, true);
+        let second = activity("responding", 0, 250, true, 80, true);
+        assert!(first.contains('▍') || first.contains('▏'), "{first}");
+        assert_ne!(first, second);
+        assert!(!activity("responding", 0, 0, false, 80, false).contains('▍'));
     }
 }
