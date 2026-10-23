@@ -55,7 +55,9 @@ client — without turning the event log into presentation data.
 - **Streaming (M9-010)**: runtime deltas broadcast over SSE and finalized by the
   durable assistant event.
 - **Approvals (M9-011)**: browser Allow/Deny releases a blocked approver; previews
-  are serialized; unknown IDs 404. See [ADR-0036](adr/0036-local-web-surface.md).
+  are serialized; unknown IDs 404.
+- **Markdown (M9-012)**: server-rendered HTML with escaped raw HTML, tables, and
+  safe links; KaTeX remains next. See [ADR-0036](adr/0036-local-web-surface.md).
 - A local HTTP + SSE server over the same agent loop and event log.
 - Static, no-build client; Markdown and KaTeX rendering.
 - Session list, streaming answer, tool/approval cards, cancel.

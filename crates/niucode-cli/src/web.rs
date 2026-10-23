@@ -15,6 +15,7 @@ use niucode_agent::{project_history, run_with_history, AgentConfig, ApprovalMode
 use niucode_core::{load, now_ms, Event, SessionLog};
 use niucode_provider::Provider;
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
+use pulldown_cmark::{html, Options as MarkdownOptions, Parser};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -83,11 +84,20 @@ pub async fn serve(options: Options) -> Result<()> {
             .with_context(|| format!("move session into {}", path.display()))?;
     }
     let loaded = load(&path).with_context(|| format!("load session {}", path.display()))?;
+    let events = loaded
+        .events
+        .iter()
+        .map(|event| {
+            let mut value = serde_json::to_value(event).unwrap_or(Value::Null);
+            add_html(&mut value);
+            value
+        })
+        .collect::<Vec<_>>();
     let snapshot = serde_json::to_vec(&json!({
         "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
         "path": path.display().to_string(),
         "warnings": loaded.warnings,
-        "events": loaded.events,
+        "events": events,
     }))?;
     let (live, _) = broadcast::channel(256);
     let listener = TcpListener::bind(("127.0.0.1", options.port))
@@ -360,6 +370,34 @@ async fn write_chunk(stream: &mut TcpStream, text: &str) -> Result<()> {
     Ok(())
 }
 
+fn add_html(value: &mut Value) {
+    if value.get("type").and_then(Value::as_str) != Some("assistant_message") {
+        return;
+    }
+    if let Some(text) = value.get("text").and_then(Value::as_str) {
+        value["html"] = Value::String(markdown_html(text));
+    }
+}
+
+fn markdown_html(text: &str) -> String {
+    let mut options = MarkdownOptions::empty();
+    options.insert(MarkdownOptions::ENABLE_TABLES);
+    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
+    let parser = Parser::new_ext(text, options).map(|event| match event {
+        pulldown_cmark::Event::Html(raw) => pulldown_cmark::Event::Text(raw),
+        pulldown_cmark::Event::InlineHtml(raw) => pulldown_cmark::Event::Text(raw),
+        event => event,
+    });
+    let mut output = String::new();
+    html::push_html(&mut output, parser);
+    output
+        .replace(
+            "href=\"javascript:",
+            "href=\"#\" data-blocked=\"javascript:",
+        )
+        .replace("<a href=", "<a rel=\"noreferrer noopener\" href=")
+}
+
 fn response(method: &str, path: &str, snapshot: &[u8]) -> (&'static str, &'static str, Vec<u8>) {
     match (method, path) {
         ("GET", "/") => (
@@ -401,6 +439,18 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             next_approval: AtomicU64::new(1),
         })
+    }
+
+    #[test]
+    fn markdown_html_escapes_raw_html_and_renders_tables() {
+        let html = markdown_html(
+            "**bold**\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n<script>alert(1)</script>",
+        );
+        assert!(html.contains("<strong>bold</strong>"), "{html}");
+        assert!(html.contains("<table>"), "{html}");
+        assert!(html.contains("<td>1</td>"), "{html}");
+        assert!(!html.contains("<script>"), "{html}");
+        assert!(html.contains("&lt;script&gt;"), "{html}");
     }
 
     #[test]
@@ -719,6 +769,7 @@ mod tests {
         assert!(INDEX.contains("fetch('/api/prompt'"));
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
+        assert!(INDEX.contains("e.html"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

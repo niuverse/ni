@@ -28,7 +28,10 @@ the missing piece is a local transport and a rendering client.
    are broadcast as ephemeral SSE events while the append-only log remains the
    durable source. Browser prompts use `workspace-write` + `ApprovalMode::Ask`;
    an approval event blocks the turn until `POST /api/approval` allows or denies
-   it (300s timeout fails closed). Read-only remains the default for the CLI.
+   it (300s timeout fails closed). Assistant text is rendered to HTML
+   server-side with raw HTML escaped and `javascript:` links blocked; the web
+   client uses that HTML only for final messages. Read-only remains the default
+   for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This
