@@ -49,7 +49,9 @@ the missing piece is a local transport and a rendering client.
    log region. Sections tagged `threads` switch archived sessions through an
    embedder allowlist, and successful new/switch operations broadcast
    `session_switched`. A Rust test checks DOM IDs and `getElementById`
-   references in the embedded client. Read-only remains the default for the CLI.
+   references in the embedded client; an optional headless-Chrome test loads the
+   file with a stubbed SSE and asserts the log role, brand, and composer.
+   Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This
