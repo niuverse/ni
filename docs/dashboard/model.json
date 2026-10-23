@@ -4981,6 +4981,27 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>A human approving a click saw coordinates but not the pixels the model was\nlooking at. That made deny/allow decisions unnecessarily blind.</p>\n<h2>Scope</h2>\n<ul>\n<li>Cache the latest computer observation PNG in memory (bounded data URL).</li>\n<li>Attach it to input approvals whose observation id matches, and to the\nsensitive-window observation approval itself.</li>\n<li>Web <code>approval</code> SSE carries <code>image</code>; the card renders only <code>data:image/*</code> with a\ndata-only <code>img-src</code> CSP.</li>\n<li>TUI keeps its text approval UI; no terminal image protocol is claimed.</li>\n<li>Keep the image out of JSONL and the attachment store.</li>\n<li>Cap the data URL at ~2 MB; larger frames are omitted.</li>\n<li>Tests assert approvals carry the image for click/type and sensitive observe.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nClick/type approvals carry the current observation thumbnail.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nSensitive observe approval carries the screenshot being released.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nThe web card renders data URLs only.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nCSP allows data images, not remote images.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nJSONL/store unchanged; no base64 persistence.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nOversize frames are omitted.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass.</li>\n</ul>\n<h2>Notes</h2>\n<p>The thumbnail is advisory UI, not forensic evidence. <code>--computer-keep-frames</code>\nstill controls durable storage.</p>\n",
       "path": "docs/board/M9-116-approval-thumbnail.md"
+    },
+    {
+      "id": "M9-117",
+      "title": "Configured Web arm/stop tests",
+      "status": "done",
+      "milestone": "M9",
+      "module": "web",
+      "size": "S",
+      "priority": "P2",
+      "updated": "2026-10-24",
+      "completed": "2026-10-24",
+      "depends_on": [
+        "M9-106",
+        "M9-116"
+      ],
+      "docs": [
+        "adr-0037"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>Web computer control had only an unconfigured 409 test. The actual stop path\n(policy off + disarm) and the thumbnail UI marker were unverified.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add a fake backend and a configured <code>ComputerRuntime</code> to a web test.</li>\n<li>POST <code>/api/computer {action:\"stop\"}</code> and assert HTTP 200, JSON policy off,\narmed false, and the runtime state afterward.</li>\n<li>Add a static assertion for the <code>approval-shot</code> element.</li>\n<li>Keep the unconfigured 409 test.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nConfigured stop returns 200.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nRuntime policy is off and disarmed.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nUnconfigured servers still return 409.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nApproval thumbnail markup is present.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass.</li>\n</ul>\n<h2>Notes</h2>\n<p>The browser control remains arm/stop only; policy selection is startup-scoped.</p>\n",
+      "path": "docs/board/M9-117-web-control-tests.md"
     }
   ],
   "docs": [
@@ -6505,7 +6526,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 197,
+    "cards": 198,
     "modules": 15,
     "docs": 62,
     "generator": "cargo xtask dashboard"

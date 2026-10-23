@@ -1554,6 +1554,32 @@ mod tests {
         })
     }
 
+    fn state_with_computer(computer: Arc<Mutex<niucode_agent::ComputerRuntime>>) -> Arc<State> {
+        Arc::new(State {
+            path: Mutex::new(PathBuf::new()),
+            snapshot: Mutex::new(br#"{"events":[]}"#.to_vec()),
+            provider: None,
+            preset: "deepseek".into(),
+            model: "deepseek-flash".into(),
+            cwd: PathBuf::from("."),
+            max_steps: 1,
+            system_prompt: None,
+            context: br#"{}"#.to_vec(),
+            context_provider: None,
+            brand: "niucode".into(),
+            token: None,
+            allow_new: true,
+            allowed_tools: Mutex::new(HashSet::new()),
+            new_session_provider: None,
+            switch_session_provider: None,
+            computer: Some(computer),
+            busy: AtomicBool::new(false),
+            live: broadcast::channel(8).0,
+            pending: Mutex::new(HashMap::new()),
+            next_approval: AtomicU64::new(1),
+        })
+    }
+
     fn state() -> Arc<State> {
         state_with(br#"{}"#.to_vec())
     }
@@ -2225,6 +2251,54 @@ mod tests {
         task.abort();
     }
 
+    struct WebComputer;
+    impl niucode_computer::ComputerBackend for WebComputer {
+        fn observe(
+            &mut self,
+            _window: Option<niucode_computer::WindowId>,
+        ) -> Result<niucode_computer::Capture, Box<dyn std::error::Error + Send + Sync>> {
+            Err("unused".into())
+        }
+
+        fn perform(
+            &mut self,
+            _action: &niucode_computer::ComputerAction,
+            _observation: &niucode_computer::Observation,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn configured_computer_can_be_stopped() {
+        let mut runtime = niucode_agent::ComputerRuntime::new(
+            Box::new(WebComputer),
+            niucode_computer::ComputerPolicy::Control,
+        );
+        runtime.arm().expect("arm");
+        let state = state_with_computer(Arc::new(Mutex::new(runtime)));
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state.clone()));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                b"POST /api/computer HTTP/1.1\r\nHost: localhost\r\nContent-Length: 17\r\n\r\n{\"action\":\"stop\"}",
+            )
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("\"armed\":false"), "{text}");
+        assert!(text.contains("\"policy\":\"off\""), "{text}");
+        let runtime = state.computer.as_ref().unwrap().lock().unwrap();
+        assert_eq!(runtime.policy(), niucode_computer::ComputerPolicy::Off);
+        assert!(!runtime.is_armed());
+        task.abort();
+    }
+
     #[tokio::test]
     async fn computer_control_requires_a_configured_runtime() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -2638,6 +2712,7 @@ mod tests {
         assert!(INDEX.contains("fetch('/api/prompt'"));
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
+        assert!(INDEX.contains("approval-shot"));
         assert!(INDEX.contains("renderPreview"));
         assert!(INDEX.contains("renderToolCall"));
         assert!(INDEX.contains("tool-card"));
