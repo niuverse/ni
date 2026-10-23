@@ -723,6 +723,61 @@ fn preview_json(preview: Option<&niucode_tools::ChangePreview>) -> Value {
     })
 }
 
+fn harden_links(html: &str) -> String {
+    let mut output = String::new();
+    let mut rest = html;
+    while let Some(start) = rest.find("<a ") {
+        output.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let Some(end) = tail.find('>') else {
+            output.push_str(tail);
+            return output;
+        };
+        let tag = &tail[..=end];
+        let href = tag.find("href=\"").and_then(|start| {
+            let rest = &tag[start + 6..];
+            rest.find('"').map(|end| &rest[..end])
+        });
+        let mut hardened = tag.replacen(
+            "<a ",
+            "<a target=\"_blank\" rel=\"noreferrer noopener\" ",
+            1,
+        );
+        if let Some(href) = href {
+            if !safe_link(href) {
+                let scheme = href
+                    .split(':')
+                    .next()
+                    .unwrap_or("unknown")
+                    .chars()
+                    .filter(|character| character.is_ascii_alphanumeric())
+                    .take(16)
+                    .collect::<String>();
+                hardened = hardened.replacen(
+                    &format!("href=\"{href}\""),
+                    &format!("href=\"#\" data-blocked=\"{scheme}:\""),
+                    1,
+                );
+            }
+        }
+        output.push_str(&hardened);
+        rest = &tail[end + 1..];
+    }
+    output.push_str(rest);
+    output
+}
+
+fn safe_link(href: &str) -> bool {
+    let trimmed = href.trim_start_matches(|character: char| {
+        character.is_ascii_control() || character.is_ascii_whitespace()
+    });
+    let lower = trimmed.to_ascii_lowercase();
+    lower.starts_with("https://")
+        || lower.starts_with("http://")
+        || lower.starts_with("mailto:")
+        || trimmed.starts_with('#')
+}
+
 fn strip_images(html: &str) -> String {
     let mut output = String::new();
     let mut rest = html;
@@ -784,18 +839,7 @@ fn markdown_html(text: &str) -> String {
             .replace(&format!("<p>{token}</p>"), &rendered)
             .replace(&token, &rendered);
     }
-    output
-        .replace(
-            "href=\"javascript:",
-            "href=\"#\" data-blocked=\"javascript:",
-        )
-        .replace("href=\"data:", "href=\"#\" data-blocked=\"data:")
-        .replace("href=\"file:", "href=\"#\" data-blocked=\"file:")
-        .replace("href=\"vbscript:", "href=\"#\" data-blocked=\"vbscript:")
-        .replace(
-            "<a href=",
-            "<a target=\"_blank\" rel=\"noreferrer noopener\" href=",
-        )
+    harden_links(&output)
 }
 
 fn extract_code(text: &str) -> (String, Vec<String>) {
