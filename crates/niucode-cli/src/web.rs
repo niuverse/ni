@@ -1111,13 +1111,15 @@ mod tests {
     #[test]
     fn index_uses_sse_and_has_no_remote_assets() {
         assert!(INDEX.contains("EventSource('/api/events')"));
-        assert!(INDEX.contains("Read-only local chat"));
+        assert!(INDEX.contains("Enter to send"));
         assert!(INDEX.contains("fetch('/api/prompt'"));
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
         assert!(INDEX.contains("renderPreview"));
         assert!(INDEX.contains("renderToolCall"));
         assert!(INDEX.contains("tool-card"));
+        assert!(INDEX.contains("textarea"));
+        assert!(INDEX.contains("Shift+Enter"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1130,6 +1132,8 @@ mod tests {
         assert!(INDEX.contains("ctx-section"));
         assert!(INDEX.contains("loadContext"));
         assert!(INDEX.contains("localStorage"));
+        assert!(INDEX.contains("textarea"));
+        assert!(INDEX.contains("Shift+Enter"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
