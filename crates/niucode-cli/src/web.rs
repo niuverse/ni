@@ -1761,6 +1761,7 @@ mod tests {
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
         assert!(INDEX.contains("Allow session"));
+        assert!(INDEX.contains("expires in"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(INDEX.contains("diff-line"));
@@ -1798,6 +1799,7 @@ mod tests {
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
         assert!(INDEX.contains("Allow session"));
+        assert!(INDEX.contains("expires in"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(!INDEX.contains("http://"));

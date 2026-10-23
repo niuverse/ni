@@ -273,7 +273,20 @@ function renderApproval(e) {
   const allow = node('button',null,'Allow');
   const always = node('button','allow-session','Allow session');
   const deny = node('button','deny','Deny');
+  let remaining = 300;
+  const countdown = node('div','meta','expires in 5:00');
+  const timer = setInterval(() => {
+    remaining -= 1;
+    const minutes = Math.floor(Math.max(remaining, 0) / 60);
+    const seconds = String(Math.max(remaining, 0) % 60).padStart(2, '0');
+    countdown.textContent = remaining > 0 ? 'expires in ' + minutes + ':' + seconds : 'approval expired';
+    if (remaining <= 0) {
+      clearInterval(timer);
+      allow.disabled = always.disabled = deny.disabled = true;
+    }
+  }, 1000);
   const finish = async (allowed, session = false) => {
+    clearInterval(timer);
     allow.disabled = always.disabled = deny.disabled = true;
     try {
       const r = await fetch('/api/approval', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:e.id, allowed, session})});
@@ -282,7 +295,7 @@ function renderApproval(e) {
     } catch (err) { card.appendChild(node('div','meta','error: '+err.message)); }
   };
   allow.onclick = () => finish(true); always.onclick = () => finish(true, true); deny.onclick = () => finish(false);
-  card.appendChild(allow); card.appendChild(always); card.appendChild(deny);
+  card.appendChild(allow); card.appendChild(always); card.appendChild(deny); card.appendChild(countdown);
   log.appendChild(card);
 }
 async function refreshStatus() {

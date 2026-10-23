@@ -72,7 +72,8 @@ client — without turning the event log into presentation data.
 - **Streaming (M9-010)**: runtime deltas broadcast over SSE and finalized by the
   durable assistant event.
 - **Approvals (M9-011)**: browser Allow/Deny releases a blocked approver; previews
-  are serialized; unknown IDs 404. **M9-060** adds Allow session. **M9-024** renders them as readable diffs.
+  are serialized; unknown IDs 404. **M9-060** adds Allow session; **M9-061** adds
+  a visible timeout countdown. **M9-024** renders them as readable diffs.
 - **Markdown (M9-012)**: server-rendered HTML with escaped raw HTML, tables, and
   safe links.
 - **Math (M9-013)**: native MathML from common TeX, escaped fallback, no remote
