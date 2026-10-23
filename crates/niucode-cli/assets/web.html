@@ -137,7 +137,7 @@ const id = document.getElementById('id');
 const live = document.getElementById('live');
 function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
 function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
-let count = 0, streaming = null, streamText = '';
+let count = 0, streaming = null, streamText = '', streamRendered = false;
 let usageTotals = { input: 0, output: 0, cached: 0 };
 function compactTokens(value) {
   if (value >= 1000000) return (value / 1000000).toFixed(1) + 'm';
@@ -199,7 +199,7 @@ function render(e) {
     if (streaming) {
       if (e.html) streaming.innerHTML = e.html; else streaming.textContent = e.text || streamText;
       addMessageCopy(streaming, e.text || streamText);
-      streaming = null; streamText = ''; return;
+      streaming = null; streamText = ''; streamRendered = false; return;
     }
     const d = add('assistant', '');
     if (e.html) { d.innerHTML = e.html; addCopyButtons(d); } else d.textContent = e.text || '';
@@ -211,9 +211,10 @@ function render(e) {
     }
   }
   else if (e.type === 'text_delta') {
-    if (!streaming) { streaming = add('assistant',''); streamText = ''; }
+    if (!streaming) { streaming = add('assistant',''); streamText = ''; streamRendered = false; }
     streamText += e.text || '';
-    if (e.html) streaming.innerHTML = e.html; else streaming.textContent = streamText;
+    if (e.html) { streaming.innerHTML = e.html; streamRendered = true; }
+    else if (!streamRendered) streaming.textContent = streamText;
   }
   else if (e.type === 'tool_call') renderToolCall(e);
   else if (e.type === 'tool_result') renderToolResult(e);
@@ -632,7 +633,7 @@ form.onsubmit = async event => {
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/clear') {
-    log.textContent = ''; streaming = null; streamText = '';
+    log.textContent = ''; streaming = null; streamText = ''; streamRendered = false;
     add('meta','view cleared · session log unchanged');
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }

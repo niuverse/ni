@@ -644,17 +644,28 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
         allowed
     };
     let mut streamed = String::new();
+    let mut last_render = std::time::Instant::now();
+    let mut last_rendered_len = 0;
     let mut observer = move |event: niucode_agent::AgentEvent| {
         match &event {
             niucode_agent::AgentEvent::TextDelta(text) => {
                 streamed.push_str(text);
-                // Local turns are short; re-rendering the accumulated text keeps
-                // partial Markdown visible and is bounded by the turn size.
-                let _ = live.send(json!({
-                    "type": "text_delta",
-                    "text": text,
-                    "html": markdown_html(&streamed),
-                }));
+                // Re-render at most every 100ms or 64 new bytes. The durable
+                // assistant event always renders the final text.
+                let due = last_rendered_len == 0
+                    || streamed.len().saturating_sub(last_rendered_len) >= 64
+                    || last_render.elapsed() >= std::time::Duration::from_millis(100);
+                if due {
+                    last_render = std::time::Instant::now();
+                    last_rendered_len = streamed.len();
+                    let _ = live.send(json!({
+                        "type": "text_delta",
+                        "text": text,
+                        "html": markdown_html(&streamed),
+                    }));
+                } else {
+                    let _ = live.send(json!({"type": "text_delta", "text": text}));
+                }
             }
             _ => {
                 let _ = live.send(crate::event_json(&event));
@@ -2164,6 +2175,7 @@ mod tests {
         assert!(INDEX.contains("trapContextFocus"));
         assert!(INDEX.contains("pre.copyable"));
         assert!(INDEX.contains("addMessageCopy"));
+        assert!(INDEX.contains("streamRendered"));
         assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
@@ -2209,6 +2221,7 @@ mod tests {
         assert!(INDEX.contains("trapContextFocus"));
         assert!(INDEX.contains("pre.copyable"));
         assert!(INDEX.contains("addMessageCopy"));
+        assert!(INDEX.contains("streamRendered"));
         assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));

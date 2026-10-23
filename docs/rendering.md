@@ -85,8 +85,8 @@ client — without turning the event log into presentation data.
   browser via escaped server-rendered HTML. **M9-026** carries multi-line
   block-comment state; **M9-028** keeps triple-quoted strings across lines;
   **M9-033** adds a Copy button.
-- **Streaming (M9-023)**: each text delta carries accumulated rendered HTML, so
-  Markdown forms while the turn is still running.
+- **Streaming (M9-023)**: text deltas carry accumulated rendered HTML so Markdown
+  forms while the turn runs; **M9-078** throttles that render to 100ms/64 bytes.
 - **Tools (M9-025)**: collapsible call/result cards with escaped, bounded
   input/output.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
