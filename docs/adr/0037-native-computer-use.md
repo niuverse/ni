@@ -33,12 +33,14 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    windows, system-level shortcuts, and mismatched target windows remain
    approval-gated or rejected.
 3. **Actions.** v1: `observe`, `click`, `type`, `key`, `scroll`. No drag,
-   clipboard access, app launch, system hotkeys, or macro playback.
+   clipboard access, app launch, system hotkeys, or macro playback. X11 input
+   uses XTEST; ASCII text plus common named keys is the first limit.
 4. **Observation binding.** `observe` returns an opaque observation id, window,
    geometry, screenshot hash, scale, and expiry. Input actions carry the
    observation id, window id, and image-relative coordinates. The runtime
    rechecks window identity/geometry and a 60-second expiry; mismatch rejects
-   rather than executing an approximate click.
+   rather than executing an approximate click. Input is revalidated immediately
+   before XTEST dispatch.
 5. **Lifecycle.** After the session is armed, the model may start/stop
    observation. Input still follows policy. The user can stop or downgrade at
    any time; a global emergency stop releases held keys/buttons. Observation is
