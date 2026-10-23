@@ -380,22 +380,94 @@ fn add_html(value: &mut Value) {
 }
 
 fn markdown_html(text: &str) -> String {
+    let (text, math) = prepare_math(text);
     let mut options = MarkdownOptions::empty();
     options.insert(MarkdownOptions::ENABLE_TABLES);
     options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
-    let parser = Parser::new_ext(text, options).map(|event| match event {
+    let parser = Parser::new_ext(&text, options).map(|event| match event {
         pulldown_cmark::Event::Html(raw) => pulldown_cmark::Event::Text(raw),
         pulldown_cmark::Event::InlineHtml(raw) => pulldown_cmark::Event::Text(raw),
         event => event,
     });
     let mut output = String::new();
     html::push_html(&mut output, parser);
+    for (index, rendered) in math.into_iter().enumerate() {
+        output = output.replace(&format!("@@NIUMATH{index}@@"), &rendered);
+    }
     output
         .replace(
             "href=\"javascript:",
             "href=\"#\" data-blocked=\"javascript:",
         )
         .replace("<a href=", "<a rel=\"noreferrer noopener\" href=")
+}
+
+fn prepare_math(text: &str) -> (String, Vec<String>) {
+    let mut rendered = Vec::new();
+    let mut output = String::new();
+    let mut code = false;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            code = !code;
+            output.push_str(line);
+            continue;
+        }
+        if code {
+            output.push_str(line);
+            continue;
+        }
+        let mut index = 0;
+        let chars: Vec<char> = line.chars().collect();
+        while index < chars.len() {
+            if chars[index] == '\\' && index + 1 < chars.len() {
+                output.push(chars[index]);
+                output.push(chars[index + 1]);
+                index += 2;
+                continue;
+            }
+            if chars[index] != '$' {
+                output.push(chars[index]);
+                index += 1;
+                continue;
+            }
+            let display = chars.get(index + 1) == Some(&'$');
+            let marker = if display { "$$" } else { "$" };
+            let offset = marker.len();
+            if let Some(end) = line[index + offset..].find(marker) {
+                let end = index + offset + end;
+                let expression: String = chars[index + offset..end].iter().collect();
+                if !expression.trim().is_empty() && !expression.contains('\n') {
+                    let style = if display {
+                        latex2mathml::DisplayStyle::Block
+                    } else {
+                        latex2mathml::DisplayStyle::Inline
+                    };
+                    let value = latex2mathml::latex_to_mathml(expression.trim(), style)
+                        .unwrap_or_else(|_| {
+                            format!(
+                                "<code class=\"math\">{}</code>",
+                                escape_html(expression.trim())
+                            )
+                        });
+                    rendered.push(value);
+                    output.push_str(&format!("@@NIUMATH{}@@", rendered.len() - 1));
+                    index = end + marker.len();
+                    continue;
+                }
+            }
+            output.push('$');
+            index += 1;
+        }
+    }
+    (output, rendered)
+}
+
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn response(method: &str, path: &str, snapshot: &[u8]) -> (&'static str, &'static str, Vec<u8>) {
@@ -451,6 +523,13 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn math_is_rendered_as_mathml() {
+        let html = markdown_html("energy $E = mc^2$ and\\n\\n$$\\n\\alpha + \\beta\\n$$");
+        assert!(html.contains("<math"), "{html}");
+        assert!(!html.contains('$') || html.contains("energy"), "{html}");
     }
 
     #[test]
@@ -770,6 +849,7 @@ mod tests {
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
         assert!(INDEX.contains("e.html"));
+        assert!(INDEX.contains("math"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
