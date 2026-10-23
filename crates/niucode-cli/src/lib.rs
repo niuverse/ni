@@ -1416,6 +1416,8 @@ async fn run_actor_once(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    let _ = &mut *config;
     if policy == "off" {
         return Ok(());
     }

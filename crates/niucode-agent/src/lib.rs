@@ -111,6 +111,10 @@ impl ComputerRuntime {
         self.session.is_armed()
     }
 
+    pub fn disarm(&mut self) {
+        self.session.disarm();
+    }
+
     pub fn observe(&mut self, window: Option<WindowId>) -> Result<niucode_computer::Capture> {
         let capture = self
             .backend
