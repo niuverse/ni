@@ -1677,6 +1677,35 @@ mod tests {
     }
 
     #[test]
+    fn index_dom_ids_are_unique_and_referenced_ids_exist() {
+        use std::collections::HashSet;
+        let mut ids = HashSet::new();
+        let mut rest = INDEX;
+        while let Some(index) = rest.find("id=\"") {
+            rest = &rest[index + 4..];
+            if let Some(end) = rest.find('"') {
+                assert!(
+                    ids.insert(rest[..end].to_string()),
+                    "duplicate id {}",
+                    &rest[..end]
+                );
+                rest = &rest[end..];
+            }
+        }
+        let mut refs = HashSet::new();
+        let mut rest = INDEX;
+        while let Some(index) = rest.find("getElementById('") {
+            rest = &rest[index + 16..];
+            if let Some(end) = rest.find('\'') {
+                refs.insert(rest[..end].to_string());
+                rest = &rest[end..];
+            }
+        }
+        let missing = refs.difference(&ids).collect::<Vec<_>>();
+        assert!(missing.is_empty(), "missing ids: {missing:?}");
+    }
+
+    #[test]
     fn index_uses_sse_and_has_no_remote_assets() {
         assert!(INDEX.contains("EventSource('/api/events')"));
         assert!(INDEX.contains("Enter to send"));
