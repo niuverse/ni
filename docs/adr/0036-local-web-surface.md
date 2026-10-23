@@ -30,7 +30,8 @@ the missing piece is a local transport and a rendering client.
 2. **Start read-only.** v0 serves one session plus a live tail: `GET /`,
    `GET /api/session`, `GET /api/health`, `GET /api/events` (chunked SSE), and
    `POST /api/prompt` for one read-only turn at a time (202/409), reading the
-   complete `Content-Length` body up to a 1MiB cap. Runtime deltas
+   complete `Content-Length` body up to a 1MiB cap, and times out stalled reads
+   with 408. Runtime deltas
    are broadcast as ephemeral SSE events while the append-only log remains the
    durable source. Browser prompts use `workspace-write` + `ApprovalMode::Ask`;
    an approval event blocks the turn until `POST /api/approval` allows, allows

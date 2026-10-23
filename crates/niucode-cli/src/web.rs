@@ -225,8 +225,25 @@ async fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String
     Ok((head.to_string(), body.to_string()))
 }
 
+#[cfg(not(test))]
+const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(test)]
+const REQUEST_READ_TIMEOUT: Duration = Duration::from_millis(200);
+
 async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
-    let (head, body) = read_request(&mut stream).await?;
+    let (head, body) =
+        match tokio::time::timeout(REQUEST_READ_TIMEOUT, read_request(&mut stream)).await {
+            Ok(request) => request?,
+            Err(_) => {
+                return send(
+                    &mut stream,
+                    "408 Request Timeout",
+                    "application/json",
+                    br#"{"error":"request read timed out"}"#.to_vec(),
+                )
+                .await;
+            }
+        };
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
@@ -1396,6 +1413,31 @@ mod tests {
         assert!(loopback_origin("http://localhost:8799"));
         assert!(!loopback_origin("https://evil.example"));
         assert!(!loopback_origin("null"));
+    }
+
+    #[tokio::test]
+    async fn stalled_request_bodies_time_out() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state()));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                b"POST /api/prompt HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{}",
+            )
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut reply))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 408"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        task.abort();
     }
 
     #[tokio::test]
