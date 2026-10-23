@@ -897,6 +897,28 @@ mod tests {
         state_with(br#"{}"#.to_vec())
     }
 
+    fn state_at(path: PathBuf, allow_new: bool) -> Arc<State> {
+        Arc::new(State {
+            path: Mutex::new(path),
+            snapshot: Mutex::new(Vec::new()),
+            provider: None,
+            preset: "deepseek".into(),
+            model: "deepseek-flash".into(),
+            cwd: PathBuf::from("."),
+            max_steps: 1,
+            system_prompt: None,
+            context: br#"{}"#.to_vec(),
+            context_provider: None,
+            brand: "niucode".into(),
+            allow_new,
+            new_session_provider: None,
+            busy: AtomicBool::new(false),
+            live: broadcast::channel(8).0,
+            pending: Mutex::new(HashMap::new()),
+            next_approval: AtomicU64::new(1),
+        })
+    }
+
     #[test]
     fn export_markdown_keeps_user_assistant_and_tool_output() {
         let events = vec![
@@ -1102,6 +1124,60 @@ mod tests {
             let text = String::from_utf8_lossy(&reply);
             assert!(text.contains(expected), "{text}");
         }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn exports_markdown_with_an_attachment_header() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            "{\"type\":\"user_message\",\"text\":\"hello export\",\"ts\":0}\n",
+        )
+        .unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state_at(path, true)));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /api/export HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("text/markdown"), "{text}");
+        assert!(
+            text.contains("attachment; filename=\"niucode-session.md\""),
+            "{text}"
+        );
+        assert!(text.contains("# niucode session"), "{text}");
+        assert!(text.contains("hello export"), "{text}");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn new_session_can_be_disabled() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(
+            listener,
+            state_at(PathBuf::from("unused.jsonl"), false),
+        ));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"POST /api/new HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 403"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
         task.abort();
     }
 

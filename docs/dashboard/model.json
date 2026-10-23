@@ -3527,6 +3527,27 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>The web shell was dark-only. A user who needs a light surface or reduced motion\nhad no control, and smooth scroll ignored the OS preference.</p>\n<h2>Scope</h2>\n<ul>\n<li>Promote core colors to CSS variables with a <code>body.light</code> override.</li>\n<li>Add a ☾/☀ header toggle persisted in <code>localStorage</code>.</li>\n<li>Override diff/token/approval colors for light mode.</li>\n<li>Add <code>prefers-reduced-motion</code> CSS and make jump-to-latest use <code>auto</code> when\nreduced motion is requested.</li>\n<li>No server, store, or event changes.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nLight variables cover background, panel, text, border, code.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nToggle persists across reloads.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nLight-mode diff/token overrides remain readable.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nReduced-motion media query exists.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nLatest scroll honors reduced motion.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nStatic client assertions cover theme and motion.</li>\n</ul>\n<h2>Notes</h2>\n<p>The theme is a presentation preference only; it never touches the transcript or\nsession. A future slice can add a high-contrast variant.</p>\n",
       "path": "docs/board/M9-045-web-theme.md"
+    },
+    {
+      "id": "M9-046",
+      "title": "HTTP contract coverage for export and new session",
+      "status": "done",
+      "milestone": "M9",
+      "module": "web",
+      "size": "S",
+      "priority": "P1",
+      "updated": "2026-10-23",
+      "completed": "2026-10-23",
+      "depends_on": [
+        "M9-040",
+        "M9-043"
+      ],
+      "docs": [
+        "adr-0036"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>Export and new-session behavior had unit coverage but their HTTP contracts\n(status, content type, disposition, disabled handling) were untested.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add loopback tests for:\n<ul>\n<li><code>GET /api/export</code> → 200, <code>text/markdown</code>, attachment filename, body.</li>\n<li><code>POST /api/new</code> with <code>allow_new: false</code> → 403.</li>\n</ul>\n</li>\n<li>Keep existing create/allow tests.</li>\n<li>No production behavior change unless a test exposes a defect.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nExport response carries the Markdown content type and disposition.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nExported body includes the session title and user text.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nDisabled new-session returns 403.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests use the same state helper and loopback server.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nFull web test suite passes.</li>\n</ul>\n<h2>Notes</h2>\n<p>These are protocol-level tests; browser behavior remains covered by static client\nassertions.</p>\n",
+      "path": "docs/board/M9-046-web-contract-tests.md"
     }
   ],
   "docs": [
@@ -4963,7 +4984,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 126,
+    "cards": 127,
     "modules": 15,
     "docs": 54,
     "generator": "cargo xtask dashboard"
