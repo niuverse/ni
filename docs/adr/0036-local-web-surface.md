@@ -22,10 +22,10 @@ the missing piece is a local transport and a rendering client.
 
 1. **Local only.** Bind `127.0.0.1`; no `0.0.0.0`, no remote auth, no cloud
    relay. A future opt-in remote mode needs its own ADR and threat model.
-2. **Start read-only.** v0 serves one session snapshot and a static client:
-   `GET /`, `GET /api/session`, `GET /api/health`, and a `POST /api/prompt`
-   placeholder that returns 501. Read-only is a real product surface, not a
-   demo of implied writes.
+2. **Start read-only.** v0 serves one session plus a live tail: `GET /`,
+   `GET /api/session`, `GET /api/health`, `GET /api/events` (chunked SSE), and
+   a `POST /api/prompt` placeholder that returns 501. Read-only is a real
+   product surface, not a demo of implied writes.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This

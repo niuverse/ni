@@ -16,6 +16,7 @@ main { max-width:900px; margin:0 auto; padding:24px 18px 80px; }
 .msg.assistant { border-color:#3fb950; }
 .msg.tool { border-color:#8b949e; color:var(--dim); font-family:ui-monospace,monospace; font-size:13px; white-space:pre-wrap; }
 .meta { color:var(--dim); font-size:12px; margin:2px 0 6px; }
+.live { margin-left:auto; color:var(--dim); font-size:12px; } .live.on { color:#3fb950; }
 details { margin:8px 0; } summary { cursor:pointer; color:var(--dim); }
 input,button { font:inherit; }
 footer { position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid #30363d; padding:10px 18px; color:var(--dim); font-size:13px; }
@@ -23,7 +24,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><b>niucode</b><span id="id" class="meta">loading…</span></header>
+<header><b>niucode</b><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <main id="log"></main>
 <footer>Read-only local viewer · interactive chat and approvals are the next slice · bind 127.0.0.1</footer>
 <script>
@@ -31,23 +32,32 @@ const log = document.getElementById('log');
 const id = document.getElementById('id');
 function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
 function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
-fetch('/api/session').then(r=>r.json()).then(data=>{
-  id.textContent = data.id + ' · ' + data.events.length + ' events';
-  for (const e of data.events) {
-    if (e.type === 'session_start') add('meta','session · '+e.cwd);
-    else if (e.type === 'user_message') add('user', e.text);
-    else if (e.type === 'assistant_message') {
-      const d = add('assistant', e.text || '');
-      if (e.tool_calls && e.tool_calls.length) {
-        const det = node('details'); det.appendChild(node('summary',null,e.tool_calls.length+' tool call(s)'));
-        for (const c of e.tool_calls) det.appendChild(node('div','meta',c.name+' '+JSON.stringify(c.input)));
-        d.appendChild(det);
-      }
+const log = document.getElementById('log');
+const id = document.getElementById('id');
+const live = document.getElementById('live');
+function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
+function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
+let count = 0;
+function render(e) {
+  count += 1;
+  id.textContent = count + ' events';
+  if (e.type === 'session_start') add('meta','session · '+e.cwd);
+  else if (e.type === 'user_message') add('user', e.text);
+  else if (e.type === 'assistant_message') {
+    const d = add('assistant', e.text || '');
+    if (e.tool_calls && e.tool_calls.length) {
+      const det = node('details'); det.appendChild(node('summary',null,e.tool_calls.length+' tool call(s)'));
+      for (const c of e.tool_calls) det.appendChild(node('div','meta',c.name+' '+JSON.stringify(c.input)));
+      d.appendChild(det);
     }
-    else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output)); add('tool','').appendChild(det); }
-    else if (e.type === 'turn_end') add('meta','turn · '+JSON.stringify(e.usage));
   }
-}).catch(err=>{ log.appendChild(node('div','msg tool','failed to load session: '+err)); });
+  else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output)); add('tool','').appendChild(det); }
+  else if (e.type === 'turn_end') add('meta','turn · '+JSON.stringify(e.usage));
+}
+const source = new EventSource('/api/events');
+source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
+source.onerror = () => { live.textContent = '○ reconnecting'; live.className = 'live'; };
+source.onmessage = event => { try { render(JSON.parse(event.data)); } catch (_) {} };
 </script>
 </body>
 </html>
