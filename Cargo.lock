@@ -1457,7 +1457,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "niucode"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1488,7 +1488,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-agent"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-auth"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "keyring",
  "serde",
@@ -1517,7 +1517,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-bench-gateway"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "serde",
@@ -1542,7 +1542,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-extension"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "niucode-provider",
@@ -1555,7 +1555,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-mcp"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "niucode-provider",
@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-provider"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -1584,7 +1584,7 @@ dependencies = [
 
 [[package]]
 name = "niucode-tools"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "globset",
@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

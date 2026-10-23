@@ -13,11 +13,11 @@ async-trait.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
 similar.workspace = true
-niucode-core = { path = "../niucode-core", version = "0.1.6" }
-niucode-extension = { path = "../niucode-extension", version = "0.1.6" }
-niucode-mcp = { path = "../niucode-mcp", version = "0.1.6" }
-niucode-provider = { path = "../niucode-provider", version = "0.1.6" }
-niucode-tools = { path = "../niucode-tools", version = "0.1.6" }
+niucode-core = { path = "../niucode-core", version = "0.1.7" }
+niucode-extension = { path = "../niucode-extension", version = "0.1.7" }
+niucode-mcp = { path = "../niucode-mcp", version = "0.1.7" }
+niucode-provider = { path = "../niucode-provider", version = "0.1.7" }
+niucode-tools = { path = "../niucode-tools", version = "0.1.7" }
 serde_json.workspace = true
 tokio.workspace = true
 
