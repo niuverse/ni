@@ -961,6 +961,7 @@ fn markdown_html(text: &str) -> String {
     options.insert(MarkdownOptions::ENABLE_TABLES);
     options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
     options.insert(MarkdownOptions::ENABLE_TASKLISTS);
+    options.insert(MarkdownOptions::ENABLE_FOOTNOTES);
     let parser = Parser::new_ext(&text, options).map(|event| match event {
         pulldown_cmark::Event::Html(raw) => pulldown_cmark::Event::Text(raw),
         pulldown_cmark::Event::InlineHtml(raw) => pulldown_cmark::Event::Text(raw),
@@ -1442,6 +1443,13 @@ mod tests {
         assert!(html.contains("type=\"checkbox\""), "{html}");
         assert!(html.contains("checked"), "{html}");
         assert!(html.contains("disabled"), "{html}");
+    }
+
+    #[test]
+    fn footnotes_render_with_references() {
+        let html = markdown_html("Text[^1]\n\n[^1]: note");
+        assert!(html.contains("footnote"), "{html}");
+        assert!(html.contains("note"), "{html}");
     }
 
     #[test]
