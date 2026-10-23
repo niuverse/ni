@@ -47,8 +47,9 @@ const MCP_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 use context::non_empty;
 pub use context::{
-    build_handoff, estimate_context, project_history, ContextConfig, Handoff,
-    DEFAULT_COMPACT_AT_PERCENT, DEFAULT_CONTEXT_BUDGET, DEFAULT_KEEP_RECENT_TURNS,
+    build_handoff, estimate_context, project_history, project_history_with_attachments,
+    ContextConfig, Handoff, DEFAULT_COMPACT_AT_PERCENT, DEFAULT_CONTEXT_BUDGET,
+    DEFAULT_KEEP_RECENT_TURNS,
 };
 pub use instructions::{compose_system_prompt, load as load_instructions, Instructions};
 
