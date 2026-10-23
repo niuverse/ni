@@ -43,7 +43,10 @@ aside input { width:100%; margin:0 0 10px; background:var(--bg); color:var(--tex
 .thread-link:hover { background:var(--panel2); color:var(--accent); }
 .ctx-empty { color:var(--dim); font-size:12px; }
 @media (min-width: 980px) { aside { display:block; } main { margin-left:280px; } footer { padding-left:280px; } }
-@media (max-width: 979px) { aside { display:none; } aside.open { display:block; z-index:4; width:min(280px,85vw); box-shadow:8px 0 24px #0008; } }
+#ctx-backdrop { display:none; }
+@media (max-width: 979px) { aside { display:none; } aside.open { display:block; z-index:4; width:min(280px,85vw); box-shadow:8px 0 24px #0008; }
+#ctx-backdrop:not([hidden]) { display:block; position:fixed; top:43px; left:0; right:0; bottom:0; z-index:3; background:#0008; }
+}
 .msg { border-left:3px solid var(--border); padding:8px 14px; margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .msg.user { border-color:var(--accent); }
 .msg.assistant { border-color:#3fb950; }
@@ -112,6 +115,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <body>
 <a class="skip" href="#log">Skip to transcript</a>
 <header><button id="toggle-context" class="chip" title="Toggle context" aria-label="Toggle product context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip" aria-live="polite">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast" aria-label="Toggle theme">☾</button><button id="download" class="chip" title="download session Markdown" aria-label="Download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live" aria-live="polite">○ connecting</span></header>
+<div id="ctx-backdrop" hidden></div>
 <aside id="context" aria-label="Product context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off" aria-label="Filter product context"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off" aria-label="Search transcript"><span id="log-count"></span></div><div id="log" role="log" aria-live="polite" aria-label="Transcript"></div></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…" aria-label="Prompt"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
@@ -425,17 +429,21 @@ async function downloadSession() {
   } catch (error) { document.getElementById('status').textContent = 'export: ' + error.message; }
 }
 document.getElementById('download').onclick = downloadSession;
-document.getElementById('toggle-context').onclick = () => {
-  const aside = document.getElementById('context');
-  const visible = getComputedStyle(aside).display !== 'none';
-  if (visible) {
-    aside.classList.add('hidden');
-    aside.classList.remove('open');
-  } else {
-    aside.classList.remove('hidden');
-    aside.classList.add('open');
-  }
-};
+const ctxAside = document.getElementById('context');
+const ctxBackdrop = document.getElementById('ctx-backdrop');
+const ctxToggle = document.getElementById('toggle-context');
+function setContextOpen(open) {
+  ctxAside.classList.toggle('hidden', !open);
+  ctxAside.classList.toggle('open', open);
+  ctxBackdrop.hidden = !open;
+  if (open) document.getElementById('ctx-filter').focus();
+  else ctxToggle.focus();
+}
+ctxToggle.onclick = () => setContextOpen(getComputedStyle(ctxAside).display === 'none');
+ctxBackdrop.onclick = () => setContextOpen(false);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !ctxBackdrop.hidden) setContextOpen(false);
+});
 const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
 source.onerror = () => { live.textContent = '○ reconnecting'; live.className = 'live'; };
