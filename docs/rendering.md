@@ -91,7 +91,8 @@ client — without turning the event log into presentation data.
   input/output.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
   **M9-029** makes sections collapsible/filterable; **M9-069** makes the
-  sidebar a mobile overlay; **M9-070** adds backdrop/Escape/focus; **M9-030** refreshes them
+  sidebar a mobile overlay; **M9-070** adds backdrop/Escape/focus;
+  **M9-071** adds shortcuts and a Tab trap; **M9-030** refreshes them
   after turns and remembers collapsed groups; **M9-034** emits
   `context_changed` for immediate reloads; **M9-039** shows page-local token
   usage in the header.

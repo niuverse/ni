@@ -2121,6 +2121,8 @@ mod tests {
         assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("aside.open"));
         assert!(INDEX.contains("ctx-backdrop"));
+        assert!(INDEX.contains("trapContextFocus"));
+        assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
@@ -2162,6 +2164,8 @@ mod tests {
         assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("aside.open"));
         assert!(INDEX.contains("ctx-backdrop"));
+        assert!(INDEX.contains("trapContextFocus"));
+        assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
