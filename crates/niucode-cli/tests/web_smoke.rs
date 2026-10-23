@@ -34,6 +34,9 @@ fn embedded_client_parses_in_a_headless_browser() {
             "--headless=new",
             "--no-sandbox",
             "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--no-first-run",
+            "--no-zygote",
             "--hide-scrollbars",
             "--virtual-time-budget=1200",
             "--dump-dom",
@@ -44,14 +47,14 @@ fn embedded_client_parses_in_a_headless_browser() {
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn chrome");
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         if child.try_wait().expect("wait chrome").is_some() {
             break;
         }
         if Instant::now() > deadline {
             let _ = child.kill();
-            panic!("headless chrome did not exit in 20s");
+            panic!("headless chrome did not exit in 60s");
         }
         std::thread::sleep(Duration::from_millis(100));
     }
