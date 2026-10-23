@@ -32,7 +32,8 @@ use a real Markdown/KaTeX renderer.
 3. Buffer consecutive pipe-table lines and render them as a box table only when
    the block ends. Column widths are cell-width based and capped to the
    viewport.
-4. Code fences bypass Markdown parsing and keep the existing syntax highlight.
+4. Code fences bypass Markdown parsing and keep the existing syntax highlight;
+   the fence markers are replaced by a `▎ language` label.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,
    `\alpha`, `\frac`, `\sqrt`); unmatched `$` stays literal. A web surface
    may render full TeX. No terminal TeX engine is promised.

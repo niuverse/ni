@@ -28,6 +28,8 @@ client — without turning the event log into presentation data.
 - Lists, block quotes, task checkboxes, horizontal rules. **M9-003** covers
   `-`/`*` bullets, `☐`/`☑` tasks, and `>` quotes; ordered lists keep `1.`.
 - Table cells reuse inline spans; numeric right alignment.
+- Code fences are hidden and replaced by a `▎ language` label.
+  **M9-004**.
 - Math fallback conventions (`$…$`, `$$…$$`) and copy-friendly output.
   **Included in M9-002**: common symbols, `\frac`, `\sqrt`; unmatched `$` is
   literal.

@@ -144,15 +144,29 @@ impl TerminalSession {
             self.clear()?;
         }
         for line in clean_multiline(text).split('\n') {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                self.flush_table()?;
+                if self.code_block {
+                    self.code_block = false;
+                } else {
+                    let language = trimmed.trim_start_matches("```").trim();
+                    let label = if language.is_empty() {
+                        "code"
+                    } else {
+                        language
+                    };
+                    self.emit_line(&format!("  ▎ {label}"))?;
+                    self.code_block = true;
+                }
+                continue;
+            }
             if !self.code_block && crate::table::is_row(line) {
                 self.table.push(line.to_string());
                 continue;
             }
             self.flush_table()?;
             self.emit_line(line)?;
-            if line.trim_start().starts_with("```") {
-                self.code_block = !self.code_block;
-            }
         }
         stdout().flush()?;
         Ok(())

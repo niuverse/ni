@@ -67,7 +67,10 @@ def main():
             "Energy $E = mc^2$ and $\\alpha \\le \\beta$.\n\n"
             "- first item\n"
             "- [ ] pending task\n"
-            "> quoted line\n"
+            "> quoted line\n\n"
+            "```rust\n"
+            "fn main() {}\n"
+            "```\n"
         )
         (root / "fixture.json").write_text(json.dumps({
             "schema_version": 1,
@@ -86,6 +89,8 @@ def main():
             pane.wait_for("• first item".encode())
             pane.wait_for("☐ pending task".encode())
             pane.wait_for("│ quoted line".encode())
+            pane.wait_for("▎ rust".encode())
+            pane.wait_for(b"fn main")
             # Highlight attributes and box drawing are evidence that the
             # table was rendered as a block, not printed as raw pipes.
             pane.wait_for(b"\x1b[")
@@ -93,6 +98,7 @@ def main():
             assert "├" in decoded and "│ alpha" in decoded, decoded[-3000:]
             assert "**bold**" not in decoded, "bold markers leaked to the terminal"
             assert "| name | value |" not in decoded, "raw table line leaked"
+            assert "```" not in decoded, "code fence leaked to the terminal"
             print("PTY markdown: heading, emphasis, code, and table rendered")
         finally:
             pane.close()
