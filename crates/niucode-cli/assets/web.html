@@ -30,6 +30,8 @@ aside input { width:100%; margin:0 0 10px; background:var(--bg); color:var(--tex
 .ctx-section { border-bottom:1px solid var(--border); padding:4px 0; }
 .ctx-section summary { cursor:pointer; color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.08em; padding:4px 0; }
 .ctx-section summary span { float:right; }
+.thread-link { display:block; width:100%; text-align:left; background:none; border:0; border-radius:4px; color:var(--text); font:12px ui-monospace,monospace; padding:3px 4px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; }
+.thread-link:hover { background:var(--panel2); color:var(--accent); }
 .ctx-empty { color:var(--dim); font-size:12px; }
 @media (min-width: 980px) { aside { display:block; } main { margin-left:280px; } footer { padding-left:280px; } }
 .msg { border-left:3px solid var(--border); padding:8px 14px; margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -282,6 +284,16 @@ const CTX_KEY = 'niucode.context.collapsed';
 function collapsedSections() {
   try { return JSON.parse(localStorage.getItem(CTX_KEY) || '{}'); } catch (_) { return {}; }
 }
+async function switchThread(id) {
+  if (!confirm('Switch to ' + id + '? The current thread will be archived.')) return;
+  try {
+    const response = await fetch('/api/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'switch failed');
+    add('meta', 'switching to ' + id + ' · reloading');
+    setTimeout(() => location.reload(), 400);
+  } catch (error) { add('meta', 'switch: ' + error.message); }
+}
 async function loadContext() {
   try {
     const ctx = await fetch('/api/context').then(r=>r.json());
@@ -302,7 +314,15 @@ async function loadContext() {
       const summary = node('summary',null,title);
       summary.appendChild(node('span',null,String((section.lines || []).length)));
       details.appendChild(summary);
-      for (const line of section.lines || []) details.appendChild(node('p',null,line));
+      for (const line of section.lines || []) {
+      if (section.kind === 'threads') {
+        const link = node('button','thread-link',line);
+        link.onclick = () => switchThread(line);
+        details.appendChild(link);
+      } else {
+        details.appendChild(node('p',null,line));
+      }
+    }
       details.addEventListener('toggle', () => {
         const state = collapsedSections();
         if (details.open) delete state[title]; else state[title] = true;

@@ -630,6 +630,7 @@ pub async fn run() -> Result<()> {
                 context_provider: None,
                 allow_new: true,
                 new_session_provider: None,
+                switch_session_provider: None,
             })
             .await?;
             Ok(())

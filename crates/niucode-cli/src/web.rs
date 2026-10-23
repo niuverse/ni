@@ -25,6 +25,10 @@ use crate::provider_factory::ProviderFactory;
 
 const INDEX: &str = include_str!("../assets/web.html");
 
+type ContextProvider = Arc<dyn Fn() -> Value + Send + Sync>;
+type NewSessionProvider = Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>;
+type SwitchSessionProvider = Arc<dyn Fn(&str) -> Result<PathBuf> + Send + Sync>;
+
 pub struct Options {
     pub session: PathBuf,
     pub port: u16,
@@ -39,11 +43,13 @@ pub struct Options {
     /// Optional product context: title, brand, and sidebar sections.
     pub context: Option<Value>,
     /// Optional live context. When set, `/api/context` calls it per request.
-    pub context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
+    pub context_provider: Option<ContextProvider>,
     /// Allow `POST /api/new` to start a fresh session in the same directory.
     pub allow_new: bool,
     /// Optional embedder hook for product-specific new-session semantics.
-    pub new_session_provider: Option<Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>>,
+    pub new_session_provider: Option<NewSessionProvider>,
+    /// Optional embedder hook for switching to an allowlisted session id.
+    pub switch_session_provider: Option<SwitchSessionProvider>,
 }
 
 struct State {
@@ -56,10 +62,11 @@ struct State {
     max_steps: usize,
     system_prompt: Option<String>,
     context: Vec<u8>,
-    context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
+    context_provider: Option<ContextProvider>,
     brand: String,
     allow_new: bool,
-    new_session_provider: Option<Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>>,
+    new_session_provider: Option<NewSessionProvider>,
+    switch_session_provider: Option<SwitchSessionProvider>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -144,6 +151,7 @@ pub async fn serve(options: Options) -> Result<()> {
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
             allow_new: options.allow_new,
             new_session_provider: options.new_session_provider,
+            switch_session_provider: options.switch_session_provider,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -223,6 +231,9 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     }
     if method == "POST" && path == "/api/new" {
         return new_session(stream, state).await;
+    }
+    if method == "POST" && path == "/api/switch" {
+        return switch_session(stream, state, body).await;
     }
     if method == "POST" && path == "/api/approval" {
         return approval(stream, state, body).await;
@@ -329,6 +340,87 @@ async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Resul
             .await
         }
     }
+}
+
+async fn switch_session(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
+    let Some(provider) = state.switch_session_provider.clone() else {
+        return send(
+            &mut stream,
+            "403 Forbidden",
+            "application/json",
+            br#"{"error":"session switching is not enabled"}"#.to_vec(),
+        )
+        .await;
+    };
+    let id = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_string))
+        .unwrap_or_default();
+    if id.is_empty() {
+        return send(
+            &mut stream,
+            "400 Bad Request",
+            "application/json",
+            br#"{"error":"id is required"}"#.to_vec(),
+        )
+        .await;
+    }
+    if state.busy.swap(true, Ordering::SeqCst) {
+        return send(
+            &mut stream,
+            "409 Conflict",
+            "application/json",
+            br#"{"error":"a turn is already running"}"#.to_vec(),
+        )
+        .await;
+    }
+    let result = provider(&id);
+    state.busy.store(false, Ordering::SeqCst);
+    match result {
+        Ok(path) => {
+            let snapshot = session_snapshot(&path)?;
+            *state.path.lock().unwrap() = path.clone();
+            *state.snapshot.lock().unwrap() = snapshot;
+            send(
+                &mut stream,
+                "200 OK",
+                "application/json",
+                serde_json::to_vec(&json!({
+                    "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
+                    "path": path.display().to_string(),
+                }))?,
+            )
+            .await
+        }
+        Err(error) => {
+            send(
+                &mut stream,
+                "400 Bad Request",
+                "application/json",
+                serde_json::to_vec(&json!({"error": error.to_string()}))?,
+            )
+            .await
+        }
+    }
+}
+
+fn session_snapshot(path: &Path) -> Result<Vec<u8>> {
+    let loaded = load(path)?;
+    let events = loaded
+        .events
+        .iter()
+        .map(|event| {
+            let mut value = serde_json::to_value(event).unwrap_or(Value::Null);
+            add_html(&mut value);
+            value
+        })
+        .collect::<Vec<_>>();
+    Ok(serde_json::to_vec(&json!({
+        "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
+        "path": path.display().to_string(),
+        "warnings": loaded.warnings,
+        "events": events,
+    }))?)
 }
 
 async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
@@ -886,6 +978,7 @@ mod tests {
             brand: "niucode".into(),
             allow_new: true,
             new_session_provider: None,
+            switch_session_provider: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -912,6 +1005,7 @@ mod tests {
             brand: "niucode".into(),
             allow_new,
             new_session_provider: None,
+            switch_session_provider: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1074,6 +1168,7 @@ mod tests {
             brand: "niucode".into(),
             allow_new: true,
             new_session_provider: None,
+            switch_session_provider: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1159,6 +1254,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn switch_session_uses_the_embedder_provider() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("chapter.jsonl");
+        std::fs::write(
+            &target,
+            "{\"type\":\"user_message\",\"text\":\"chapter\",\"ts\":0}\n",
+        )
+        .unwrap();
+        let mut state = state_at(directory.path().join("active.jsonl"), true);
+        let target_for_provider = target.clone();
+        Arc::get_mut(&mut state).unwrap().switch_session_provider = Some(Arc::new(move |id| {
+            if id == "chapter" {
+                Ok(target_for_provider.clone())
+            } else {
+                anyhow::bail!("unknown thread")
+            }
+        }));
+        let state_for_assert = state.clone();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        let body = br#"{"id":"chapter"}"#;
+        stream
+            .write_all(
+                format!(
+                    "POST /api/switch HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(body).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 200"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        assert_eq!(*state_for_assert.path.lock().unwrap(), target);
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn new_session_can_be_disabled() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -1224,6 +1365,7 @@ mod tests {
                 brand: "niucode".into(),
                 allow_new: true,
                 new_session_provider: None,
+                switch_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1299,6 +1441,7 @@ mod tests {
                 brand: "niucode".into(),
                 allow_new: true,
                 new_session_provider: None,
+                switch_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1447,6 +1590,7 @@ mod tests {
                 brand: "niucode".into(),
                 allow_new: true,
                 new_session_provider: None,
+                switch_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1537,6 +1681,7 @@ mod tests {
         assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
+        assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1566,6 +1711,7 @@ mod tests {
         assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
+        assert!(INDEX.contains("switchThread"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
