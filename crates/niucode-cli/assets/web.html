@@ -113,7 +113,8 @@ function render(e) {
   }
   else if (e.type === 'text_delta') {
     if (!streaming) { streaming = add('assistant',''); streamText = ''; }
-    streamText += e.text || ''; streaming.textContent = streamText;
+    streamText += e.text || '';
+    if (e.html) streaming.innerHTML = e.html; else streaming.textContent = streamText;
   }
   else if (e.type === 'tool_call') add('tool','→ '+e.name+' '+JSON.stringify(e.input||{}));
   else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output||e.summary||'')); add('tool','').appendChild(det); }

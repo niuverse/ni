@@ -337,8 +337,23 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
         approval_state.pending.lock().unwrap().remove(&id);
         allowed
     };
+    let mut streamed = String::new();
     let mut observer = move |event: niucode_agent::AgentEvent| {
-        let _ = live.send(crate::event_json(&event));
+        match &event {
+            niucode_agent::AgentEvent::TextDelta(text) => {
+                streamed.push_str(text);
+                // Local turns are short; re-rendering the accumulated text keeps
+                // partial Markdown visible and is bounded by the turn size.
+                let _ = live.send(json!({
+                    "type": "text_delta",
+                    "text": text,
+                    "html": markdown_html(&streamed),
+                }));
+            }
+            _ => {
+                let _ = live.send(crate::event_json(&event));
+            }
+        }
     };
     run_with_history(
         provider.as_ref(),
@@ -893,6 +908,7 @@ mod tests {
         .await;
         delta.expect("text delta over SSE");
         assert!(String::from_utf8_lossy(&live).contains("\"type\":\"phase\""));
+        assert!(String::from_utf8_lossy(&live).contains("\"html\":"));
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             let text = std::fs::read_to_string(&path).unwrap_or_default();
