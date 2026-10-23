@@ -44,6 +44,7 @@ mod terminal;
 mod text_layout;
 mod theme;
 mod tui;
+mod web;
 mod workspace;
 
 pub use niucode_agent::{AgentEvent, EmbedderTool, RunOutcome};
@@ -401,6 +402,14 @@ enum Command {
         #[arg(long, default_value_t = 6)]
         max_goal_turns: usize,
     },
+    /// Serve a read-only local web view of one session
+    Web {
+        /// Session JSONL to display
+        session: PathBuf,
+        /// Loopback port (0 chooses an ephemeral port)
+        #[arg(long, default_value_t = 8787)]
+        port: u16,
+    },
     /// Start the interactive linear TUI
     Tui {
         /// Provider preset: deepseek or openai
@@ -585,6 +594,10 @@ pub async fn run() -> Result<()> {
             if code != 0 {
                 std::process::exit(code);
             }
+            Ok(())
+        }
+        Some(Command::Web { session, port }) => {
+            web::serve(&session, port).await?;
             Ok(())
         }
         Some(Command::Tui {

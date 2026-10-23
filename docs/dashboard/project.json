@@ -447,6 +447,23 @@
         "M7 首轮 96 次配对基线完成；可靠性专项与重复试验待办。M6 保持 active，真实终端 gate 未关闭。",
         "首轮 DeepSeek API 总预算 300 元；参赛容器不持有真实密钥。"
       ]
+    },
+    {
+      "id": "web",
+      "title": "Web surface",
+      "layer": "interface",
+      "status": "active",
+      "paths": [
+        "crates/niucode-cli/src/web.rs",
+        "crates/niucode-cli/assets/web.html"
+      ],
+      "summary": "Loopback-only read-only session viewer: one embedded HTML client and JSON endpoints; chat, SSE, and KaTeX are next.",
+      "contract": "niucode web --session <jsonl> [--port] serves /, /api/session, /api/health; POST /api/prompt is 501. It never mutates the log.",
+      "notes": [
+        "Binds 127.0.0.1 only; no remote auth.",
+        "Embedded static client, no build step or remote assets.",
+        "Event log remains the only truth."
+      ]
     }
   ],
   "relations": [
