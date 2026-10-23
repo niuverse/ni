@@ -36,7 +36,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   per-request visual cap, TUI `/attach`/`@path`, Web upload/drop/paste, CLI
   `--attach`/`--image`.
 - **Memory evidence**: context projection, reopened attachment-store history,
-  and reopened Markdown memory in a second session.
+  reopened Markdown memory in a second session, and fork copies referenced
+  attachments into its own store.
 
 ## Verification
 

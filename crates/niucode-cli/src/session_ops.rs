@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use niucode_agent::{estimate_context, project_history};
+use niucode_attachments::AttachmentStore;
 use niucode_core::{load, now_ms, Event, EventId, SessionLog};
 use niucode_provider::ChatMessage;
 use niucode_tools::Toolbox;
@@ -46,6 +47,7 @@ pub struct ForkReport {
     pub destination: PathBuf,
     pub at: EventId,
     pub copied: usize,
+    pub attachments: usize,
     pub warnings: Vec<String>,
 }
 
@@ -128,14 +130,70 @@ pub fn fork(source: &Path, at: &str, destination_dir: &Path) -> Result<ForkRepor
         parent_event: at.to_string(),
         ts: now_ms(),
     })?;
+    let mut warnings = loaded.warnings;
+    let attachments = copy_attachments(
+        &loaded.events[..=index],
+        source,
+        destination_dir,
+        &mut warnings,
+    )?;
 
     Ok(ForkReport {
         parent: source.to_path_buf(),
         destination: destination.path().to_path_buf(),
         at,
         copied: index + 1,
-        warnings: loaded.warnings,
+        attachments,
+        warnings,
     })
+}
+
+fn copy_attachments(
+    events: &[Event],
+    source: &Path,
+    destination_dir: &Path,
+    warnings: &mut Vec<String>,
+) -> Result<usize> {
+    let Some(source_root) = source.parent().map(|parent| parent.join("attachments")) else {
+        return Ok(0);
+    };
+    if !source_root.exists() {
+        return Ok(0);
+    }
+    let destination_root = destination_dir.join("attachments");
+    if source_root == destination_root {
+        return Ok(0);
+    }
+    let source_label = source_root.display().to_string();
+    let source_store = AttachmentStore::open(source_root)?;
+    let destination_store = AttachmentStore::open(destination_root)?;
+    let mut seen = std::collections::HashSet::new();
+    let mut copied = 0;
+    for event in events {
+        let Event::UserMessage { attachments, .. } = event else {
+            continue;
+        };
+        for reference in attachments {
+            if !seen.insert(reference.sha256.clone()) {
+                continue;
+            }
+            match source_store.load(reference) {
+                Ok(bytes) => {
+                    destination_store.put(
+                        &bytes,
+                        reference.name.as_deref(),
+                        reference.alt.as_deref(),
+                    )?;
+                    copied += 1;
+                }
+                Err(error) => warnings.push(format!(
+                    "attachment {} missing from {}: {error}",
+                    reference.sha256, source_label
+                )),
+            }
+        }
+    }
+    Ok(copied)
 }
 
 fn text_of(event: &Event) -> &str {
@@ -292,6 +350,41 @@ mod tests {
             } if parent == &source.display().to_string() && parent_event == "e000002"
         ));
 
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn fork_copies_referenced_attachments() {
+        let directory = temp_dir("fork-attachments");
+        let store = AttachmentStore::open(directory.join("attachments")).unwrap();
+        let image = store
+            .put(b"\x89PNG\r\n\x1a\nimage", Some("shot.png"), Some("screen"))
+            .unwrap();
+        let source = write_session(
+            &directory,
+            &[
+                start("parent"),
+                Event::UserMessage {
+                    text: "look".into(),
+                    attachments: vec![image.clone()],
+                    ts: 2,
+                },
+                assistant("done"),
+            ],
+        );
+        let forks = directory.join("forks");
+        let report = fork(&source, "e000002", &forks).expect("fork");
+        assert_eq!(report.attachments, 1);
+        let destination_store = AttachmentStore::open(forks.join("attachments")).unwrap();
+        assert_eq!(
+            destination_store.load(&image).unwrap(),
+            b"\x89PNG\r\n\x1a\nimage"
+        );
+        let loaded = load(&report.destination).unwrap();
+        let history =
+            niucode_agent::project_history_with_attachments(&loaded.events, &destination_store, 2)
+                .unwrap();
+        assert!(history.iter().any(|message| message.has_images()));
         fs::remove_dir_all(directory).expect("cleanup");
     }
 

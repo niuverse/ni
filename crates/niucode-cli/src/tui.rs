@@ -1124,6 +1124,12 @@ async fn handle_command(
                     }
                 ))
             );
+            if report.attachments > 0 {
+                println!(
+                    "{}",
+                    out.dim(format!("attachment(s) copied: {}", report.attachments))
+                );
+            }
             println!(
                 "{}",
                 out.dim(format!(

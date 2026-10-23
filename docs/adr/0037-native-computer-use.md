@@ -70,7 +70,8 @@ capped at 10k characters, key names at 64, scroll at 50 steps per action.
    Resumed sessions and queued follow-ups rebuild history through the same
    projection, so compaction and the recent-image window use one rule.
    `project_history_with_attachments` is public for embedders/tests; a reopened
-   content-addressed store is sufficient to rebuild the recent-image window. The local web client uploads via a
+   content-addressed store is sufficient to rebuild the recent-image window.
+   Fork copies referenced attachments into the fork's own store. The local web client uploads via a
    token-gated `/api/attach` (16MiB request cap) and sends refs with the prompt.
 7. **Text attachments.** TUI `/attach` + `/detach` and user-typed `@path`, CLI
    `--attach`/`--image`, and Web drop-paste; a
