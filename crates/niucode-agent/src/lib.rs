@@ -24,6 +24,7 @@ use niucode_provider::{
 };
 use niucode_tools::{ChangePreview, SandboxPolicy, ToolResult, Toolbox};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 mod changes;
 mod context;
@@ -739,10 +740,12 @@ async fn run_engine(
             assemble_tool_calls(pending)?
         };
 
+        let mut logged_calls = tool_calls.clone();
+        redact_tool_calls_for_log(&mut logged_calls);
         session.append(&Event::AssistantMessage {
             text: text.clone(),
             reasoning: non_empty(reasoning.clone()),
-            tool_calls: tool_calls.clone(),
+            tool_calls: logged_calls,
             ts: now_ms(),
         })?;
 
@@ -1366,6 +1369,30 @@ struct PendingCall {
     arguments: String,
 }
 
+/// Typed computer text is sensitive; the JSONL keeps length + SHA-256 rather
+/// than the literal keystrokes. The live call still executes with the original.
+fn redact_tool_calls_for_log(calls: &mut [ToolCall]) {
+    for call in calls {
+        if call.name != "computer"
+            || call.input.get("action").and_then(Value::as_str) != Some("type")
+        {
+            continue;
+        }
+        let Some(text) = call.input.get("text").and_then(Value::as_str) else {
+            continue;
+        };
+        let characters = text.chars().count();
+        let digest: String = Sha256::digest(text.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        call.input["text"] =
+            Value::String(format!("[redacted: {characters} chars sha256:{digest}]"));
+        call.input["text_chars"] = Value::from(characters);
+        call.input["text_sha256"] = Value::String(digest);
+    }
+}
+
 fn assemble_tool_calls(pending: BTreeMap<u32, PendingCall>) -> Result<Vec<ToolCall>> {
     pending
         .into_iter()
@@ -1732,6 +1759,14 @@ mod tests {
                         r#"{"action":"click","observation_id":"obs-1","window_id":7,"x":5,"y":5}"#
                             .to_string(),
                 }),
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 2,
+                    id: Some("type".into()),
+                    name: Some("computer".into()),
+                    arguments:
+                        r#"{"action":"type","observation_id":"obs-1","window_id":7,"text":"hunter2"}"#
+                            .to_string(),
+                }),
                 StreamEvent::Done {
                     finish_reason: Some("tool_calls".into()),
                 },
@@ -1757,7 +1792,7 @@ mod tests {
         )
         .await
         .expect("run");
-        assert_eq!(approvals, 1);
+        assert_eq!(approvals, 2);
         let loaded = niucode_core::load(session.path()).expect("load");
         assert!(loaded.events.iter().any(|event| matches!(
             event,
@@ -1766,6 +1801,41 @@ mod tests {
         assert!(loaded.events.iter().any(|event| matches!(
             event,
             Event::ToolResult { call_id, ok: true, .. } if call_id == "click"
+        )));
+        let typed = loaded
+            .events
+            .iter()
+            .find_map(|event| match event {
+                Event::AssistantMessage { tool_calls, .. } => tool_calls
+                    .iter()
+                    .find(|call| call.input.get("action").and_then(Value::as_str) == Some("type")),
+                _ => None,
+            })
+            .expect("typed call");
+        let logged = typed
+            .input
+            .get("text")
+            .and_then(Value::as_str)
+            .expect("text");
+        assert!(
+            !logged.contains("hunter2"),
+            "plaintext typed text leaked: {logged}"
+        );
+        assert_eq!(
+            typed.input.get("text_chars").and_then(Value::as_u64),
+            Some(7)
+        );
+        assert_eq!(
+            typed
+                .input
+                .get("text_sha256")
+                .and_then(Value::as_str)
+                .map(str::len),
+            Some(64)
+        );
+        assert!(!loaded.events.iter().any(|event| matches!(
+            event,
+            Event::ToolResult { output, .. } if output.contains("hunter2")
         )));
     }
 

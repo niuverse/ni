@@ -1631,6 +1631,7 @@ dependencies = [
  "niucode-provider",
  "niucode-tools",
  "serde_json",
+ "sha2",
  "similar",
  "tempfile",
  "tokio",

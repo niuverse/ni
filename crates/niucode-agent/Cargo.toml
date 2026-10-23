@@ -22,6 +22,7 @@ niucode-mcp = { path = "../niucode-mcp", version = "0.1.8" }
 niucode-provider = { path = "../niucode-provider", version = "0.1.8" }
 niucode-tools = { path = "../niucode-tools", version = "0.1.8" }
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
