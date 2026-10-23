@@ -37,14 +37,14 @@ claim real-desktop or macOS runtime acceptance.
 | C: fork copies attachments | `fork_copies_referenced_attachments` | done |
 | B: cross-session Markdown memory | reopened-store two-session test | done |
 | Kernel/product boundary | computer crates + niuse flags; default TUI remains opt-in | done |
-| Release readiness | 0.1.8/0.1.14, preflight `--skip-package`, runbook | prepared; publish gate open |
+| Release readiness | 0.1.8/0.1.14 published; clean installs pass | done |
 | Real Linux desktop | `docs/computer-acceptance.md` checklist | external gate open |
 | macOS TCC/runtime | acceptance checklist; only compile/unit evidence | external gate open |
 
 ## External gates
 
-1. **Publish authorization.** Irreversible crates.io upload; no `--execute` has
-   run. Full package preflight must follow the kernel publish order.
+1. ~~Publish authorization~~ — completed 2026-10-24; see
+   [published evidence](evidence/published-0.1.8.md).
 2. **Real Linux X11 acceptance.** Run `scripts/computer-dogfood.sh` on a human
    desktop and complete `docs/computer-acceptance.md`.
 3. **macOS acceptance.** Grant Screen Recording + Accessibility on a real Mac,

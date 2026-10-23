@@ -1,16 +1,16 @@
 +++
 id = "release-0.1.8"
-title = "Release 0.1.8 (draft)"
+title = "Release 0.1.8"
 kind = "release"
-status = "draft"
+status = "living"
 order = 71
 summary = "Draft notes: native Linux X11 and macOS computer use, observation-bound input, approvals/emergency stop, and multimodal attachment memory."
 +++
 
 ## Status
 
-Prepared 2026-10-23. The workspace is `0.1.8`; publication is pending an
-explicit maintainer go-ahead. Nothing has been uploaded for this version.
+Published 2026-10-24. All twelve crates are on crates.io and a clean install
+reports `niucode 0.1.8`; see [published evidence](evidence/published-0.1.8.md).
 
 ## Highlights
 
@@ -70,6 +70,5 @@ Detailed steps, clean-install checks, and rollback are in the
 
 ## Caveats
 
-- Pre-release package verification for the new crates cannot succeed against
-  registry `0.1.8` until the dependency order has been published.
 - macOS runtime evidence requires a signed/permission-granted Mac.
+- Real Linux desktop acceptance is still manual.
