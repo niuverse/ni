@@ -971,6 +971,39 @@ struct ComputerExecution {
     images: Vec<String>,
 }
 
+fn audit_computer(
+    session: &SessionLog,
+    action: &ComputerAction,
+    purpose: &str,
+    result: &niucode_tools::ToolResult,
+) -> Result<()> {
+    let (text_chars, text_sha256) = match action {
+        ComputerAction::Type { text, .. } => {
+            let digest: String = Sha256::digest(text.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            (text.chars().count() as u64, Some(digest))
+        }
+        _ => (0, None),
+    };
+    session.append(&Event::ComputerAction {
+        action: action_label(action).to_string(),
+        window_id: action.window_id().map(|window| window.0).unwrap_or(0),
+        observation_id: action
+            .observation_id()
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+        purpose: clean_display(purpose, 200),
+        ok: result.ok,
+        error: (!result.ok).then(|| clean_display(&result.output, 240)),
+        text_chars,
+        text_sha256,
+        ts: now_ms(),
+    })?;
+    Ok(())
+}
+
 async fn execute_computer(
     _provider: &dyn Provider,
     session: &SessionLog,
@@ -979,15 +1012,6 @@ async fn execute_computer(
     call: &ToolCall,
     messages: &mut [ChatMessage],
 ) -> Result<ComputerExecution> {
-    let Some(runtime) = &config.computer else {
-        return Ok(ComputerExecution {
-            result: niucode_tools::ToolResult {
-                ok: false,
-                output: "computer tool is not configured".into(),
-            },
-            images: Vec::new(),
-        });
-    };
     let action = match parse_action(&call.input) {
         Ok(action) => action,
         Err(error) => {
@@ -1006,7 +1030,35 @@ async fn execute_computer(
         .and_then(Value::as_str)
         .unwrap_or("no purpose provided")
         .to_string();
-    let decision = match runtime.lock().unwrap().decide(&action) {
+    let execution = execute_computer_action(
+        _provider, session, config, io, call, messages, &action, &purpose,
+    )
+    .await?;
+    audit_computer(session, &action, &purpose, &execution.result)?;
+    Ok(execution)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn execute_computer_action(
+    _provider: &dyn Provider,
+    session: &SessionLog,
+    config: &AgentConfig,
+    io: &mut runtime::RunIo<'_>,
+    call: &ToolCall,
+    messages: &mut [ChatMessage],
+    action: &ComputerAction,
+    purpose: &str,
+) -> Result<ComputerExecution> {
+    let Some(runtime) = &config.computer else {
+        return Ok(ComputerExecution {
+            result: niucode_tools::ToolResult {
+                ok: false,
+                output: "computer tool is not configured".into(),
+            },
+            images: Vec::new(),
+        });
+    };
+    let decision = match runtime.lock().unwrap().decide(action) {
         Ok(decision) => decision,
         Err(error) => {
             return Ok(ComputerExecution {
@@ -1032,21 +1084,21 @@ async fn execute_computer(
             let (window, approval_frame) = {
                 let runtime = runtime.lock().unwrap();
                 (
-                    runtime.window_for(&action).map(|window| {
+                    runtime.window_for(action).map(|window| {
                         format!(
                             "{} — {}",
                             clean_display(&window.app, 60),
                             clean_display(&window.title, 80)
                         )
                     }),
-                    runtime.frame_for(&action),
+                    runtime.frame_for(action),
                 )
             };
             let window = window.unwrap_or_else(|| "unobserved window".into());
             let summary = format!(
                 "computer {} on {window}. Purpose: {}",
-                action_detail(&action),
-                clean_display(&purpose, 200)
+                action_detail(action),
+                clean_display(purpose, 200)
             );
             if !io
                 .approve(
@@ -1083,7 +1135,7 @@ async fn execute_computer(
         PolicyDecision::Allowed => {}
     }
 
-    if let ComputerAction::Observe { window_id } = &action {
+    if let ComputerAction::Observe { window_id } = action {
         let capture = {
             let mut runtime = runtime.lock().unwrap();
             runtime.observe(*window_id)
@@ -1106,7 +1158,7 @@ async fn execute_computer(
                 "computer observe sensitive window {} — {}. Purpose: {}",
                 clean_display(&capture.observation.window.app, 60),
                 clean_display(&capture.observation.window.title, 80),
-                clean_display(&purpose, 200)
+                clean_display(purpose, 200)
             );
             let image = approval_image(&capture.png);
             if !io
@@ -1183,8 +1235,8 @@ async fn execute_computer(
 
     let input = {
         let mut runtime = runtime.lock().unwrap();
-        match runtime.validate(&action, now_ms()) {
-            Ok(observation) => runtime.perform(&action, &observation),
+        match runtime.validate(action, now_ms()) {
+            Ok(observation) => runtime.perform(action, &observation),
             Err(error) => Err(anyhow::anyhow!(error.to_string())),
         }
     };
@@ -1192,7 +1244,7 @@ async fn execute_computer(
         Ok(()) => Ok(ComputerExecution {
             result: niucode_tools::ToolResult {
                 ok: true,
-                output: format!("computer {} completed", action_label(&action)),
+                output: format!("computer {} completed", action_label(action)),
             },
             images: Vec::new(),
         }),
@@ -2330,6 +2382,27 @@ mod tests {
         assert!(!loaded.events.iter().any(|event| matches!(
             event,
             Event::ToolResult { output, .. } if output.contains("hunter2")
+        )));
+        let typed_audit = loaded
+            .events
+            .iter()
+            .find_map(|event| match event {
+                Event::ComputerAction {
+                    action,
+                    text_chars,
+                    text_sha256,
+                    purpose,
+                    ..
+                } if action == "type" => Some((*text_chars, text_sha256.clone(), purpose.clone())),
+                _ => None,
+            })
+            .expect("typed audit");
+        assert_eq!(typed_audit.0, 7);
+        assert_eq!(typed_audit.1.as_deref().map(str::len), Some(64));
+        assert_eq!(typed_audit.2, "no purpose provided");
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::ComputerAction { action, ok: true, .. } if action == "click"
         )));
     }
 

@@ -218,6 +218,7 @@ fn project_history_inner(
             | Event::TurnEnd { .. }
             | Event::Policy { .. }
             | Event::Approval { .. }
+            | Event::ComputerAction { .. }
             | Event::Fork { .. }
             | Event::SubagentSpawn { .. }
             | Event::SubagentResult { .. }

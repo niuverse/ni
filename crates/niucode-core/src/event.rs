@@ -197,6 +197,25 @@ pub enum Event {
         allowed: bool,
         ts: Timestamp,
     },
+    /// Structured audit for one native computer action. Typed text is never
+    /// stored; type actions carry length + SHA-256 only.
+    ComputerAction {
+        action: String,
+        #[serde(default)]
+        window_id: u64,
+        #[serde(default)]
+        observation_id: String,
+        #[serde(default)]
+        purpose: String,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+        #[serde(default)]
+        text_chars: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text_sha256: Option<String>,
+        ts: Timestamp,
+    },
     /// Provenance for a session created by `niucode fork`.
     Fork {
         parent: String,
@@ -379,6 +398,7 @@ impl Event {
             Self::Compaction { .. } => "compaction",
             Self::Policy { .. } => "policy",
             Self::Approval { .. } => "approval",
+            Self::ComputerAction { .. } => "computer_action",
             Self::Fork { .. } => "fork",
             Self::SubagentSpawn { .. } => "subagent_spawn",
             Self::SubagentResult { .. } => "subagent_result",
@@ -416,6 +436,7 @@ impl Event {
             | Self::Compaction { ts, .. }
             | Self::Policy { ts, .. }
             | Self::Approval { ts, .. }
+            | Self::ComputerAction { ts, .. }
             | Self::Fork { ts, .. }
             | Self::SubagentSpawn { ts, .. }
             | Self::SubagentResult { ts, .. }
