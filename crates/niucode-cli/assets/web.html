@@ -11,6 +11,9 @@ body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 ui-sans
 header { position:sticky; top:0; z-index:2; background:var(--panel); border-bottom:1px solid #30363d; padding:12px 18px; display:flex; gap:12px; align-items:center; }
 header b { color:var(--accent); }
 main { max-width:900px; margin:0 auto; padding:24px 18px 140px; }
+.log-tools { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+.log-tools input { max-width:280px; padding:6px 9px; font-size:12px; }
+.log-tools span { color:var(--dim); font-size:11px; }
 aside { position:fixed; top:53px; bottom:70px; left:0; width:260px; overflow:auto; border-right:1px solid #30363d; padding:14px; background:#10151c; display:none; }
 aside h4 { margin:14px 0 4px; color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
 aside p { margin:2px 0; font-size:12px; color:var(--text); overflow-wrap:anywhere; white-space:pre-wrap; }
@@ -83,7 +86,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <body>
 <header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="download" class="chip" title="download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
-<main id="log"></main>
+<main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off"><span id="log-count"></span></div><div id="log"></div></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
@@ -287,6 +290,21 @@ async function loadContext() {
 }
 loadContext();
 setInterval(loadContext, 15000);
+function filterTranscript() {
+  const query = document.getElementById('log-filter').value.trim().toLowerCase();
+  let visible = 0, total = 0;
+  for (const item of document.getElementById('log').children) {
+    total += 1;
+    const match = !query || item.textContent.toLowerCase().includes(query);
+    item.hidden = !match;
+    if (match) visible += 1;
+  }
+  document.getElementById('log-count').textContent = query ? visible + ' / ' + total : '';
+}
+document.getElementById('log-filter').addEventListener('input', filterTranscript);
+document.getElementById('log-filter').addEventListener('keydown', event => {
+  if (event.key === 'Escape') { document.getElementById('log-filter').value = ''; filterTranscript(); }
+});
 function filterContext() {
   const query = document.getElementById('ctx-filter').value.trim().toLowerCase();
   for (const section of document.querySelectorAll('.ctx-section')) {
