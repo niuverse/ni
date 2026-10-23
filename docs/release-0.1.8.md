@@ -20,8 +20,9 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   id, window id, image-relative coordinates, expiry, and id/app/class/kind +
   geometry rechecks before dispatch.
 - **Permissions**: `off | observe | control | autonomous`, explicit arm,
-  per-action approval for control, terminal/sensitive red lines, sensitive
-  observation approval, Ctrl-C emergency stop and input release.
+  per-action approval for control, terminal/sensitive red lines, an expanded
+  system-shortcut list, sensitive observation approval, Ctrl-C emergency stop
+  and input release.
 - **Agent tool**: `computer` returns the screenshot as a tool image part;
   action failures stay ToolResults; approvals show safe action details and are
   audited, typed text is persisted only as length + SHA-256 unless

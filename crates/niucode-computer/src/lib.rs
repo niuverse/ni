@@ -316,9 +316,15 @@ impl KeyChord {
         let ctrl = self.modifiers.contains(&Modifier::Ctrl);
         let alt = self.modifiers.contains(&Modifier::Alt);
         let super_key = self.modifiers.contains(&Modifier::Super);
+        let function_key = key
+            .strip_prefix('f')
+            .and_then(|number| number.parse::<u8>().ok())
+            .is_some_and(|number| (1..=12).contains(&number));
         super_key
-            || (alt && key == "f4")
-            || (ctrl && alt && matches!(key.as_str(), "delete" | "escape"))
+            || (alt && matches!(key.as_str(), "f4" | "tab" | "escape"))
+            || (ctrl
+                && alt
+                && (matches!(key.as_str(), "delete" | "backspace" | "escape") || function_key))
     }
 }
 
@@ -842,8 +848,15 @@ mod tests {
             PolicyDecision::Allowed
         );
         assert!(KeyChord::new(vec![Modifier::Alt], "F4").is_system_shortcut());
+        assert!(KeyChord::new(vec![Modifier::Alt], "Tab").is_system_shortcut());
+        assert!(KeyChord::new(vec![Modifier::Alt], "Escape").is_system_shortcut());
         assert!(KeyChord::new(vec![Modifier::Ctrl, Modifier::Alt], "Delete").is_system_shortcut());
+        assert!(
+            KeyChord::new(vec![Modifier::Ctrl, Modifier::Alt], "Backspace").is_system_shortcut()
+        );
+        assert!(KeyChord::new(vec![Modifier::Ctrl, Modifier::Alt], "F2").is_system_shortcut());
         assert!(!KeyChord::new(vec![Modifier::Ctrl], "c").is_system_shortcut());
+        assert!(!KeyChord::new(vec![Modifier::Ctrl, Modifier::Alt], "a").is_system_shortcut());
     }
 
     #[test]
