@@ -34,6 +34,10 @@ aside p { margin:2px 0; font-size:12px; color:var(--text); overflow-wrap:anywher
 .meta { color:var(--dim); font-size:12px; margin:2px 0 6px; }
 .live { margin-left:auto; color:var(--dim); font-size:12px; } .live.on { color:#3fb950; }
 .chip { border:1px solid #30363d; border-radius:999px; padding:1px 8px; font-size:11px; color:var(--dim); white-space:nowrap; }
+#busy { color:var(--accent); }
+#busy.working { border-color:var(--accent); }
+aside.hidden { display:none !important; }
+#toggle-context { cursor:pointer; background:none; }
 #cwd { max-width:320px; overflow:hidden; text-overflow:ellipsis; }
 @media (max-width: 760px) { #cwd, #mode { display:none; } }
 details { margin:8px 0; } summary { cursor:pointer; color:var(--dim); }
@@ -53,7 +57,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><div class="ctx-empty">loading context…</div></aside>
 <main id="log"></main>
 <footer><form id="composer"><input id="prompt" autocomplete="off" placeholder="Ask for a read-only task…"><button id="send">Send</button></form><div id="status">Read-only local chat · bind 127.0.0.1</div></footer>
@@ -64,6 +68,29 @@ const live = document.getElementById('live');
 function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
 function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
 let count = 0, streaming = null, streamText = '';
+let turnStart = null, turnTimer = null, turnPhase = 'working';
+function beginTurn(phase) {
+  if (phase) turnPhase = phase;
+  if (turnStart === null) {
+    turnStart = Date.now();
+    turnTimer = setInterval(() => {
+      const elapsed = ((Date.now() - turnStart) / 1000).toFixed(1);
+      document.getElementById('busy').textContent = turnPhase + ' ' + elapsed + 's';
+    }, 200);
+  }
+  const busy = document.getElementById('busy');
+  busy.textContent = turnPhase + ' 0.0s';
+  busy.classList.add('working');
+}
+function endTurn() {
+  if (turnTimer) { clearInterval(turnTimer); turnTimer = null; }
+  const elapsed = turnStart === null ? 0 : (Date.now() - turnStart) / 1000;
+  turnStart = null;
+  const busy = document.getElementById('busy');
+  busy.textContent = 'idle';
+  busy.classList.remove('working');
+  return elapsed.toFixed(1);
+}
 function render(e) {
   count += 1;
   id.textContent = count + ' events';
@@ -88,8 +115,9 @@ function render(e) {
   }
   else if (e.type === 'tool_call') add('tool','→ '+e.name+' '+JSON.stringify(e.input||{}));
   else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output||e.summary||'')); add('tool','').appendChild(det); }
-  else if (e.type === 'approval') renderApproval(e);
-  else if (e.type === 'turn_end') add('meta','turn · '+JSON.stringify(e.usage));
+  else if (e.type === 'approval') { beginTurn('approval'); renderApproval(e); }
+  else if (e.type === 'phase') { if (e.phase === 'done') endTurn(); else beginTurn(e.phase); }
+  else if (e.type === 'turn_end') { const elapsed = endTurn(); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); }
 }
 function renderApproval(e) {
   const card = node('div','approval');
@@ -116,6 +144,7 @@ async function refreshStatus() {
     document.getElementById('model').textContent = status.model || status.provider || 'model';
     document.getElementById('cwd').textContent = status.cwd || '';
     document.getElementById('mode').textContent = (status.sandbox || '') + ' / ' + (status.approval || '');
+    if (turnStart === null) document.getElementById('busy').textContent = status.busy ? 'working' : 'idle';
   } catch (_) {}
 }
 refreshStatus(); setInterval(refreshStatus, 2500);
@@ -133,6 +162,9 @@ fetch('/api/context').then(r=>r.json()).then(ctx=>{
     for (const line of section.lines || []) aside.appendChild(node('p',null,line));
   }
 }).catch(()=>{});
+document.getElementById('toggle-context').onclick = () => {
+  document.getElementById('context').classList.toggle('hidden');
+};
 const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
 source.onerror = () => { live.textContent = '○ reconnecting'; live.className = 'live'; };
@@ -145,7 +177,7 @@ form.onsubmit = async event => {
   event.preventDefault();
   const prompt = input.value.trim();
   if (!prompt) return;
-  send.disabled = true; status.textContent = 'sending…';
+  send.disabled = true; status.textContent = 'sending…'; beginTurn('sending');
   try {
     const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
     const data = await response.json();

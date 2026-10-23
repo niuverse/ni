@@ -62,7 +62,9 @@ client — without turning the event log into presentation data.
   assets. KaTeX remains an optional upgrade.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
 - **Status (M9-016)**: model/cwd/policy chips from `/api/status`.
-  See [ADR-0036](adr/0036-local-web-surface.md).
+- **Turn timer (M9-017)**: SSE phases drive a busy chip and elapsed timer; the
+  context sidebar can be collapsed. See
+  [ADR-0036](adr/0036-local-web-surface.md).
 - A local HTTP + SSE server over the same agent loop and event log.
 - Static, no-build client; Markdown and KaTeX rendering.
 - Session list, streaming answer, tool/approval cards, cancel.

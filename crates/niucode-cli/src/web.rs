@@ -796,6 +796,7 @@ mod tests {
         })
         .await;
         delta.expect("text delta over SSE");
+        assert!(String::from_utf8_lossy(&live).contains("\"type\":\"phase\""));
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -955,6 +956,8 @@ mod tests {
         assert!(INDEX.contains("math"));
         assert!(INDEX.contains("/api/context"));
         assert!(INDEX.contains("/api/status"));
+        assert!(INDEX.contains("beginTurn"));
+        assert!(INDEX.contains("toggle-context"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
