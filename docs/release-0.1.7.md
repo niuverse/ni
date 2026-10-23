@@ -29,6 +29,9 @@ release requires a coordinated bump and publication order.
 
 ## Verification
 
+Publish dry run: all eight publishable crates package/verify; nothing uploaded
+([evidence](evidence/publish-dry-run.md)).
+
 ```sh
 cargo +1.88.0 check --workspace --all-targets
 cargo test --workspace

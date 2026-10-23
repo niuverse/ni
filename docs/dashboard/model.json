@@ -4210,6 +4210,26 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>Every text delta re-rendered the entire accumulated Markdown and sent the full\nHTML: O(n²) work for long answers.</p>\n<h2>Scope</h2>\n<ul>\n<li>Render/send accumulated HTML at most every 100ms or 64 new bytes.</li>\n<li>Other deltas carry only <code>text</code>.</li>\n<li>The durable <code>assistant_message</code> always renders the final text.</li>\n<li>Client ignores text-only deltas after it has HTML, avoiding a plain-text\ndowngrade; before the first HTML it still shows plain text.</li>\n<li>Reset stream render state on final/clear/new bubble.</li>\n<li>Tested by the existing scripted turn (first delta still has HTML).</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nFirst delta includes HTML.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nThrottled deltas omit HTML.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nFinal assistant event has HTML.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nClient does not downgrade rendered HTML.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nExisting streaming tests pass.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo change to the durable event log.</li>\n</ul>\n<h2>Notes</h2>\n<p>This is a fixed-rate throttle, not an incremental Markdown parser. A future\nslice can render only the changed tail.</p>\n",
       "path": "docs/board/M9-078-stream-throttle.md"
+    },
+    {
+      "id": "M9-079",
+      "title": "Publish dry run for all crates",
+      "status": "done",
+      "milestone": "M9",
+      "module": "cli",
+      "size": "S",
+      "priority": "P0",
+      "updated": "2026-10-23",
+      "completed": "2026-10-23",
+      "depends_on": [
+        "M9-052"
+      ],
+      "docs": [
+        "release"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p>Release packaging was only checked for the <code>niucode</code> CLI. Foundation crates and\nthe embedded asset could still fail after a version bump.</p>\n<h2>Scope</h2>\n<ul>\n<li><code>cargo publish --dry-run</code> for all eight publishable crates in dependency order.</li>\n<li>Record package/verify/upload status in evidence.</li>\n<li>Do not upload, bump versions, or tag.</li>\n<li>State what the dry run does and does not prove.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nAll eight crates package and verify.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nUpload is aborted by dry-run for each.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nEvidence lists the exact command and HEAD.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nEmbedded assets are covered by the CLI package.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nHuman approval remains the release gate.</li>\n</ul>\n<h2>Notes</h2>\n<p>The dry run uses the current <code>0.1.6</code> versions; a release still needs a\ncoordinated bump and registry publication.</p>\n",
+      "path": "docs/board/M9-079-publish-dry-run.md"
     }
   ],
   "docs": [
@@ -4544,6 +4564,17 @@
       "excerpt": "只在流尚未产生事件时重试 network/decode/retryable HTTP；上下文溢出强制 compact 后重试；默认 max-steps=0（256 安全上限）；/compact 手动压缩。"
     },
     {
+      "id": "publish-dry-run",
+      "title": "Publish dry run · niucode 0.1.6",
+      "kind": "doc",
+      "status": "done",
+      "order": 43,
+      "summary": "All eight publishable niucode crates package and verify under cargo publish --dry-run; nothing was uploaded.",
+      "body_html": "<h2>Context</h2>\n<p>Date: 2026-10-23. HEAD: <code>3adc37f</code>. Workspace versions: <code>0.1.6</code>.\nThis is packaging verification for the next coordinated release, not a publish.</p>\n<h2>Command</h2>\n<pre><code class=\"language-sh\">for crate in niucode-core niucode-auth niucode-provider niucode-tools \\\n             niucode-agent niucode-extension niucode-mcp niucode; do\n  cargo publish --dry-run -p \"$crate\" --allow-dirty\ndone\n</code></pre>\n<h2>Result</h2>\n<div class=\"table-wrap\"><table><thead><tr><th>Crate</th><th>Package</th><th>Verify</th><th>Upload</th></tr></thead><tbody>\n<tr><td>niucode-core</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-auth</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-provider</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-tools</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-agent</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-extension</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode-mcp</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n<tr><td>niucode</td><td>pass</td><td>pass</td><td>aborted (dry run)</td></tr>\n</tbody></table></div>\n<p>Every crate reported <code>warning: aborting upload due to dry run</code>.</p>\n<h2>What this proves</h2>\n<ul>\n<li>Each crate packages the expected files.</li>\n<li>Each packaged crate compiles in isolation enough for Cargo's verification.</li>\n<li>The embedded <code>assets/web.html</code> is present in the <code>niucode</code> package.</li>\n<li>The publish order is mechanically plausible.</li>\n</ul>\n<h2>What this does not prove</h2>\n<ul>\n<li>It does not upload, tag, or bump versions.</li>\n<li>It does not prove crates.io index propagation or <code>cargo install</code>.</li>\n<li>It does not replace human approval for the release.</li>\n<li><code>xtask</code> and <code>niucode-bench-gateway</code> are not published.</li>\n</ul>\n",
+      "path": "docs/evidence/publish-dry-run.md",
+      "excerpt": "All eight publishable niucode crates package and verify under cargo publish --dry-run; nothing was uploaded."
+    },
+    {
       "id": "adr-0017",
       "title": "ADR-0017：Provider seam 与跨 provider model catalog",
       "kind": "adr",
@@ -4803,7 +4834,7 @@
       "status": "draft",
       "order": 70,
       "summary": "Draft notes for the next niucode release: local web surface, streaming Markdown, approvals, TUI rendering, and verification evidence.",
-      "body_html": "<h2>Status</h2>\n<p>Draft. Not published. Version numbers in the workspace are still 0.1.6; a\nrelease requires a coordinated bump and publication order.</p>\n<h2>Highlights</h2>\n<ul>\n<li><strong>Local web surface</strong> (<code>niucode web --session &lt;jsonl&gt;</code>): loopback-only HTTP +\nSSE, embedded client, no build step, no remote assets. See ADR-0036.</li>\n<li><strong>Browser chat</strong>: read-only/workspace-write turns, streamed Markdown and\nMathML, visible approvals with structured diffs, tool cards, session export,\ntranscript search, prompt history, and slash commands.</li>\n<li><strong>TUI rendering</strong>: inline Markdown, tables with styled cells, lists/rules,\nmath fallback, code-fence labels, token highlighting, and multi-line code\ncomment/string state.</li>\n<li><strong>Motion/progress</strong>: streaming caret, per-tool elapsed footer, compact\nper-tool markers.</li>\n<li><strong>Web status/context</strong>: model/cwd/policy chips, turn timer, token usage,\nproduct context sidebar, <code>context_changed</code> refresh.</li>\n</ul>\n<h2>Verification</h2>\n<pre><code class=\"language-sh\">cargo +1.88.0 check --workspace --all-targets\ncargo test --workspace\ncargo clippy --workspace --all-targets -- -D warnings\ncargo package -p niucode --allow-dirty\n</code></pre>\n<p>Last run: MSRV clean, workspace tests/clippy green, package verifies and\nincludes <code>assets/web.html</code> and <code>src/web.rs</code>.</p>\n<h2>Release order</h2>\n<ol>\n<li>Bump all niucode workspace crates to <code>0.1.7</code>; update sibling version\nrequirements.</li>\n<li>Publish foundation crates first (<code>niucode-core</code>, <code>niucode-auth</code>,\n<code>niucode-provider</code>, <code>niucode-tools</code>, <code>niucode-agent</code>, ...), then\n<code>niucode-mcp</code>, <code>niucode</code>, if the release includes those changes.</li>\n<li>Verify <code>cargo install niucode --version 0.1.7</code>.</li>\n<li>Bump niuse to <code>0.1.13</code>, require <code>niucode = 0.1.7</code>, publish.</li>\n<li>Update <code>niuse/niucode.rev</code> and <code>docs/compat.md</code>.</li>\n</ol>\n<h2>Blockers</h2>\n<ul>\n<li>Human approval to publish.</li>\n<li>Version bump has not been applied.</li>\n<li>Registry package verification cannot pass for a new sibling API until the\nfoundation crates are published; the CLI package itself verifies at the\ncurrent version.</li>\n</ul>\n",
+      "body_html": "<h2>Status</h2>\n<p>Draft. Not published. Version numbers in the workspace are still 0.1.6; a\nrelease requires a coordinated bump and publication order.</p>\n<h2>Highlights</h2>\n<ul>\n<li><strong>Local web surface</strong> (<code>niucode web --session &lt;jsonl&gt;</code>): loopback-only HTTP +\nSSE, embedded client, no build step, no remote assets. See ADR-0036.</li>\n<li><strong>Browser chat</strong>: read-only/workspace-write turns, streamed Markdown and\nMathML, visible approvals with structured diffs, tool cards, session export,\ntranscript search, prompt history, and slash commands.</li>\n<li><strong>TUI rendering</strong>: inline Markdown, tables with styled cells, lists/rules,\nmath fallback, code-fence labels, token highlighting, and multi-line code\ncomment/string state.</li>\n<li><strong>Motion/progress</strong>: streaming caret, per-tool elapsed footer, compact\nper-tool markers.</li>\n<li><strong>Web status/context</strong>: model/cwd/policy chips, turn timer, token usage,\nproduct context sidebar, <code>context_changed</code> refresh.</li>\n</ul>\n<h2>Verification</h2>\n<p>Publish dry run: all eight publishable crates package/verify; nothing uploaded\n(<a href=\"evidence/publish-dry-run.md\">evidence</a>).</p>\n<pre><code class=\"language-sh\">cargo +1.88.0 check --workspace --all-targets\ncargo test --workspace\ncargo clippy --workspace --all-targets -- -D warnings\ncargo package -p niucode --allow-dirty\n</code></pre>\n<p>Last run: MSRV clean, workspace tests/clippy green, package verifies and\nincludes <code>assets/web.html</code> and <code>src/web.rs</code>.</p>\n<h2>Release order</h2>\n<ol>\n<li>Bump all niucode workspace crates to <code>0.1.7</code>; update sibling version\nrequirements.</li>\n<li>Publish foundation crates first (<code>niucode-core</code>, <code>niucode-auth</code>,\n<code>niucode-provider</code>, <code>niucode-tools</code>, <code>niucode-agent</code>, ...), then\n<code>niucode-mcp</code>, <code>niucode</code>, if the release includes those changes.</li>\n<li>Verify <code>cargo install niucode --version 0.1.7</code>.</li>\n<li>Bump niuse to <code>0.1.13</code>, require <code>niucode = 0.1.7</code>, publish.</li>\n<li>Update <code>niuse/niucode.rev</code> and <code>docs/compat.md</code>.</li>\n</ol>\n<h2>Blockers</h2>\n<ul>\n<li>Human approval to publish.</li>\n<li>Version bump has not been applied.</li>\n<li>Registry package verification cannot pass for a new sibling API until the\nfoundation crates are published; the CLI package itself verifies at the\ncurrent version.</li>\n</ul>\n",
       "path": "docs/release-0.1.7.md",
       "excerpt": "Draft notes for the next niucode release: local web surface, streaming Markdown, approvals, TUI rendering, and verification evidence."
     },
@@ -5668,9 +5699,9 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 159,
+    "cards": 160,
     "modules": 15,
-    "docs": 56,
+    "docs": 57,
     "generator": "cargo xtask dashboard"
   }
 }
