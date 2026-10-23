@@ -1145,11 +1145,21 @@ fn export_markdown(events: &[Event]) -> String {
                 out.push_str(text);
                 out.push_str("\n\n");
             }
-            Event::AssistantMessage { text, .. } => {
+            Event::AssistantMessage {
+                text, tool_calls, ..
+            } => {
                 if !text.trim().is_empty() {
                     out.push_str("## Assistant\n\n");
                     out.push_str(text);
                     out.push_str("\n\n");
+                }
+                for call in tool_calls {
+                    out.push_str(&format!("### Tool call · {}\n\n````json\n", call.name));
+                    out.push_str(
+                        &serde_json::to_string_pretty(&call.input)
+                            .unwrap_or_else(|_| "{}".to_string()),
+                    );
+                    out.push_str("\n````\n\n");
                 }
             }
             Event::ToolResult { ok, output, .. } => {
@@ -1286,7 +1296,11 @@ mod tests {
             Event::AssistantMessage {
                 text: "world".into(),
                 reasoning: None,
-                tool_calls: vec![],
+                tool_calls: vec![niucode_core::ToolCall {
+                    id: "c1".into(),
+                    name: "write".into(),
+                    input: serde_json::json!({"path":"a.txt"}),
+                }],
                 ts: 0,
             },
             Event::ToolResult {
@@ -1301,6 +1315,8 @@ mod tests {
         assert!(markdown.contains("## User\n\nhello"));
         assert!(markdown.contains("## Assistant\n\nworld"));
         assert!(markdown.contains("````text\noutput\n````"));
+        assert!(markdown.contains("### Tool call · write"));
+        assert!(markdown.contains("a.txt"));
         assert!(markdown.contains("cwd: `/w`"));
     }
 

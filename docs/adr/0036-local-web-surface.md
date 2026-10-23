@@ -49,7 +49,8 @@ the missing piece is a local transport and a rendering client.
    rendered HTML, and the durable usage comes from `turn_end`. The composer is a
    multi-line textarea with local prompt history and `/help` `/status` `/report`
    `/clear` commands; code blocks have a Copy button, the session can be
-   downloaded as derived Markdown, and a local search filters transcript nodes.
+   downloaded as derived Markdown (including tool-call arguments), and a local
+   search filters transcript nodes.
    The viewport follows new output only when already near the bottom, with a
    jump-to-latest control otherwise. A persisted dark/light/high-contrast toggle,
    first-run OS color/contrast preferences, and `prefers-reduced-motion` affect
