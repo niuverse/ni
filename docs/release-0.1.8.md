@@ -47,7 +47,8 @@ cargo xtask dashboard --check
 
 The Linux X11 path is exercised under Xvfb in CI, including an end-to-end
 agent tool turn (observe image → approved click → ButtonPress) and
-`niucode computer doctor --json`. macOS compiles and runs unit
+`niucode computer doctor --json`. Real-desktop and macOS steps live in
+[the manual acceptance guide](computer-acceptance.md). macOS compiles and runs unit
 tests on the macOS runner; real TCC/dogfood interaction remains manual.
 
 ## Release order
