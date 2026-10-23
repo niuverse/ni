@@ -70,7 +70,10 @@ def main():
             "> quoted line\n\n"
             "```rust\n"
             "fn main() {}\n"
-            "```\n"
+            "```\n\n"
+            "$$\n"
+            "\\alpha + \\beta = \\gamma\n"
+            "$$\n"
         )
         (root / "fixture.json").write_text(json.dumps({
             "schema_version": 1,
@@ -91,6 +94,7 @@ def main():
             pane.wait_for("│ quoted line".encode())
             pane.wait_for("▎ rust".encode())
             pane.wait_for(b"fn main")
+            pane.wait_for("α + β = γ".encode())
             # Highlight attributes and box drawing are evidence that the
             # table was rendered as a block, not printed as raw pipes.
             pane.wait_for(b"\x1b[")
@@ -99,6 +103,7 @@ def main():
             assert "**bold**" not in decoded, "bold markers leaked to the terminal"
             assert "| name | value |" not in decoded, "raw table line leaked"
             assert "```" not in decoded, "code fence leaked to the terminal"
+            assert "$$" not in decoded, "display math markers leaked to the terminal"
             print("PTY markdown: heading, emphasis, code, and table rendered")
         finally:
             pane.close()

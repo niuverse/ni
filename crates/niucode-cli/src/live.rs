@@ -249,6 +249,7 @@ impl Transcript {
         }
         if !viewing {
             terminal.flush_table()?;
+            terminal.flush_math()?;
         }
         Ok(())
     }

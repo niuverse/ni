@@ -35,8 +35,9 @@ use a real Markdown/KaTeX renderer.
 4. Code fences bypass Markdown parsing and keep the existing syntax highlight;
    the fence markers are replaced by a `▎ language` label.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,
-   `\alpha`, `\frac`, `\sqrt`); unmatched `$` stays literal. A web surface
-   may render full TeX. No terminal TeX engine is promised.
+   `\alpha`, `\frac`, `\sqrt`); `$$` blocks are buffered and lose their
+   fences, and unmatched `$` stays literal. A web surface may render full TeX.
+   No terminal TeX engine is promised.
 6. Rendering never writes to the session log and never trusts model-provided
    ANSI; existing sanitization stays.
 7. Styling must preserve text width: styles change attributes, not characters,

@@ -31,6 +31,7 @@ client — without turning the event log into presentation data.
 - Code fences are hidden and replaced by a `▎ language` label.
   **M9-004**.
 - Math fallback conventions (`$…$`, `$$…$$`) and copy-friendly output.
+  **M9-005** buffers display blocks and strips the `$$` fences.
   **Included in M9-002**: common symbols, `\frac`, `\sqrt`; unmatched `$` is
   literal.
 - Link display strategy for terminals without hyperlink support.

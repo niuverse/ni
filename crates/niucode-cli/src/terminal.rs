@@ -43,6 +43,7 @@ pub struct TerminalSession {
     ansi: bool,
     code_block: bool,
     table: Vec<String>,
+    math: Option<Vec<String>>,
     pub notice: Option<String>,
 }
 
@@ -62,6 +63,7 @@ impl TerminalSession {
             ansi,
             code_block: false,
             table: Vec::new(),
+            math: None,
             notice: None,
         };
         execute!(
@@ -145,6 +147,19 @@ impl TerminalSession {
         }
         for line in clean_multiline(text).split('\n') {
             let trimmed = line.trim_start();
+            if !self.code_block && line.trim() == "$$" {
+                self.flush_table()?;
+                if let Some(rows) = self.math.take() {
+                    self.emit_math(&rows)?;
+                } else {
+                    self.math = Some(Vec::new());
+                }
+                continue;
+            }
+            if let Some(rows) = &mut self.math {
+                rows.push(line.to_string());
+                continue;
+            }
             if trimmed.starts_with("```") {
                 self.flush_table()?;
                 if self.code_block {
@@ -167,6 +182,26 @@ impl TerminalSession {
             }
             self.flush_table()?;
             self.emit_line(line)?;
+        }
+        stdout().flush()?;
+        Ok(())
+    }
+
+    /// Render a buffered display-math block, if any.
+    pub fn flush_math(&mut self) -> io::Result<()> {
+        if let Some(rows) = self.math.take() {
+            self.emit_math(&rows)?;
+        }
+        Ok(())
+    }
+
+    fn emit_math(&mut self, rows: &[String]) -> io::Result<()> {
+        for row in rows {
+            let fallback = crate::markdown::latex_fallback(row.trim());
+            if fallback.is_empty() {
+                continue;
+            }
+            self.emit_line(&format!("  ƒ {fallback}"))?;
         }
         stdout().flush()?;
         Ok(())
