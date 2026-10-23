@@ -35,6 +35,14 @@ writes. The populated fixture exercised:
 - The approval card keeps the diff, warning slot, and Allow/Deny actions in one
   bounded surface.
 
+## High contrast and mobile
+
+A second pass rendered the populated fixture in high-contrast mode and at
+390×844. It caught a blank Deny button (white-on-white from the border variable)
+and a mobile header overflow. Deny now uses `--panel2`, secondary header items
+hide below 760px, and `/export` covers the hidden Download button. Mobile and
+high-contrast screenshots are still manual evidence.
+
 ## Residual risks
 
 - No pixel-diff regression baseline; screenshots are manual evidence.

@@ -81,7 +81,7 @@ button.chip:hover { color:var(--text); border-color:var(--accent); }
 aside.hidden { display:none !important; }
 #toggle-context { cursor:pointer; background:none; }
 #cwd { max-width:320px; overflow:hidden; text-overflow:ellipsis; }
-@media (max-width: 760px) { #cwd, #mode { display:none; } }
+@media (max-width: 760px) { #cwd, #mode, #download, #id, #live { display:none; } header { gap:8px; padding:10px 12px; } }
 details { margin:8px 0; } summary { cursor:pointer; color:var(--dim); }
 input,button { font:inherit; }
 footer { position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid var(--border); padding:10px 18px; color:var(--dim); font-size:13px; }
@@ -103,7 +103,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 .diff-line.add { background:#12261a; color:#aff5b4; }
 .diff-line.remove { background:#2d1214; color:#ffb3ba; }
 .diff-num { color:#6e7681; min-width:3ch; text-align:right; user-select:none; }
-.approval button { margin-right:8px; } .deny { background:var(--border); color:var(--text); }
+.approval button { margin-right:8px; } .deny { background:var(--panel2); color:var(--text); }
 </style>
 </head>
 <body>
@@ -394,7 +394,7 @@ document.getElementById('theme').onclick = () => {
     : document.body.classList.contains('contrast') ? 'contrast' : 'dark';
   applyTheme(current === 'dark' ? 'light' : current === 'light' ? 'contrast' : 'dark');
 };
-document.getElementById('download').onclick = async () => {
+async function downloadSession() {
   try {
     const response = await fetch('/api/export');
     if (!response.ok) throw new Error('export failed');
@@ -404,8 +404,10 @@ document.getElementById('download').onclick = async () => {
     link.download = 'niucode-session.md';
     link.click();
     URL.revokeObjectURL(link.href);
+    document.getElementById('status').textContent = 'session downloaded';
   } catch (error) { document.getElementById('status').textContent = 'export: ' + error.message; }
-};
+}
+document.getElementById('download').onclick = downloadSession;
 document.getElementById('toggle-context').onclick = () => {
   document.getElementById('context').classList.toggle('hidden');
 };
@@ -421,6 +423,7 @@ const COMMANDS = [
   { name: '/status', description: 'model, cwd, and policy' },
   { name: '/report', description: 'show the weekly report in context' },
   { name: '/threads', description: 'show archived threads in context' },
+  { name: '/export', description: 'download the session Markdown' },
   { name: '/clear', description: 'clear the view only; session stays' },
   { name: '/new', description: 'start a new session (reloads)' },
 ];
@@ -507,7 +510,7 @@ form.onsubmit = async event => {
   rememberPrompt(prompt);
   const command = prompt.split(/\s+/)[0];
   if (command === '/help') {
-    add('meta','commands: /help · /status · /report · /threads · /clear · /new · anything else goes to the agent');
+    add('meta','commands: /help · /status · /report · /threads · /export · /clear · /new · anything else goes to the agent');
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/status') {
@@ -540,6 +543,10 @@ form.onsubmit = async event => {
       setTimeout(() => location.reload(), 500);
     } catch (error) { add('meta', 'new session: ' + error.message); }
     return;
+  }
+  if (command === '/export') {
+    await downloadSession();
+    input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/clear') {
     log.textContent = ''; streaming = null; streamText = '';

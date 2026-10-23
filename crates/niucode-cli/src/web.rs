@@ -1736,6 +1736,7 @@ mod tests {
         assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
+        assert!(INDEX.contains("/export"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(INDEX.contains("diff-line"));
@@ -1771,6 +1772,7 @@ mod tests {
         assert!(INDEX.contains("button.chip"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
+        assert!(INDEX.contains("/export"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
         assert!(!INDEX.contains("http://"));
