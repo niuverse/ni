@@ -56,6 +56,10 @@ The script checks crates.io before each upload and skips a crate whose version i
 
 0.1.0 was published on 2026-10-22 in the order above. `cargo install niucode --version 0.1.0 --locked` was verified from a clean root.
 
+`niucode-mcp` 0.1.5 was published on 2026-10-23 after the package and publish
+dry-runs. The other 0.1.5 crates were already on the registry and the script
+skipped them.
+
 0.1.1 was the patch for the inline CJK spacing fix and `TuiOptions`. 0.1.2 added the full TUI hook surface; 0.1.3 added `filter_text` and the command hook; 0.1.4 added `after_turn` / `on_answer`; 0.1.5 adds command registration. The order is unchanged.
 
 ## After publishing

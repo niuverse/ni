@@ -1,12 +1,12 @@
 +++
 id = "M8-002"
 title = "Mutating MCP with per-call approval"
-status = "backlog"
+status = "ready"
 milestone = "M8"
 module = "mcp"
 size = "L"
 priority = "P1"
-updated = "2026-10-22"
+updated = "2026-10-23"
 depends_on = ["M8-001"]
 docs = ["adr-0034", "mcp"]
 +++
@@ -36,5 +36,7 @@ become the least-guarded surface in the harness.
 
 ## Notes
 
-Requires human sign-off on ADR-0034, especially the open questions. Do not
-implement before the ADR status changes from `proposed`.
+ADR-0034 was accepted by the human on 2026-10-23. The design is now settled:
+manifest allowlist, `--allow-mcp-write`, interactive approval only, args
+preview, shared write lock, no retry, no subagent inheritance. Implementation
+may proceed.

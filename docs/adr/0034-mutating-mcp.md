@@ -2,17 +2,17 @@
 id = "adr-0034"
 title = "ADR-0034: Mutating MCP — explicit tool allowlist and per-call approval"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 order = 61
 summary = "Mutating MCP stays off by default. A write-enabled server names each write tool, mounts only with an explicit flag and an interactive approval mode, and every call is approved with its arguments and recorded."
 +++
 
 ## Status
 
-Proposed · 2026-10-22. This is a design for M8-002, not an implemented
-capability. Until it is accepted, the client keeps the ADR-0033 rule: only
-`read_only = true` servers mount, and `read_only = false` is refused before
-spawn.
+Accepted · 2026-10-23 (human sign-off). Implementation starts in M8-002. Until
+the first write tool ships, the client keeps the ADR-0033 rule in production:
+only `read_only = true` servers mount, and `read_only = false` is refused
+before spawn.
 
 ## Context
 
