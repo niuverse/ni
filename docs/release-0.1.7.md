@@ -19,13 +19,19 @@ release requires a coordinated bump and publication order.
 - **Browser chat**: read-only/workspace-write turns, streamed Markdown and
   MathML, visible approvals with structured diffs, tool cards, session export,
   transcript search, prompt history, and slash commands.
-- **TUI rendering**: inline Markdown, tables with styled cells, lists/rules,
-  math fallback, code-fence labels, token highlighting, and multi-line code
-  comment/string state.
+- **TUI rendering**: inline Markdown, tables with styled cells, lists/tasks,
+  GFM alert labels/tones, viewport rules, math fallback, code-fence labels,
+  token highlighting, and multi-line code comment/string state.
 - **Motion/progress**: streaming caret, per-tool elapsed footer, compact
-  per-tool markers.
+  per-tool markers, reduced-motion env fallbacks.
+- **Web Markdown**: task lists, footnotes, GFM alerts, safe href allowlist,
+  remote-image stripping, stream throttling, whole-message/block copy.
+- **Web security**: Host/Origin guards, strict CSP, per-run token + HttpOnly
+  cookie, 1MiB complete-body reads, 5s request timeout, threat model.
 - **Web status/context**: model/cwd/policy chips, turn timer, token usage,
-  product context sidebar, `context_changed` refresh.
+  collapsible context sidebar (mobile overlay), `context_changed` refresh.
+- **Approvals**: diff previews, Allow/Deny, Allow tool for the session,
+  5:00 countdown.
 
 ## Verification
 
@@ -57,6 +63,6 @@ includes `assets/web.html` and `src/web.rs`.
 
 - Human approval to publish.
 - Version bump has not been applied.
-- Registry package verification cannot pass for a new sibling API until the
-  foundation crates are published; the CLI package itself verifies at the
-  current version.
+- `niuse --features web` against registry 0.1.6 fails exactly at missing
+  `niucode::web`; publish 0.1.7 first, then re-run the niuse feature dry run.
+- Version bump has not been applied; nothing has been uploaded.
