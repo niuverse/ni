@@ -4040,6 +4040,17 @@
       "excerpt": "MCP stdio: read-only by default, opt-in writes with an allowlist and per-call approval, manifest shape, and limits."
     },
     {
+      "id": "release-0.1.7",
+      "title": "Release 0.1.7 (draft)",
+      "kind": "release",
+      "status": "draft",
+      "order": 70,
+      "summary": "Draft notes for the next niucode release: local web surface, streaming Markdown, approvals, TUI rendering, and verification evidence.",
+      "body_html": "<h2>Status</h2>\n<p>Draft. Not published. Version numbers in the workspace are still 0.1.6; a\nrelease requires a coordinated bump and publication order.</p>\n<h2>Highlights</h2>\n<ul>\n<li><strong>Local web surface</strong> (<code>niucode web --session &lt;jsonl&gt;</code>): loopback-only HTTP +\nSSE, embedded client, no build step, no remote assets. See ADR-0036.</li>\n<li><strong>Browser chat</strong>: read-only/workspace-write turns, streamed Markdown and\nMathML, visible approvals with structured diffs, tool cards, session export,\ntranscript search, prompt history, and slash commands.</li>\n<li><strong>TUI rendering</strong>: inline Markdown, tables with styled cells, lists/rules,\nmath fallback, code-fence labels, token highlighting, and multi-line code\ncomment/string state.</li>\n<li><strong>Motion/progress</strong>: streaming caret, per-tool elapsed footer, compact\nper-tool markers.</li>\n<li><strong>Web status/context</strong>: model/cwd/policy chips, turn timer, token usage,\nproduct context sidebar, <code>context_changed</code> refresh.</li>\n</ul>\n<h2>Verification</h2>\n<pre><code class=\"language-sh\">cargo +1.88.0 check --workspace --all-targets\ncargo test --workspace\ncargo clippy --workspace --all-targets -- -D warnings\ncargo package -p niucode --allow-dirty\n</code></pre>\n<p>Last run: MSRV clean, workspace tests/clippy green, package verifies and\nincludes <code>assets/web.html</code> and <code>src/web.rs</code>.</p>\n<h2>Release order</h2>\n<ol>\n<li>Bump all niucode workspace crates to <code>0.1.7</code>; update sibling version\nrequirements.</li>\n<li>Publish foundation crates first (<code>niucode-core</code>, <code>niucode-auth</code>,\n<code>niucode-provider</code>, <code>niucode-tools</code>, <code>niucode-agent</code>, ...), then\n<code>niucode-mcp</code>, <code>niucode</code>, if the release includes those changes.</li>\n<li>Verify <code>cargo install niucode --version 0.1.7</code>.</li>\n<li>Bump niuse to <code>0.1.13</code>, require <code>niucode = 0.1.7</code>, publish.</li>\n<li>Update <code>niuse/niucode.rev</code> and <code>docs/compat.md</code>.</li>\n</ol>\n<h2>Blockers</h2>\n<ul>\n<li>Human approval to publish.</li>\n<li>Version bump has not been applied.</li>\n<li>Registry package verification cannot pass for a new sibling API until the\nfoundation crates are published; the CLI package itself verifies at the\ncurrent version.</li>\n</ul>\n",
+      "path": "docs/release-0.1.7.md",
+      "excerpt": "Draft notes for the next niucode release: local web surface, streaming Markdown, approvals, TUI rendering, and verification evidence."
+    },
+    {
       "id": "readme",
       "title": "看板维护指南",
       "kind": "guide",
@@ -4891,7 +4902,7 @@
     "schema_version": 1,
     "cards": 123,
     "modules": 15,
-    "docs": 53,
+    "docs": 54,
     "generator": "cargo xtask dashboard"
   }
 }
