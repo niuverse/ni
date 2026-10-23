@@ -62,6 +62,8 @@ client — without turning the event log into presentation data.
   safe links.
 - **Math (M9-013)**: native MathML from common TeX, escaped fallback, no remote
   assets. KaTeX remains an optional upgrade.
+- **Code (M9-022)**: fenced code keeps its language and token colors in the
+  browser via escaped server-rendered HTML.
 - **Context (M9-015)**: embedder brand + `/api/context` + generic sidebar.
 - **Status (M9-016)**: model/cwd/policy chips from `/api/status`.
 - **Turn timer (M9-017)**: SSE phases drive a busy chip and elapsed timer; the

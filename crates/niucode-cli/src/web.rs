@@ -425,7 +425,8 @@ fn add_html(value: &mut Value) {
 }
 
 fn markdown_html(text: &str) -> String {
-    let (text, math) = prepare_math(text);
+    let (text, code) = extract_code(text);
+    let (text, math) = prepare_math(&text);
     let mut options = MarkdownOptions::empty();
     options.insert(MarkdownOptions::ENABLE_TABLES);
     options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
@@ -439,12 +440,95 @@ fn markdown_html(text: &str) -> String {
     for (index, rendered) in math.into_iter().enumerate() {
         output = output.replace(&format!("@@NIUMATH{index}@@"), &rendered);
     }
+    for (index, rendered) in code.into_iter().enumerate() {
+        let token = format!("@@NIUCODE{index}@@");
+        output = output
+            .replace(&format!("<p>{token}</p>"), &rendered)
+            .replace(&token, &rendered);
+    }
     output
         .replace(
             "href=\"javascript:",
             "href=\"#\" data-blocked=\"javascript:",
         )
         .replace("<a href=", "<a rel=\"noreferrer noopener\" href=")
+}
+
+fn extract_code(text: &str) -> (String, Vec<String>) {
+    let mut output = String::new();
+    let mut blocks: Vec<String> = Vec::new();
+    let mut language = String::new();
+    let mut body = String::new();
+    let mut in_code = false;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if !in_code && trimmed.starts_with("```") {
+            in_code = true;
+            language = trimmed.trim_start_matches("```").trim().to_string();
+            body.clear();
+            blocks.push(String::new());
+            output.push_str(&format!("\n@@NIUCODE{}@@\n", blocks.len() - 1));
+            continue;
+        }
+        if in_code && trimmed.starts_with("```") {
+            let rendered = render_code(&language, &body);
+            let index = blocks.len() - 1;
+            blocks[index] = rendered;
+            in_code = false;
+            continue;
+        }
+        if in_code {
+            body.push_str(line);
+        } else {
+            output.push_str(line);
+        }
+    }
+    if in_code {
+        let rendered = render_code(&language, &body);
+        let index = blocks.len() - 1;
+        blocks[index] = rendered;
+    }
+    (output, blocks)
+}
+
+fn render_code(language: &str, body: &str) -> String {
+    let language = language
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+        .take(24)
+        .collect::<String>();
+    let label = if language.is_empty() {
+        "code".to_string()
+    } else {
+        language
+    };
+    let mut html = format!("<pre class=\"code\"><code class=\"language-{label}\">");
+    let lines: Vec<&str> = body.split('\n').collect();
+    for (index, line) in lines.iter().enumerate() {
+        for token in crate::syntax::highlight(line) {
+            let class = match token.kind {
+                crate::syntax::TokenKind::Keyword => "tok-keyword",
+                crate::syntax::TokenKind::String => "tok-string",
+                crate::syntax::TokenKind::Comment => "tok-comment",
+                crate::syntax::TokenKind::Number => "tok-number",
+                crate::syntax::TokenKind::Function => "tok-function",
+                crate::syntax::TokenKind::Plain => "",
+            };
+            if class.is_empty() {
+                html.push_str(&escape_html(&token.text));
+            } else {
+                html.push_str(&format!(
+                    "<span class=\"{class}\">{}</span>",
+                    escape_html(&token.text)
+                ));
+            }
+        }
+        if index + 1 < lines.len() {
+            html.push('\n');
+        }
+    }
+    html.push_str("</code></pre>");
+    html
 }
 
 fn prepare_math(text: &str) -> (String, Vec<String>) {
@@ -575,6 +659,18 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn fenced_code_gets_token_classes_and_stays_escaped() {
+        let html = markdown_html("```rust\nlet x = \"hi\"; // note\n<script>\n```");
+        assert!(html.contains("<pre class=\"code\">"), "{html}");
+        assert!(html.contains("tok-keyword"), "{html}");
+        assert!(html.contains("tok-string"), "{html}");
+        assert!(html.contains("tok-comment"), "{html}");
+        assert!(!html.contains("<script>"), "{html}");
+        assert!(html.contains("&lt;script&gt;"), "{html}");
+        assert!(!html.contains("```"), "{html}");
     }
 
     #[test]
@@ -954,6 +1050,7 @@ mod tests {
         assert!(INDEX.contains("renderApproval"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
+        assert!(INDEX.contains("tok-keyword"));
         assert!(INDEX.contains("/api/context"));
         assert!(INDEX.contains("/api/status"));
         assert!(INDEX.contains("beginTurn"));
