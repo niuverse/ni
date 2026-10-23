@@ -210,6 +210,18 @@ pub struct Observation {
     pub expires_at_ms: u64,
 }
 
+impl WindowInfo {
+    /// Stable identity used immediately before input dispatch. Titles may
+    /// change during typing and are intentionally excluded; app, class, and
+    /// the sensitive/terminal classification are not.
+    pub fn same_identity(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.app == other.app
+            && self.class == other.class
+            && self.kind == other.kind
+    }
+}
+
 impl Observation {
     /// Reject an action that was derived from a different, moved, or expired
     /// observation. This is the safety boundary, not a hint.
@@ -957,6 +969,20 @@ mod tests {
             session.decide(&click()).unwrap(),
             PolicyDecision::NeedsApproval
         );
+    }
+
+    #[test]
+    fn window_identity_ignores_titles_but_not_kind_or_app() {
+        let window = observation().window;
+        let mut renamed = window.clone();
+        renamed.title = "typed a new title".into();
+        assert!(window.same_identity(&renamed));
+        let mut other_app = window.clone();
+        other_app.app = "other".into();
+        assert!(!window.same_identity(&other_app));
+        let mut sensitive = window.clone();
+        sensitive.kind = WindowKind::Sensitive;
+        assert!(!window.same_identity(&sensitive));
     }
 
     #[test]

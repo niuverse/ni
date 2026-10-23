@@ -191,7 +191,9 @@ impl MacBackend {
             .into_iter()
             .find(|window| window.id == observation.window.id)
             .ok_or(MacError::NotVisible(observation.window.id.0))?;
-        if current.bounds != observation.window.bounds {
+        if current.bounds != observation.window.bounds
+            || !observation.window.same_identity(&current)
+        {
             return Err(MacError::StaleWindow);
         }
         match action {

@@ -17,7 +17,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
 - **Native computer use**: new `niucode-computer` protocol, Linux X11
   (`x11rb` + XTEST), and macOS (CoreGraphics + CGEvent) backends.
 - **Observation-bound actions**: click/type/key/scroll carry an observation
-  id, window id, image-relative coordinates, expiry, and geometry rechecks.
+  id, window id, image-relative coordinates, expiry, and id/app/class/kind +
+  geometry rechecks before dispatch.
 - **Permissions**: `off | observe | control | autonomous`, explicit arm,
   per-action approval for control, terminal/sensitive red lines, Ctrl-C
   emergency stop and input release.

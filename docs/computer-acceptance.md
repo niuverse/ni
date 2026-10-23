@@ -61,7 +61,8 @@ runs the doctor and writes a 0600 Markdown template.
    image when Screen Recording is granted.
 3. Repeat the observe/deny/allow/type/stop checks. Retina coordinates are
    mapped from the captured image; verify a click lands on the intended target,
-   including a window moved after observation (the backend must reject it).
+   including a window moved or retitled after observation (a move/identity
+   change must reject; a title-only change is allowed).
 4. Record the TCC prompts and any re-prompt after rebuild. A missing grant is a
    fail-closed result, never a silent fallback.
 

@@ -41,7 +41,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    `observe` returns an opaque observation id, window, geometry, screenshot
    hash, scale, and expiry. Input actions carry the
    observation id, window id, and image-relative coordinates. The runtime
-   rechecks window identity/geometry and a 60-second expiry; mismatch rejects
+   rechecks window id/app/class/kind identity, geometry, and a 60-second
+   expiry; mismatch rejects
    rather than executing an approximate click. Input is revalidated immediately
    before XTEST dispatch.
 5. **Lifecycle.** After the session is armed, the model may start/stop

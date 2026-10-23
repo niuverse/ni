@@ -173,7 +173,9 @@ impl X11Backend {
         let current = self
             .window_info(window)
             .ok_or_else(|| X11Error::NotViewable(u64::from(window)))?;
-        if current.bounds != observation.window.bounds {
+        if current.bounds != observation.window.bounds
+            || !observation.window.same_identity(&current)
+        {
             return Err(X11Error::StaleWindow);
         }
         if matches!(
@@ -617,7 +619,7 @@ mod tests {
 
     use super::*;
     use x11rb::protocol::xproto::{
-        ChangeWindowAttributesAux, CreateWindowAux, EventMask, WindowClass,
+        ChangeWindowAttributesAux, ConfigureWindowAux, CreateWindowAux, EventMask, WindowClass,
     };
 
     #[test]
@@ -761,6 +763,15 @@ mod tests {
             sleep(Duration::from_millis(20));
         }
         assert!(keyed, "XTEST key did not reach the window");
+        connection
+            .configure_window(window_id, &ConfigureWindowAux::new().x(50))
+            .expect("move");
+        connection.flush().expect("flush");
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(matches!(
+            backend.perform(&click, &capture.observation),
+            Err(X11Error::StaleWindow)
+        ));
         backend.emergency_stop().expect("release input");
     }
 }
