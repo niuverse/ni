@@ -446,6 +446,9 @@ fn keycode_for(key: &str) -> Option<(CGKeyCode, CGEventFlags)> {
         "f11" => (103, CGEventFlags::CGEventFlagNull),
         "f12" => (111, CGEventFlags::CGEventFlagNull),
         _ => {
+            if lower.chars().count() != 1 {
+                return None;
+            }
             let character = lower.chars().next()?;
             let code = match character {
                 'a' => 0,
