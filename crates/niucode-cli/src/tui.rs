@@ -2999,6 +2999,42 @@ mod tests {
         std::fs::remove_dir_all(directory).expect("cleanup");
     }
 
+    struct FooterComputer;
+
+    impl niucode_computer::ComputerBackend for FooterComputer {
+        fn observe(
+            &mut self,
+            _window: Option<niucode_computer::WindowId>,
+        ) -> Result<niucode_computer::Capture, Box<dyn std::error::Error + Send + Sync>> {
+            Err("unused".into())
+        }
+
+        fn perform(
+            &mut self,
+            _action: &niucode_computer::ComputerAction,
+            _observation: &niucode_computer::Observation,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn footer_shows_computer_policy_and_stop_state() {
+        let mut config = AgentConfig::new("test", ".");
+        let runtime = Arc::new(std::sync::Mutex::new(niucode_agent::ComputerRuntime::new(
+            Box::new(FooterComputer),
+            niucode_computer::ComputerPolicy::Control,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime.clone());
+        let state = SessionUiState::from_events(&[]);
+        let footer = editor_footer(&state, &config);
+        assert!(footer.contains("computer control ✓"), "{footer}");
+        runtime.lock().unwrap().emergency_stop().expect("stop");
+        let footer = editor_footer(&state, &config);
+        assert!(footer.contains("computer off paused"), "{footer}");
+    }
+
     #[test]
     fn permission_profiles_map_to_policy() {
         let mut config = AgentConfig::new("test", ".");

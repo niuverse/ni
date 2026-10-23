@@ -32,6 +32,7 @@ computer use was off.
 - [x] Stop changes the badge to off/paused.
 - [x] Off mode leaves the footer unchanged.
 - [x] PTY regression passes.
+- [x] Unit test covers armed and stopped footer states.
 - [x] Tests/clippy pass.
 
 ## Notes
