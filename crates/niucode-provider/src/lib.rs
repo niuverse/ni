@@ -13,8 +13,8 @@ mod scripted;
 mod sse;
 
 pub use catalog::{
-    context_window, derived_context_budget, find_model, find_provider, providers, ModelDescriptor,
-    ModelSelection, ProviderDescriptor, DEFAULT_CONTEXT_WINDOW,
+    context_window, derived_context_budget, find_model, find_provider, model_supports_images,
+    providers, ModelDescriptor, ModelSelection, ProviderDescriptor, DEFAULT_CONTEXT_WINDOW,
 };
 pub use error::ProviderError;
 pub use fixture::{RecordedEvent, RecordedFixture, RecordingProvider, ReplayProvider};
