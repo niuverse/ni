@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
-use crate::model::{CardOut, CardStatus, DocOut, MilestoneStatus, ModuleStatus, ProjectSpec};
+use crate::model::{CardOut, CardStatus, DocOut, ModuleStatus, ProjectSpec};
 
 pub fn validate(root: &Path, spec: &ProjectSpec, cards: &[CardOut], docs: &[DocOut]) -> Result<()> {
     let mut errors = Vec::new();
@@ -39,17 +39,7 @@ pub fn validate(root: &Path, spec: &ProjectSpec, cards: &[CardOut], docs: &[DocO
     if spec.milestones.is_empty() {
         errors.push("at least one milestone is required".into());
     }
-    let active_milestones = spec
-        .milestones
-        .iter()
-        .filter(|milestone| milestone.status == MilestoneStatus::Active)
-        .count();
-    if active_milestones > 1 {
-        errors.push(format!(
-            "{} milestones are active; only one may be active",
-            active_milestones
-        ));
-    }
+    // The experience track (M9) runs alongside the remaining M6 review work.
 
     let mut layer_ids = HashSet::new();
     for layer in &spec.layers {

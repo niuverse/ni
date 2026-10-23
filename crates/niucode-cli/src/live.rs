@@ -247,9 +247,13 @@ impl Transcript {
             let line = std::mem::take(&mut self.pending);
             self.print(terminal, viewing, line)?;
         }
+        if !viewing {
+            terminal.flush_table()?;
+        }
         Ok(())
     }
     fn resume(&mut self, terminal: &mut TerminalSession) -> Result<()> {
+        terminal.flush_table()?;
         terminal.clear()?;
         while let Some(line) = self.deferred.pop_front() {
             terminal.print(&line)?;

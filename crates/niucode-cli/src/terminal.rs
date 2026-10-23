@@ -42,6 +42,7 @@ pub struct TerminalSession {
     mouse: bool,
     ansi: bool,
     code_block: bool,
+    table: Vec<String>,
     pub notice: Option<String>,
 }
 
@@ -60,6 +61,7 @@ impl TerminalSession {
             mouse: false,
             ansi,
             code_block: false,
+            table: Vec::new(),
             notice: None,
         };
         execute!(
@@ -138,33 +140,56 @@ impl TerminalSession {
     /// Text is untrusted. This is the only path for runtime transcript output.
     pub fn print(&mut self, text: &str) -> io::Result<()> {
         self.last_frame = None;
+        if self.inline.is_none() {
+            self.clear()?;
+        }
+        for line in clean_multiline(text).split('\n') {
+            if !self.code_block && crate::table::is_row(line) {
+                self.table.push(line.to_string());
+                continue;
+            }
+            self.flush_table()?;
+            self.emit_line(line)?;
+            if line.trim_start().starts_with("```") {
+                self.code_block = !self.code_block;
+            }
+        }
+        stdout().flush()?;
+        Ok(())
+    }
+
+    /// Render a buffered Markdown table block, if any.
+    pub fn flush_table(&mut self) -> io::Result<()> {
+        if self.table.is_empty() {
+            return Ok(());
+        }
+        let width = self.size().0;
+        let rows = std::mem::take(&mut self.table);
+        for line in crate::table::render(&rows, width) {
+            self.emit_line(&line)?;
+        }
+        stdout().flush()?;
+        Ok(())
+    }
+
+    fn emit_line(&mut self, line: &str) -> io::Result<()> {
         let theme = if self.ansi {
             Theme::detect_stdout()
         } else {
             Theme::plain()
         };
-        if self.inline.is_none() {
-            self.clear()?;
-        }
-        let mut out = stdout();
-        for line in clean_multiline(text).split('\n') {
-            if let Some(t) = &mut self.inline {
-                let width = t.size()?.width.saturating_sub(1).max(1) as usize;
-                for row in wrap(line, width) {
-                    let row = theme.row(&row, self.code_block);
-                    t.insert_before(1, |buf| {
-                        Paragraph::new(row).render(buf.area, buf);
-                        collapse_wide_continuations(buf);
-                    })?;
-                }
-            } else {
-                write!(out, "{}\r\n", theme.render_row(line, self.code_block))?;
+        if let Some(t) = &mut self.inline {
+            let width = t.size()?.width.saturating_sub(1).max(1) as usize;
+            for row in wrap(line, width) {
+                let row = theme.row(&row, self.code_block);
+                t.insert_before(1, |buf| {
+                    Paragraph::new(row).render(buf.area, buf);
+                    collapse_wide_continuations(buf);
+                })?;
             }
-            if line.trim_start().starts_with("```") {
-                self.code_block = !self.code_block;
-            }
+        } else {
+            write!(stdout(), "{}\r\n", theme.render_row(line, self.code_block))?;
         }
-        out.flush()?;
         Ok(())
     }
     /// Returns the absolute top row when available, for honest mouse hit tests.

@@ -104,6 +104,11 @@ impl Theme {
             }
         };
         let trimmed = text.trim_start();
+        if !code {
+            if let Some(heading) = crate::markdown::heading(&text) {
+                return vec![Span::styled(heading, style(Tone::Accent))].into();
+            }
+        }
         let tone = if trimmed.contains("│ - ")
             || trimmed.starts_with("✗")
             || trimmed.starts_with('-') && !trimmed.starts_with("- ")
@@ -172,19 +177,29 @@ impl Theme {
                 .collect();
             return spans.into();
         }
-        let mut inline = false;
-        let spans: Vec<_> = text
-            .split_inclusive('`')
-            .map(|part| {
-                let tone = if inline || part.ends_with('`') && part == "`" {
-                    Some(Tone::Accent)
-                } else {
-                    None
-                };
-                if part.ends_with('`') {
-                    inline = !inline;
+        let spans: Vec<_> = crate::markdown::inline(&text)
+            .into_iter()
+            .map(|span| {
+                let mut style = Style::default();
+                if !self.ansi {
+                    return Span::styled(span.text, style);
                 }
-                Span::styled(part.to_owned(), tone.map_or(Style::default(), style))
+                if span.style.bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if span.style.italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                if span.style.strike {
+                    style = style.add_modifier(Modifier::CROSSED_OUT);
+                }
+                if span.style.code {
+                    style = style.fg(Color::Cyan);
+                }
+                if span.style.link {
+                    style = style.fg(Color::Cyan).add_modifier(Modifier::UNDERLINED);
+                }
+                Span::styled(span.text, style)
             })
             .collect();
         spans.into()
@@ -198,17 +213,35 @@ impl Theme {
         let mut output = String::new();
         for span in row.spans {
             if self.ansi {
-                let code = match span.style.fg {
-                    Some(Color::Cyan) => "36",
-                    Some(Color::Green) => "32",
-                    Some(Color::Red) => "31",
-                    Some(Color::Yellow) => "33",
-                    Some(Color::Magenta) => "35",
-                    _ if span.style.add_modifier.contains(Modifier::BOLD) => "1",
-                    _ if span.style.add_modifier.contains(Modifier::DIM) => "2",
-                    _ => "0",
-                };
-                output.push_str(&format!("\x1b[{code}m{}\x1b[0m", span.content));
+                let mut attrs: Vec<&str> = Vec::new();
+                match span.style.fg {
+                    Some(Color::Cyan) => attrs.push("36"),
+                    Some(Color::Green) => attrs.push("32"),
+                    Some(Color::Red) => attrs.push("31"),
+                    Some(Color::Yellow) => attrs.push("33"),
+                    Some(Color::Magenta) => attrs.push("35"),
+                    _ => {}
+                }
+                if span.style.add_modifier.contains(Modifier::BOLD) {
+                    attrs.push("1");
+                }
+                if span.style.add_modifier.contains(Modifier::DIM) {
+                    attrs.push("2");
+                }
+                if span.style.add_modifier.contains(Modifier::ITALIC) {
+                    attrs.push("3");
+                }
+                if span.style.add_modifier.contains(Modifier::UNDERLINED) {
+                    attrs.push("4");
+                }
+                if span.style.add_modifier.contains(Modifier::CROSSED_OUT) {
+                    attrs.push("9");
+                }
+                if attrs.is_empty() {
+                    output.push_str(&span.content);
+                } else {
+                    output.push_str(&format!("\x1b[{}m{}\x1b[0m", attrs.join(";"), span.content));
+                }
             } else {
                 output.push_str(&span.content);
             }
@@ -260,11 +293,15 @@ mod tests {
     #[test]
     fn highlighted_code_and_markdown_preserve_text_and_sanitize_controls() {
         let theme = Theme::ansi_forced();
-        for (text, code) in [
-            ("# Heading", false),
-            ("Use `cargo test` now", false),
-            ("fn main() { let x = 42; }", true),
-            ("+ new line", false),
+        for (text, code, expected) in [
+            ("# Heading", false, "Heading"),
+            ("Use `cargo test` now", false, "Use cargo test now"),
+            (
+                "fn main() { let x = 42; }",
+                true,
+                "fn main() { let x = 42; }",
+            ),
+            ("+ new line", false, "+ new line"),
         ] {
             let row = theme.row(text, code);
             assert_eq!(
@@ -272,9 +309,9 @@ mod tests {
                     .iter()
                     .map(|s| s.content.as_ref())
                     .collect::<String>(),
-                text
+                expected
             );
-            assert_eq!(Theme::plain().render_row(text, code), text);
+            assert_eq!(Theme::plain().render_row(text, code), expected);
             assert!(theme.render_row(text, code).contains("\x1b["));
         }
         assert_eq!(

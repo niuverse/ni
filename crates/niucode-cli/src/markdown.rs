@@ -1,0 +1,331 @@
+//! Small inline Markdown parser for the terminal transcript.
+//!
+//! The event log stays raw text; this module only decides how a line is
+//! presented. It intentionally covers the inline subset the product uses
+//! (emphasis, code, links, strikethrough) and leaves block handling to the
+//! caller. Unbalanced or unknown markers stay literal.
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Style {
+    pub bold: bool,
+    pub italic: bool,
+    pub code: bool,
+    pub link: bool,
+    pub strike: bool,
+}
+
+impl Style {
+    fn merge(self, other: Style) -> Self {
+        Self {
+            bold: self.bold || other.bold,
+            italic: self.italic || other.italic,
+            code: self.code || other.code,
+            link: self.link || other.link,
+            strike: self.strike || other.strike,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Span {
+    pub text: String,
+    pub style: Style,
+}
+
+/// Strip an ATX heading marker (`#` through `######`) and return its text.
+pub fn heading(text: &str) -> Option<String> {
+    let trimmed = text.trim_start();
+    let hashes = trimmed
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
+    if hashes == 0 || hashes > 6 {
+        return None;
+    }
+    let rest = &trimmed[hashes..];
+    if !rest.is_empty() && !rest.starts_with(' ') {
+        return None;
+    }
+    Some(rest.trim_start().to_string())
+}
+
+/// Parse one line of inline Markdown. Markers are removed when balanced and
+/// echoed literally otherwise, so a half-streamed `**` never disappears.
+pub fn inline(text: &str) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut plain = String::new();
+    let bytes = text.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        // Backslash escapes the next marker character.
+        if bytes[index] == b'\\' && index + 1 < bytes.len() {
+            let next = text[index + 1..].chars().next().unwrap_or('\\');
+            if matches!(next, '*' | '_' | '`' | '~' | '[' | ']' | '\\') {
+                plain.push(next);
+                index += 1 + next.len_utf8();
+                continue;
+            }
+        }
+
+        if bytes[index] == b'`' {
+            if let Some(end) = text[index + 1..].find('`') {
+                let content = &text[index + 1..index + 1 + end];
+                push(
+                    &mut spans,
+                    &mut plain,
+                    Span {
+                        text: content.to_string(),
+                        style: Style {
+                            code: true,
+                            ..Style::default()
+                        },
+                    },
+                );
+                index += end + 2;
+                continue;
+            }
+        }
+
+        if bytes[index] == b'!' && text[index..].starts_with("![") {
+            if let Some((label, url, consumed)) = link(text, index + 1) {
+                push(
+                    &mut spans,
+                    &mut plain,
+                    Span {
+                        text: if url.is_empty() {
+                            label
+                        } else {
+                            format!("{label} ({url})")
+                        },
+                        style: Style {
+                            link: true,
+                            ..Style::default()
+                        },
+                    },
+                );
+                index += consumed + 1;
+                continue;
+            }
+        }
+
+        if bytes[index] == b'[' {
+            if let Some((label, url, consumed)) = link(text, index) {
+                push(
+                    &mut spans,
+                    &mut plain,
+                    Span {
+                        text: if url.is_empty() {
+                            label
+                        } else {
+                            format!("{label} ({url})")
+                        },
+                        style: Style {
+                            link: true,
+                            ..Style::default()
+                        },
+                    },
+                );
+                index += consumed;
+                continue;
+            }
+        }
+
+        if text[index..].starts_with("***")
+            && text[index + 3..]
+                .chars()
+                .next()
+                .is_some_and(|character| !character.is_whitespace())
+        {
+            if let Some(end) = text[index + 3..].find("***") {
+                let inner = &text[index + 3..index + 3 + end];
+                for mut span in inline(inner) {
+                    span.style = span.style.merge(Style {
+                        bold: true,
+                        italic: true,
+                        ..Style::default()
+                    });
+                    push(&mut spans, &mut plain, span);
+                }
+                index += end + 6;
+                continue;
+            }
+        }
+
+        if (text[index..].starts_with("**") || text[index..].starts_with("__"))
+            && text[index + 2..]
+                .chars()
+                .next()
+                .is_some_and(|character| !character.is_whitespace())
+        {
+            let marker = &text[index..index + 2];
+            if let Some(end) = text[index + 2..].find(marker) {
+                let inner = &text[index + 2..index + 2 + end];
+                for mut span in inline(inner) {
+                    span.style = span.style.merge(Style {
+                        bold: true,
+                        ..Style::default()
+                    });
+                    push(&mut spans, &mut plain, span);
+                }
+                index += end + 4;
+                continue;
+            }
+        }
+
+        if text[index..].starts_with("~~") {
+            if let Some(end) = text[index + 2..].find("~~") {
+                let inner = &text[index + 2..index + 2 + end];
+                for mut span in inline(inner) {
+                    span.style = span.style.merge(Style {
+                        strike: true,
+                        ..Style::default()
+                    });
+                    push(&mut spans, &mut plain, span);
+                }
+                index += end + 4;
+                continue;
+            }
+        }
+
+        if bytes[index] == b'*' || bytes[index] == b'_' {
+            let marker = bytes[index] as char;
+            let opens = text[index + 1..]
+                .chars()
+                .next()
+                .is_some_and(|character| !character.is_whitespace());
+            if opens {
+                if let Some(end) = text[index + 1..].find(marker) {
+                    if end > 0 {
+                        let inner = &text[index + 1..index + 1 + end];
+                        // Do not turn snake_case into italics.
+                        let snake = marker == '_'
+                            && inner.chars().any(|c| c.is_alphanumeric())
+                            && index > 0
+                            && text[..index]
+                                .chars()
+                                .last()
+                                .is_some_and(|c| c.is_alphanumeric());
+                        if !snake {
+                            for mut span in inline(inner) {
+                                span.style = span.style.merge(Style {
+                                    italic: true,
+                                    ..Style::default()
+                                });
+                                push(&mut spans, &mut plain, span);
+                            }
+                            index += end + 2;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        let character = text[index..].chars().next().unwrap_or('*');
+        plain.push(character);
+        index += character.len_utf8();
+    }
+
+    push(
+        &mut spans,
+        &mut plain,
+        Span {
+            text: String::new(),
+            style: Style::default(),
+        },
+    );
+    if !plain.is_empty() {
+        spans.push(Span {
+            text: plain,
+            style: Style::default(),
+        });
+    }
+    spans
+}
+
+fn push(spans: &mut Vec<Span>, plain: &mut String, span: Span) {
+    if !plain.is_empty() {
+        spans.push(Span {
+            text: std::mem::take(plain),
+            style: Style::default(),
+        });
+    }
+    if !span.text.is_empty() {
+        spans.push(span);
+    }
+}
+
+fn link(text: &str, start: usize) -> Option<(String, String, usize)> {
+    let close = text[start..].find(']')? + start;
+    if !text[close + 1..].starts_with('(') {
+        return None;
+    }
+    let url_end = text[close + 2..].find(')')? + close + 2;
+    let label = text[start + 1..close].to_string();
+    let url = text[close + 2..url_end].to_string();
+    Some((label, url, url_end + 1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(spans: &[Span]) -> String {
+        spans.iter().map(|span| span.text.as_str()).collect()
+    }
+
+    #[test]
+    fn bold_italic_and_code_are_styled_and_stripped() {
+        let spans = inline("a **bold** *it* `code` end");
+        assert_eq!(text(&spans), "a bold it code end");
+        assert!(spans
+            .iter()
+            .any(|span| span.text == "bold" && span.style.bold));
+        assert!(spans
+            .iter()
+            .any(|span| span.text == "it" && span.style.italic));
+        assert!(spans
+            .iter()
+            .any(|span| span.text == "code" && span.style.code));
+    }
+
+    #[test]
+    fn triple_marker_is_bold_and_italic() {
+        let spans = inline("***both***");
+        assert_eq!(text(&spans), "both");
+        assert!(spans[0].style.bold && spans[0].style.italic);
+    }
+
+    #[test]
+    fn links_keep_label_and_url() {
+        let spans = inline("[docs](https://example.test)");
+        assert_eq!(text(&spans), "docs (https://example.test)");
+        assert!(spans[0].style.link);
+    }
+
+    #[test]
+    fn unbalanced_and_escaped_markers_stay_literal() {
+        assert_eq!(text(&inline("2 * 3 and **open")), "2 * 3 and **open");
+        assert_eq!(text(&inline(r"\*literal\*")), "*literal*");
+        assert_eq!(text(&inline("snake_case_name")), "snake_case_name");
+    }
+
+    #[test]
+    fn headings_strip_only_atx_markers() {
+        assert_eq!(
+            heading("## Release 0.1.12").as_deref(),
+            Some("Release 0.1.12")
+        );
+        assert_eq!(heading("####### not a heading"), None);
+        assert_eq!(heading("#hashtag"), None);
+        assert_eq!(heading("#").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn strikethrough_is_marked() {
+        let spans = inline("~~old~~ new");
+        assert_eq!(text(&spans), "old new");
+        assert!(spans[0].style.strike);
+    }
+}
