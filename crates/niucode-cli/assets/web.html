@@ -58,6 +58,7 @@ aside input { width:100%; margin:0 0 10px; background:var(--bg); color:var(--tex
 .msg.assistant th,.msg.assistant td { border:1px solid var(--border); padding:5px 9px; text-align:left; }
 .msg.assistant th { background:var(--panel2); }
 .msg.assistant pre { position:relative; background:var(--code); border:1px solid var(--border); border-radius:6px; padding:10px; overflow-x:auto; }
+.tool-card pre, .preview pre { position:relative; }
 .copy-code { position:absolute; top:6px; right:6px; padding:2px 7px; font-size:11px; border:1px solid var(--border); border-radius:5px; background:var(--panel2); color:var(--dim); cursor:pointer; opacity:.75; }
 .copy-code:hover { opacity:1; color:var(--text); }
 .cmd-menu { position:fixed; bottom:86px; left:50%; transform:translateX(-50%); width:min(900px,calc(100vw - 36px)); background:var(--panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 28px #0008; overflow:hidden; z-index:5; }
@@ -210,12 +211,13 @@ function render(e) {
   else if (e.type === 'turn_end') { const elapsed = endTurn(); addUsage(e.usage || {}); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); setTimeout(loadContext, 600); }
 }
 function addCopyButtons(root) {
-  for (const pre of root.querySelectorAll('pre.code')) {
+  for (const pre of root.querySelectorAll('pre.code, pre.copyable')) {
     if (pre.querySelector('.copy-code')) continue;
+    const code = pre.querySelector('code');
+    if (!code) pre.dataset.copyText = pre.innerText;
     const button = node('button','copy-code','Copy');
     button.onclick = async () => {
-      const code = pre.querySelector('code');
-      const text = code ? code.innerText : pre.innerText;
+      const text = code ? code.innerText : (pre.dataset.copyText || pre.innerText);
       try {
         await navigator.clipboard.writeText(text);
         button.textContent = 'Copied';
@@ -235,7 +237,9 @@ function renderToolCall(e) {
 function renderToolResult(e) {
   const card = node('details','tool-card '+(e.ok?'ok':'err'));
   card.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+(e.name||'tool')+' · '+(e.summary||'')));
-  card.appendChild(node('pre',null,e.output||e.summary||''));
+  const pre = node('pre','copyable',e.output||e.summary||'');
+  card.appendChild(pre);
+  addCopyButtons(card);
   log.appendChild(card);
 }
 
@@ -244,7 +248,7 @@ function renderPreview(preview) {
   if (!preview || !preview.body) { box.appendChild(node('div','meta','preview unavailable')); return box; }
   const body = preview.body;
   if (body.kind === 'command') {
-    const pre = node('pre'); pre.textContent = body.command || ''; box.appendChild(pre); return box;
+    const pre = node('pre','copyable'); pre.textContent = body.command || ''; box.appendChild(pre); addCopyButtons(box); return box;
   }
   if (body.kind === 'note') { box.appendChild(node('div','meta', body.message || '')); return box; }
   if (body.kind !== 'diff') { box.appendChild(node('div','meta','preview unavailable')); return box; }

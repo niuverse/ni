@@ -2138,6 +2138,7 @@ mod tests {
         assert!(INDEX.contains("aside.open"));
         assert!(INDEX.contains("ctx-backdrop"));
         assert!(INDEX.contains("trapContextFocus"));
+        assert!(INDEX.contains("pre.copyable"));
         assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
@@ -2181,6 +2182,7 @@ mod tests {
         assert!(INDEX.contains("aside.open"));
         assert!(INDEX.contains("ctx-backdrop"));
         assert!(INDEX.contains("trapContextFocus"));
+        assert!(INDEX.contains("pre.copyable"));
         assert!(INDEX.contains("ctrlKey"));
         assert!(INDEX.contains("getComputedStyle"));
         assert!(INDEX.contains("/new"));
