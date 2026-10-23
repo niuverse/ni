@@ -75,7 +75,8 @@ client — without turning the event log into presentation data.
   are serialized; unknown IDs 404. **M9-060** adds session allow; **M9-061** adds
   a countdown; **M9-062** scopes the allow to the tool. **M9-024** renders them as readable diffs.
 - **Markdown (M9-012)**: server-rendered HTML with escaped raw HTML, tables, and
-  safe links. **M9-063** strips remote images to alt text.
+  safe links. **M9-063** strips remote images to alt text; **M9-064** opens
+  external links safely and blocks dangerous schemes.
 - **Math (M9-013)**: native MathML from common TeX, escaped fallback, no remote
   assets. KaTeX remains an optional upgrade.
 - **Code (M9-022)**: fenced code keeps its language and token colors in the

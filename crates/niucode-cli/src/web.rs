@@ -789,7 +789,13 @@ fn markdown_html(text: &str) -> String {
             "href=\"javascript:",
             "href=\"#\" data-blocked=\"javascript:",
         )
-        .replace("<a href=", "<a rel=\"noreferrer noopener\" href=")
+        .replace("href=\"data:", "href=\"#\" data-blocked=\"data:")
+        .replace("href=\"file:", "href=\"#\" data-blocked=\"file:")
+        .replace("href=\"vbscript:", "href=\"#\" data-blocked=\"vbscript:")
+        .replace(
+            "<a href=",
+            "<a target=\"_blank\" rel=\"noreferrer noopener\" href=",
+        )
 }
 
 fn extract_code(text: &str) -> (String, Vec<String>) {
@@ -1124,6 +1130,19 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn links_open_safely_and_block_dangerous_schemes() {
+        let html = markdown_html(
+            "[ok](https://example.com) [bad](data:text/html,x) [js](javascript:alert(1))",
+        );
+        assert!(html.contains("target=\"_blank\""), "{html}");
+        assert!(html.contains("rel=\"noreferrer noopener\""), "{html}");
+        assert!(html.contains("data-blocked=\"data:"), "{html}");
+        assert!(html.contains("data-blocked=\"javascript:"), "{html}");
+        assert!(!html.contains("href=\"data:"), "{html}");
+        assert!(!html.contains("href=\"javascript:"), "{html}");
     }
 
     #[test]
