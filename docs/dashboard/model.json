@@ -4277,6 +4277,17 @@
       "excerpt": "/model 是当前 provider 内的运行时模型选择；/permissions 映射 ask/review/full-access/ci 到既有 sandbox/network/approval；两者事件化、下一 turn 生效。"
     },
     {
+      "id": "web-security",
+      "title": "Local web threat model",
+      "kind": "doc",
+      "status": "living",
+      "order": 42,
+      "summary": "What the loopback web surface protects against, what it does not, and which tests hold the line.",
+      "body_html": "<h2>Scope</h2>\n<p><code>niucode web</code> (and <code>niuse web --features web</code>) is a single-user, localhost tool.\nIt has no remote mode and no account system. The event log is the source of\ntruth; the browser is a client.</p>\n<h2>Trust model</h2>\n<ul>\n<li>Trusted: the local OS user, the local browser, the session log, the workspace.</li>\n<li>Untrusted: model output, tool output, Markdown links/images, other web origins,\nforeign <code>Host</code> headers.</li>\n<li>Not trusted: other local processes/users on a shared machine. Loopback has no\nauthentication; any local principal that can connect can call the API.</li>\n</ul>\n<h2>Controls</h2>\n<div class=\"table-wrap\"><table><thead><tr><th>Risk</th><th>Control</th><th>Test / evidence</th></tr></thead><tbody>\n<tr><td>Remote network exposure</td><td>bind <code>127.0.0.1</code> only</td><td>server construction</td></tr>\n<tr><td>DNS rebinding / foreign Host</td><td>loopback <code>Host</code> allowlist</td><td><code>cross_origin_and_foreign_host_requests_are_rejected</code></td></tr>\n<tr><td>Cross-site POST</td><td>loopback <code>Origin</code> check on POST</td><td>same test</td></tr>\n<tr><td>Framing / clickjacking</td><td><code>X-Frame-Options: DENY</code>, <code>frame-ancestors 'none'</code></td><td>response headers</td></tr>\n<tr><td>Script injection</td><td>raw HTML escaped; strict CSP</td><td><code>markdown_html_escapes_raw_html_and_renders_tables</code></td></tr>\n<tr><td>Link-based script execution</td><td>parsed href allowlist (<code>http</code>/<code>https</code>/<code>mailto</code>/fragment)</td><td><code>links_open_safely_and_block_dangerous_schemes</code></td></tr>\n<tr><td>Remote tracking pixels</td><td>all <code>&lt;img&gt;</code> stripped to alt text</td><td><code>remote_images_do_not_load</code></td></tr>\n<tr><td>Unapproved writes</td><td><code>ApprovalMode::Ask</code>; blocked approver; 300s fail closed</td><td>approval/write tests</td></tr>\n<tr><td>Runaway approvals</td><td>per-tool session allow, cleared on new/switch</td><td>session approval test</td></tr>\n<tr><td>Stale cross-tab state</td><td><code>session_switched</code> SSE</td><td>switch test</td></tr>\n<tr><td>Event-log mutation from web</td><td>routes are read/session-scoped; no log rewrite</td><td>code review</td></tr>\n</tbody></table></div>\n<h2>Residual risks</h2>\n<ul>\n<li>No token or authentication: another local process/user can use the API. The\nguards stop browser origins, not local sockets.</li>\n<li>The server trusts the workspace/path passed on the command line; it does not\nsandbox its own process.</li>\n<li>Browser extensions, devtools, or a compromised local browser bypass the\npresentation assumptions.</li>\n<li>Approval previews and tool output are displayed as text/cards, but a future\nrenderer could reintroduce HTML paths; keep the escaping tests.</li>\n<li>Export contains full session text, including anything the model/tools printed.</li>\n<li>No TLS; do not expose the port through a proxy.</li>\n</ul>\n<h2>Non-goals</h2>\n<p>Remote access, multi-user auth, cloud relay, OAuth, and encrypted browser\nstorage are out of scope until a separate ADR and threat model exist.</p>\n",
+      "path": "docs/web-security.md",
+      "excerpt": "What the loopback web surface protects against, what it does not, and which tests hold the line."
+    },
+    {
       "id": "adr-0016",
       "title": "ADR-0016：Provider 重试、无硬 turn 上限与手动 compact",
       "kind": "adr",
@@ -5414,7 +5425,7 @@
     "schema_version": 1,
     "cards": 147,
     "modules": 15,
-    "docs": 55,
+    "docs": 56,
     "generator": "cargo xtask dashboard"
   }
 }
