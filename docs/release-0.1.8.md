@@ -40,7 +40,8 @@ cargo xtask dashboard --check
 ./scripts/publish-niucode.sh --check
 ```
 
-The Linux X11 path is exercised under Xvfb in CI. macOS compiles and runs unit
+The Linux X11 path is exercised under Xvfb in CI, including an end-to-end
+agent tool turn (observe image → approved click → ButtonPress). macOS compiles and runs unit
 tests on the macOS runner; real TCC/dogfood interaction remains manual.
 
 ## Release order

@@ -1611,6 +1611,7 @@ dependencies = [
  "toml",
  "unicode-segmentation",
  "unicode-width",
+ "x11rb",
 ]
 
 [[package]]
