@@ -1536,6 +1536,7 @@ mod tests {
         assert!(INDEX.contains("prefers-reduced-motion"));
         assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
+        assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1564,6 +1565,7 @@ mod tests {
         assert!(INDEX.contains("prefers-reduced-motion"));
         assert!(INDEX.contains("niucode.theme"));
         assert!(INDEX.contains("/new"));
+        assert!(INDEX.contains("/threads"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

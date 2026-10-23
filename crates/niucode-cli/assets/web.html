@@ -374,6 +374,7 @@ const COMMANDS = [
   { name: '/help', description: 'list local commands' },
   { name: '/status', description: 'model, cwd, and policy' },
   { name: '/report', description: 'show the weekly report in context' },
+  { name: '/threads', description: 'show archived threads in context' },
   { name: '/clear', description: 'clear the view only; session stays' },
   { name: '/new', description: 'start a new session (reloads)' },
 ];
@@ -460,7 +461,7 @@ form.onsubmit = async event => {
   rememberPrompt(prompt);
   const command = prompt.split(/\s+/)[0];
   if (command === '/help') {
-    add('meta','commands: /help · /status · /report · /clear · /new · anything else goes to the agent');
+    add('meta','commands: /help · /status · /report · /threads · /clear · /new · anything else goes to the agent');
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/status') {
@@ -475,6 +476,12 @@ form.onsubmit = async event => {
     document.getElementById('ctx-filter').value = 'report';
     await loadContext();
     status.textContent = 'local command · report shown in context';
+    input.value = ''; growComposer(); return;
+  }
+  if (command === '/threads') {
+    document.getElementById('ctx-filter').value = 'threads';
+    await loadContext();
+    status.textContent = 'local command · threads shown in context';
     input.value = ''; growComposer(); return;
   }
   if (command === '/new') {
