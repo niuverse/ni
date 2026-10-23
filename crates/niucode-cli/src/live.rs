@@ -295,6 +295,8 @@ pub async fn run(
     let mut running_tool: Option<(String, Instant)> = None;
     let mut tools_completed = 0;
     let mut seen_tools = std::collections::HashSet::new();
+    let mut tool_times: std::collections::HashMap<String, std::time::Duration> =
+        std::collections::HashMap::new();
     let mut transcript = Transcript::new();
     let mut view: Option<View> = None;
     let mut unacknowledged: Vec<(String, String)> = Vec::new();
@@ -337,7 +339,9 @@ pub async fn run(
                         RuntimeEvent::Agent(AgentEvent::ToolResult { name, ok, summary, .. }) => {
                             tools_completed += 1;
                             streaming = false;
-                            running_tool = None;
+                            if let Some((started_name, since)) = running_tool.take() {
+                                *tool_times.entry(started_name).or_default() += since.elapsed();
+                            }
                             status = format!("{name} finished");
                             if !ok {
                                 let line = crate::presentation::tool_result(
@@ -382,6 +386,12 @@ pub async fn run(
                             if let Some(review) = niucode_agent::task_review_by_id(&niucode_core::load(session.path())?.events, &id) {
                                 let summary = crate::presentation::completion(&review, terminal.size().0);
                                 transcript.print(&mut terminal, view.is_some(), summary)?;
+                                if let Some(timings) =
+                                    crate::presentation::tool_timings(&tool_times, terminal.size().0)
+                                {
+                                    transcript.print(&mut terminal, view.is_some(), timings)?;
+                                }
+                                tool_times.clear();
                             }
                         }
                         RuntimeEvent::Approval { request_id, request, .. } => {

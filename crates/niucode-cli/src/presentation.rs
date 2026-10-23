@@ -3,6 +3,8 @@ use crate::text_layout::{clean_text, clip};
 use niucode_agent::TaskReview;
 use niucode_core::ProcessOutcome;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::time::Duration;
 
 pub fn startup(
     project: &str,
@@ -182,6 +184,24 @@ fn tool_detail(input: &Value) -> Option<String> {
     None
 }
 
+/// Aggregate per-tool durations into one bounded, deterministic line.
+pub fn tool_timings(times: &HashMap<String, Duration>, width: usize) -> Option<String> {
+    if times.is_empty() {
+        return None;
+    }
+    let mut entries: Vec<_> = times.iter().collect();
+    entries.sort_by(|left, right| right.1.cmp(left.1).then_with(|| left.0.cmp(right.0)));
+    let parts = entries
+        .into_iter()
+        .take(6)
+        .map(|(name, elapsed)| format!("{name} {:.1}s", elapsed.as_secs_f64()))
+        .collect::<Vec<_>>();
+    Some(clip(
+        &clean_text(&format!("tools · {}", parts.join(" · "))),
+        width,
+    ))
+}
+
 pub fn activity(
     state: &str,
     tools: usize,
@@ -294,6 +314,18 @@ mod tests {
         assert!(first.contains('▍') || first.contains('▏'), "{first}");
         assert_ne!(first, second);
         assert!(!activity("responding", 0, 0, false, 80, false).contains('▍'));
+    }
+
+    #[test]
+    fn tool_timings_are_aggregated_and_bounded() {
+        let mut times = HashMap::new();
+        times.insert("bash".to_string(), Duration::from_millis(1200));
+        times.insert("write".to_string(), Duration::from_millis(400));
+        let line = tool_timings(&times, 80).unwrap();
+        assert!(line.starts_with("tools · bash 1.2s"), "{line}");
+        assert!(line.contains("write 0.4s"), "{line}");
+        assert!(tool_timings(&HashMap::new(), 80).is_none());
+        assert!(tool_timings(&times, 18).unwrap().chars().count() <= 18);
     }
 
     #[test]

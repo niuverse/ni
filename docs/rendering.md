@@ -45,6 +45,7 @@ client — without turning the event log into presentation data.
   `▍`/`▏` caret and a per-tool elapsed timer.
 - Per-tool progress with elapsed time and a stable collapsed line. **M9-027**
   adds one `→ tool` marker per type per turn; failures stay explicit.
+  **M9-051** adds an aggregated per-tool timing line at task completion.
 - Completion transitions that do not reflow history.
 - Respect `NO_COLOR`, `TERM=dumb`, and reduced-motion environments.
 
