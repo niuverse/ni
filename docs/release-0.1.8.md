@@ -30,8 +30,9 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
   `--computer`; TUI/REPL `/computer stop|arm`, web status chip and
   token-gated arm/stop control.
 - **Multimodal attachments**: OpenAI-compatible image parts, capability gate,
-  content-addressed store, budgeted text/image turns, TUI `/attach`/`@path`,
-  Web upload/drop/paste, CLI `--attach`/`--image`.
+  content-addressed store, budgeted text/image turns, a four-image
+  per-request visual cap, TUI `/attach`/`@path`, Web upload/drop/paste, CLI
+  `--attach`/`--image`.
 - **Memory evidence**: context projection, reopened attachment-store history,
   and reopened Markdown memory in a second session.
 

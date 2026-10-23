@@ -20,7 +20,8 @@ use niucode_computer::{
 };
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::{
-    ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent, ToolSpec,
+    ChatMessage, CompletionRequest, ContentPart, MessageContent, Provider, ProviderError,
+    StreamEvent, ToolSpec,
 };
 use niucode_tools::{ChangePreview, SandboxPolicy, ToolResult, Toolbox};
 use serde_json::{json, Value};
@@ -615,6 +616,7 @@ async fn run_engine(
             None => {}
         }
 
+        cap_visual_budget(&mut messages, MAX_VISUAL_PARTS);
         let mut request = CompletionRequest::new(config.model.clone());
         request.messages = messages.clone();
         request.tools = tools.clone();
@@ -820,7 +822,8 @@ async fn run_engine(
                 )
                 .await?
             } else if call.name == "computer" {
-                let execution = execute_computer(provider, session, config, io, &call).await?;
+                let execution =
+                    execute_computer(provider, session, config, io, &call, &mut messages).await?;
                 tool_images = execution.images;
                 execution.result
             } else if let Some(host) = config
@@ -958,6 +961,7 @@ async fn execute_computer(
     config: &AgentConfig,
     io: &mut runtime::RunIo<'_>,
     call: &ToolCall,
+    messages: &mut [ChatMessage],
 ) -> Result<ComputerExecution> {
     let Some(runtime) = &config.computer else {
         return Ok(ComputerExecution {
@@ -1064,6 +1068,7 @@ async fn execute_computer(
     match &action {
         ComputerAction::Observe { window_id } => match runtime.observe(*window_id) {
             Ok(capture) => {
+                cap_visual_budget(messages, MAX_VISUAL_PARTS - 1);
                 let encoded = base64::engine::general_purpose::STANDARD.encode(&capture.png);
                 let data_url = format!("data:image/png;base64,{encoded}");
                 let mut output = format!(
@@ -1139,6 +1144,34 @@ async fn execute_computer(
                 },
                 images: Vec::new(),
             })
+        }
+    }
+}
+
+const MAX_VISUAL_PARTS: usize = 4;
+
+/// Keep at most `max` image parts across the whole provider request. The
+/// oldest images are replaced by a text marker; JSONL events are untouched.
+fn cap_visual_budget(messages: &mut [ChatMessage], max: usize) {
+    let mut positions = Vec::new();
+    for (message_index, message) in messages.iter().enumerate() {
+        if let Some(MessageContent::Parts(parts)) = &message.content {
+            for (part_index, part) in parts.iter().enumerate() {
+                if matches!(part, ContentPart::ImageUrl { .. }) {
+                    positions.push((message_index, part_index));
+                }
+            }
+        }
+    }
+    if positions.len() <= max {
+        return;
+    }
+    let drop_count = positions.len() - max;
+    for (message_index, part_index) in positions.into_iter().take(drop_count) {
+        if let Some(MessageContent::Parts(parts)) = &mut messages[message_index].content {
+            parts[part_index] = ContentPart::Text {
+                text: "[image omitted: visual budget]".into(),
+            };
         }
     }
 }
@@ -1807,6 +1840,78 @@ mod tests {
             self.flag.0.store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
+    }
+
+    #[test]
+    fn visual_budget_drops_the_oldest_images_first() {
+        let mut messages = vec![
+            ChatMessage::user_with_images("one", vec!["a".into()]),
+            ChatMessage::user_with_images("two", vec!["b".into()]),
+            ChatMessage::user_with_images("three", vec!["c".into()]),
+        ];
+        cap_visual_budget(&mut messages, 2);
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|message| message.has_images())
+                .count(),
+            2
+        );
+        let first = match messages[0].content.as_ref().unwrap() {
+            MessageContent::Parts(parts) => parts,
+            MessageContent::Text(_) => panic!("parts expected"),
+        };
+        assert!(first.iter().any(|part| matches!(
+            part,
+            ContentPart::Text { text } if text.contains("visual budget")
+        )));
+        assert!(messages[1].has_images());
+        assert!(messages[2].has_images());
+    }
+
+    #[tokio::test]
+    async fn provider_request_never_exceeds_four_images() {
+        let directory = temp_dir("visual-budget-request");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let config = test_config(&directory);
+        let history = (0..5)
+            .map(|index| {
+                ChatMessage::user_with_images(
+                    format!("image {index}"),
+                    vec![format!("data:image/png;base64,{index}")],
+                )
+            })
+            .collect::<Vec<_>>();
+        let provider = ScriptedProvider::from_turns(vec![vec![
+            StreamEvent::TextDelta("done".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ]]);
+        run_with_history(
+            &provider,
+            &mut session,
+            &config,
+            "continue",
+            history,
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        let requests = provider.requests();
+        let images = requests[0]
+            .messages
+            .iter()
+            .map(|message| match message.content.as_ref() {
+                Some(MessageContent::Parts(parts)) => parts
+                    .iter()
+                    .filter(|part| matches!(part, ContentPart::ImageUrl { .. }))
+                    .count(),
+                _ => 0,
+            })
+            .sum::<usize>();
+        assert!(images <= 4, "request carried {images} images");
     }
 
     #[test]
