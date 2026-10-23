@@ -497,6 +497,21 @@ fn ordered(text: &str) -> Option<(String, &str)> {
     Some((format!("{}. ", &text[..digits]), rest))
 }
 
+fn alert_label(rest: &str) -> Option<String> {
+    for (marker, label) in [
+        ("[!NOTE]", "note"),
+        ("[!TIP]", "tip"),
+        ("[!IMPORTANT]", "important"),
+        ("[!WARNING]", "warning"),
+        ("[!CAUTION]", "caution"),
+    ] {
+        if let Some(body) = rest.strip_prefix(marker) {
+            return Some(format!("{label} ·{body}"));
+        }
+    }
+    None
+}
+
 /// Recognize a line-level Markdown block marker. Indentation is preserved.
 /// `+` is deliberately not treated as a list marker: diff output uses it.
 pub fn block(text: &str) -> Option<BlockLine> {
@@ -551,6 +566,11 @@ pub fn block(text: &str) -> Option<BlockLine> {
             BlockKind::Quote => "│ ",
             _ => "",
         };
+        let rest = if kind == BlockKind::Quote {
+            alert_label(rest).unwrap_or_else(|| rest.to_string())
+        } else {
+            rest.to_string()
+        };
         BlockLine {
             text: format!("{indent}{marker}{rest}"),
             kind,
@@ -569,6 +589,8 @@ mod block_tests {
         assert_eq!(block("- [ ] todo").unwrap().text, "☐ todo");
         assert_eq!(block("- [x] done").unwrap().text, "☑ done");
         assert_eq!(block("> quoted").unwrap().text, "│ quoted");
+        assert_eq!(block("> [!NOTE] body").unwrap().text, "│ note · body");
+        assert_eq!(block("> [!WARNING]").unwrap().text, "│ warning ·");
         assert_eq!(block(">").unwrap().text, "│ ");
         assert_eq!(block("1. numbered").unwrap().text, "1. numbered");
         assert_eq!(block("2) next").unwrap().text, "2. next");
