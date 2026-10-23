@@ -1494,6 +1494,7 @@ dependencies = [
  "async-trait",
  "futures-util",
  "ignore",
+ "niucode-attachments",
  "niucode-core",
  "niucode-extension",
  "niucode-mcp",

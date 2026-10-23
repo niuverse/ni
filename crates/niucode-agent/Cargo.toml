@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+niucode-attachments = { path = "../niucode-attachments", version = "0.1.7" }
 async-trait.workspace = true
 futures-util.workspace = true
 ignore.workspace = true

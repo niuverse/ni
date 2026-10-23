@@ -355,7 +355,12 @@ impl<'a> RunIo<'a> {
         }
         Ok(injected)
     }
-    pub(crate) async fn begin(&mut self, session: &SessionLog, prompt: &str) -> Result<()> {
+    pub(crate) async fn begin(
+        &mut self,
+        session: &SessionLog,
+        prompt: &str,
+        attachments: &[niucode_core::AttachmentRef],
+    ) -> Result<()> {
         if let Some(input) = self.starting.take() {
             session.append(&Event::InputApplied {
                 id: input.id.clone(),
@@ -372,7 +377,7 @@ impl<'a> RunIo<'a> {
         } else {
             session.append(&Event::UserMessage {
                 text: prompt.into(),
-                attachments: Vec::new(),
+                attachments: attachments.to_vec(),
                 ts: now_ms(),
             })
         }
@@ -391,7 +396,17 @@ pub async fn run_interactive(
     let mut prompt = prompt.to_string();
     let mut history = history;
     loop {
-        let outcome = execute_task(provider, session, config, &prompt, history, &mut io).await?;
+        let outcome = execute_task(
+            provider,
+            session,
+            config,
+            &prompt,
+            history,
+            Vec::new(),
+            None,
+            &mut io,
+        )
+        .await?;
         io.drain(session).await?;
         // Submissions arriving after the final boundary become the next task.
         if let Some(next) = io.pending.front().cloned() {
@@ -404,12 +419,15 @@ pub async fn run_interactive(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_task(
     provider: &dyn Provider,
     session: &SessionLog,
     config: &AgentConfig,
     prompt: &str,
     history: Vec<ChatMessage>,
+    attachments: Vec<niucode_core::AttachmentRef>,
+    store: Option<&niucode_attachments::AttachmentStore>,
     io: &mut RunIo<'_>,
 ) -> Result<RunOutcome> {
     let recorded = load(session.path())?.events;
@@ -426,7 +444,7 @@ pub(crate) async fn execute_task(
         ts: now_ms(),
     })?;
     let result = async {
-        io.begin(session, prompt).await?;
+        io.begin(session, prompt, &attachments).await?;
         let mut before = io
             .wait(
                 session,
@@ -440,7 +458,17 @@ pub(crate) async fn execute_task(
             snapshot: before,
             ts: now_ms(),
         })?;
-        crate::run_engine(provider, session, config, prompt, history, io).await
+        crate::run_engine(
+            provider,
+            session,
+            config,
+            prompt,
+            history,
+            &attachments,
+            store,
+            io,
+        )
+        .await
     }
     .await;
     // Effects are already stopped here. Cleanup evidence is bounded even after

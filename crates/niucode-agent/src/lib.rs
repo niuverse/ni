@@ -12,7 +12,8 @@ use std::time::Duration;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use niucode_core::{now_ms, Event, SessionLog, ToolCall, Usage};
+use niucode_attachments::{check_budget, AttachmentStore};
+use niucode_core::{now_ms, AttachmentRef, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::{
     ChatMessage, CompletionRequest, Provider, ProviderError, StreamEvent, ToolSpec,
 };
@@ -256,16 +257,121 @@ pub async fn run_with_history(
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
-    let mut io = runtime::RunIo::callbacks(approver, observer);
-    runtime::execute_task(provider, session, config, prompt, history, &mut io).await
+    run_inner(
+        provider,
+        session,
+        config,
+        prompt,
+        history,
+        Vec::new(),
+        None,
+        approver,
+        observer,
+    )
+    .await
 }
 
+/// Run one turn with pre-ingested attachments. The store resolves image bytes
+/// to OpenAI-compatible data URLs and text attachments to fenced context.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_with_attachments(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    attachments: Vec<AttachmentRef>,
+    store: &AttachmentStore,
+    approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
+    observer: &mut dyn FnMut(AgentEvent),
+) -> Result<RunOutcome> {
+    run_inner(
+        provider,
+        session,
+        config,
+        prompt,
+        history,
+        attachments,
+        Some(store),
+        approver,
+        observer,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_inner(
+    provider: &dyn Provider,
+    session: &mut SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    attachments: Vec<AttachmentRef>,
+    store: Option<&AttachmentStore>,
+    approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
+    observer: &mut dyn FnMut(AgentEvent),
+) -> Result<RunOutcome> {
+    if !attachments.is_empty() {
+        check_budget(&attachments, config.context.budget_tokens)?;
+    }
+    let mut io = runtime::RunIo::callbacks(approver, observer);
+    runtime::execute_task(
+        provider,
+        session,
+        config,
+        prompt,
+        history,
+        attachments,
+        store,
+        &mut io,
+    )
+    .await
+}
+
+fn attachment_message(
+    store: Option<&AttachmentStore>,
+    prompt: &str,
+    attachments: &[AttachmentRef],
+    context_budget_tokens: usize,
+) -> Result<ChatMessage> {
+    if attachments.is_empty() {
+        return Ok(ChatMessage::user(prompt));
+    }
+    check_budget(attachments, context_budget_tokens)?;
+    let store = store.ok_or_else(|| anyhow::anyhow!("attachments require an attachment store"))?;
+    let mut text = prompt.to_string();
+    let mut images = Vec::new();
+    for attachment in attachments {
+        match attachment.kind {
+            niucode_core::AttachmentKind::Image => {
+                images.push(store.image_data_url(attachment)?);
+            }
+            niucode_core::AttachmentKind::Text => {
+                let content = store.text(attachment)?;
+                text.push_str(&format!(
+                    "\n\n<attachment name={:?}>\n````\n{}\n````\n</attachment>",
+                    attachment.name.as_deref().unwrap_or("attachment"),
+                    content.replace("````", "` ` ` `")
+                ));
+            }
+        }
+    }
+    if images.is_empty() {
+        Ok(ChatMessage::user(text))
+    } else {
+        Ok(ChatMessage::user_with_images(text, images))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn run_engine(
     provider: &dyn Provider,
     session: &SessionLog,
     config: &AgentConfig,
     prompt: &str,
     history: Vec<ChatMessage>,
+    attachments: &[AttachmentRef],
+    store: Option<&AttachmentStore>,
     io: &mut runtime::RunIo<'_>,
 ) -> Result<RunOutcome> {
     let toolbox = Toolbox::with_policy_and_roots(
@@ -344,7 +450,12 @@ async fn run_engine(
     let mut messages = Vec::with_capacity(history.len() + 2);
     messages.push(ChatMessage::system(system_prompt.clone()));
     messages.extend(history);
-    messages.push(ChatMessage::user(prompt));
+    messages.push(attachment_message(
+        store,
+        prompt,
+        attachments,
+        config.context.budget_tokens,
+    )?);
 
     if !loaded_instructions.sources.is_empty() {
         session.append(&Event::Instructions {
@@ -1131,6 +1242,70 @@ mod tests {
             .any(|event| matches!(event, Event::Approval { allowed: false, .. })));
 
         fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[tokio::test]
+    async fn attachments_are_stored_budgeted_and_sent_as_parts() {
+        let directory = temp_dir("attachments");
+        let store = AttachmentStore::open(directory.join("attachments")).expect("store");
+        let image = store
+            .put(b"\x89PNG\r\n\x1a\nimage", Some("shot.png"), Some("screen"))
+            .expect("image");
+        let script = store
+            .put(b"print('hi')\n", Some("script.py"), None)
+            .expect("script");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let provider = ScriptedProvider::from_turns(vec![vec![
+            StreamEvent::TextDelta("done".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ]]);
+        let config = test_config(&directory);
+        let outcome = run_with_attachments(
+            &provider,
+            &mut session,
+            &config,
+            "look at this",
+            Vec::new(),
+            vec![image, script],
+            &store,
+            &mut |_| true,
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        assert_eq!(outcome.final_text, "done");
+
+        let request = provider.requests().remove(0);
+        let user = request.messages.last().expect("user message");
+        assert!(user.has_images());
+        let parts = match user.content.as_ref().expect("content") {
+            niucode_provider::MessageContent::Parts(parts) => parts,
+            _ => panic!("expected parts"),
+        };
+        assert!(parts.iter().any(|part| matches!(
+            part,
+            niucode_provider::ContentPart::ImageUrl { image_url }
+                if image_url.url.starts_with("data:image/png;base64,")
+        )));
+        assert!(parts.iter().any(|part| matches!(
+            part,
+            niucode_provider::ContentPart::Text { text }
+                if text.contains("<attachment name=\"script.py\">")
+                    && text.contains("print('hi')")
+        )));
+
+        let loaded = load(session.path()).expect("load");
+        let attachments = loaded
+            .events
+            .iter()
+            .find_map(|event| match event {
+                Event::UserMessage { attachments, .. } => Some(attachments.clone()),
+                _ => None,
+            })
+            .expect("user event");
+        assert_eq!(attachments.len(), 2);
     }
 
     #[test]
