@@ -1510,6 +1510,7 @@ name = "niucode-attachments"
 version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
+ "niucode-core",
  "serde",
  "sha2",
  "tempfile",
