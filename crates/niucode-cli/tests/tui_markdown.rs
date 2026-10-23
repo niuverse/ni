@@ -1,6 +1,9 @@
 //! Offline PTY regression for TUI Markdown rendering.
+//!
+//! Linux-only: the fixture passes `--sandbox read-only`, which needs bubblewrap.
+//! macOS runners do not provide bwrap, so the child exits before the TUI starts.
 
-#![cfg(unix)]
+#![cfg(all(unix, target_os = "linux"))]
 
 use std::path::Path;
 use std::process::Command;
