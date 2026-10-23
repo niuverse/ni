@@ -1701,6 +1701,7 @@ mod tests {
         assert!(INDEX.contains("scrollToLatest"));
         assert!(INDEX.contains("prefers-reduced-motion"));
         assert!(INDEX.contains("niucode.theme"));
+        assert!(INDEX.contains("body.contrast"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));
@@ -1732,6 +1733,7 @@ mod tests {
         assert!(INDEX.contains("scrollToLatest"));
         assert!(INDEX.contains("prefers-reduced-motion"));
         assert!(INDEX.contains("niucode.theme"));
+        assert!(INDEX.contains("body.contrast"));
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));

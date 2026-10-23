@@ -14,6 +14,13 @@ body.light .diff-line.remove { background:#ffebe9; color:#cf222e; }
 body.light .tok-keyword { color:#cf222e; } body.light .tok-string { color:#0a3069; }
 body.light .tok-number { color:#0550ae; } body.light .tok-function { color:#8250df; }
 body.light .copy-code { background:#f6f8fa; }
+body.contrast { color-scheme:dark; --bg:#000000; --panel:#000000; --text:#ffffff; --dim:#d0d0d0; --accent:#ffff00; --err:#ff5555; --border:#ffffff; --panel2:#111111; --code:#000000; }
+body.contrast .msg.assistant { border-color:#ffff00; }
+body.contrast .diff-line.add { background:#003300; color:#ffffff; }
+body.contrast .diff-line.remove { background:#550000; color:#ffffff; }
+body.contrast .tok-keyword { color:#ffff00; } body.contrast .tok-string { color:#00ffff; }
+body.contrast .tok-number { color:#00ff00; } body.contrast .tok-function { color:#ff88ff; }
+body.contrast .tool-card.ok summary, body.contrast .live.on { color:#00ff00; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration:0.01ms !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; } }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
@@ -96,7 +103,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
-<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle light/dark">☾</button><button id="download" class="chip" title="download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast">☾</button><button id="download" class="chip" title="download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off"><span id="log-count"></span></div><div id="log"></div></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
@@ -361,13 +368,17 @@ document.getElementById('ctx-filter').addEventListener('input', filterContext);
 const THEME_KEY = 'niucode.theme';
 function applyTheme(theme) {
   const light = theme === 'light';
+  const contrast = theme === 'contrast';
   document.body.classList.toggle('light', light);
-  document.getElementById('theme').textContent = light ? '☀' : '☾';
-  try { localStorage.setItem(THEME_KEY, light ? 'light' : 'dark'); } catch (_) {}
+  document.body.classList.toggle('contrast', contrast);
+  document.getElementById('theme').textContent = contrast ? '◐' : light ? '☀' : '☾';
+  try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
 }
 applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
 document.getElementById('theme').onclick = () => {
-  applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+  const current = document.body.classList.contains('light') ? 'light'
+    : document.body.classList.contains('contrast') ? 'contrast' : 'dark';
+  applyTheme(current === 'dark' ? 'light' : current === 'light' ? 'contrast' : 'dark');
 };
 document.getElementById('download').onclick = async () => {
   try {
