@@ -1137,6 +1137,7 @@ mod tests {
         assert!(INDEX.contains("copy-code"));
         assert!(INDEX.contains("context_changed"));
         assert!(INDEX.contains("'/help'"));
+        assert!(INDEX.contains("unknown command"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1155,6 +1156,7 @@ mod tests {
         assert!(INDEX.contains("copy-code"));
         assert!(INDEX.contains("context_changed"));
         assert!(INDEX.contains("'/help'"));
+        assert!(INDEX.contains("unknown command"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

@@ -351,6 +351,10 @@ form.onsubmit = async event => {
     status.textContent = 'local command · report shown in context';
     input.value = ''; growComposer(); return;
   }
+  if (command.startsWith('/')) {
+    add('meta','unknown command ' + command + ' · /help');
+    input.value = ''; growComposer(); status.textContent = 'local command'; return;
+  }
   send.disabled = true; status.textContent = 'sending…'; beginTurn('sending');
   try {
     const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
