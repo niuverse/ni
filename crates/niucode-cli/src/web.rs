@@ -519,8 +519,9 @@ fn render_code(language: &str, body: &str) -> String {
     };
     let mut html = format!("<pre class=\"code\"><code class=\"language-{label}\">");
     let lines: Vec<&str> = body.split('\n').collect();
+    let mut highlighter = crate::syntax::Highlighter::new();
     for (index, line) in lines.iter().enumerate() {
-        for token in crate::syntax::highlight(line) {
+        for token in highlighter.line(line) {
             let class = match token.kind {
                 crate::syntax::TokenKind::Keyword => "tok-keyword",
                 crate::syntax::TokenKind::String => "tok-string",
@@ -674,6 +675,14 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn fenced_block_comments_keep_their_state() {
+        let html = markdown_html("```rust\n/* start\nstill */ let x = 1;\n```");
+        let comments = html.matches("tok-comment").count();
+        assert!(comments >= 2, "{html}");
+        assert!(html.contains("tok-keyword"), "{html}");
     }
 
     #[test]

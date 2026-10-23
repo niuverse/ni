@@ -63,7 +63,8 @@ client — without turning the event log into presentation data.
 - **Math (M9-013)**: native MathML from common TeX, escaped fallback, no remote
   assets. KaTeX remains an optional upgrade.
 - **Code (M9-022)**: fenced code keeps its language and token colors in the
-  browser via escaped server-rendered HTML.
+  browser via escaped server-rendered HTML. **M9-026** carries multi-line
+  block-comment state in both surfaces.
 - **Streaming (M9-023)**: each text delta carries accumulated rendered HTML, so
   Markdown forms while the turn is still running.
 - **Tools (M9-025)**: collapsible call/result cards with escaped, bounded

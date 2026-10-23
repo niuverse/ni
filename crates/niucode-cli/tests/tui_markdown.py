@@ -72,7 +72,8 @@ def main():
             "---\n"
             "> quoted line\n\n"
             "```rust\n"
-            "fn main() {}\n"
+            "/* start\n"
+            "still */ fn main() {}\n"
             "```\n\n"
             "$$\n"
             "\\alpha + \\beta = \\gamma\n"
@@ -99,7 +100,7 @@ def main():
             pane.wait_for("────".encode())
             pane.wait_for("│ quoted line".encode())
             pane.wait_for("▎ rust".encode())
-            pane.wait_for(b"fn main")
+            pane.wait_for(b"still */ fn main")
             pane.wait_for("α + β = γ".encode())
             # Highlight attributes and box drawing are evidence that the
             # table was rendered as a block, not printed as raw pipes.

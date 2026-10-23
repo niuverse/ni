@@ -42,6 +42,7 @@ pub struct TerminalSession {
     mouse: bool,
     ansi: bool,
     code_block: bool,
+    code_syntax: crate::syntax::Highlighter,
     table: Vec<String>,
     math: Option<Vec<String>>,
     pub notice: Option<String>,
@@ -62,6 +63,7 @@ impl TerminalSession {
             mouse: false,
             ansi,
             code_block: false,
+            code_syntax: crate::syntax::Highlighter::new(),
             table: Vec::new(),
             math: None,
             notice: None,
@@ -173,6 +175,7 @@ impl TerminalSession {
                     };
                     self.emit_line(&format!("  ▎ {label}"))?;
                     self.code_block = true;
+                    self.code_syntax = crate::syntax::Highlighter::new();
                 }
                 continue;
             }
@@ -255,14 +258,24 @@ impl TerminalSession {
         if let Some(t) = &mut self.inline {
             let width = t.size()?.width.saturating_sub(1).max(1) as usize;
             for row in wrap(line, width) {
-                let row = theme.row(&row, self.code_block);
+                let row = if self.code_block {
+                    let tokens = self.code_syntax.line(&row);
+                    theme.code_tokens(&tokens)
+                } else {
+                    theme.row(&row, false)
+                };
                 t.insert_before(1, |buf| {
                     Paragraph::new(row).render(buf.area, buf);
                     collapse_wide_continuations(buf);
                 })?;
             }
         } else {
-            write!(stdout(), "{}\r\n", theme.render_row(line, self.code_block))?;
+            if self.code_block {
+                let tokens = self.code_syntax.line(line);
+                write!(stdout(), "{}\r\n", theme.render_code_tokens(&tokens))?;
+            } else {
+                write!(stdout(), "{}\r\n", theme.render_row(line, false))?;
+            }
         }
         Ok(())
     }

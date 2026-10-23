@@ -151,29 +151,7 @@ impl Theme {
             .into();
         }
         if code {
-            let spans: Vec<_> = crate::syntax::highlight(&text)
-                .into_iter()
-                .map(|token| {
-                    let token_style = if !self.ansi {
-                        Style::default()
-                    } else {
-                        match token.kind {
-                            crate::syntax::TokenKind::Keyword => {
-                                Style::default().fg(Color::Magenta)
-                            }
-                            crate::syntax::TokenKind::String => Style::default().fg(Color::Green),
-                            crate::syntax::TokenKind::Comment => {
-                                Style::default().add_modifier(Modifier::DIM)
-                            }
-                            crate::syntax::TokenKind::Number => Style::default().fg(Color::Yellow),
-                            crate::syntax::TokenKind::Function => Style::default().fg(Color::Cyan),
-                            crate::syntax::TokenKind::Plain => Style::default(),
-                        }
-                    };
-                    Span::styled(token.text, token_style)
-                })
-                .collect();
-            return spans.into();
+            return self.code_tokens(&crate::syntax::highlight(&text));
         }
         let base = block_style.map_or(Style::default(), style);
         let spans: Vec<_> = crate::markdown::inline(&text)
@@ -202,6 +180,34 @@ impl Theme {
                     style = style.fg(Color::Magenta).add_modifier(Modifier::ITALIC);
                 }
                 Span::styled(span.text, style)
+            })
+            .collect();
+        spans.into()
+    }
+
+    pub fn code_tokens(self, tokens: &[crate::syntax::Token]) -> ratatui::text::Line<'static> {
+        use ratatui::{
+            style::{Color, Modifier, Style},
+            text::Span,
+        };
+        let spans: Vec<_> = tokens
+            .iter()
+            .map(|token| {
+                let token_style = if !self.ansi {
+                    Style::default()
+                } else {
+                    match token.kind {
+                        crate::syntax::TokenKind::Keyword => Style::default().fg(Color::Magenta),
+                        crate::syntax::TokenKind::String => Style::default().fg(Color::Green),
+                        crate::syntax::TokenKind::Comment => {
+                            Style::default().add_modifier(Modifier::DIM)
+                        }
+                        crate::syntax::TokenKind::Number => Style::default().fg(Color::Yellow),
+                        crate::syntax::TokenKind::Function => Style::default().fg(Color::Cyan),
+                        crate::syntax::TokenKind::Plain => Style::default(),
+                    }
+                };
+                Span::styled(token.text.clone(), token_style)
             })
             .collect();
         spans.into()
@@ -329,8 +335,17 @@ impl Theme {
     }
 
     pub fn render_row(self, text: &str, code: bool) -> String {
-        use ratatui::style::{Color, Modifier};
         let row = self.row(text, code);
+        self.render_spans(row)
+    }
+
+    pub fn render_code_tokens(self, tokens: &[crate::syntax::Token]) -> String {
+        let row = self.code_tokens(tokens);
+        self.render_spans(row)
+    }
+
+    fn render_spans(self, row: ratatui::text::Line<'static>) -> String {
+        use ratatui::style::{Color, Modifier};
         let mut output = String::new();
         for span in row.spans {
             if self.ansi {
