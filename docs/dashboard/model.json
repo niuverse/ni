@@ -5063,6 +5063,26 @@
       "blocked_reason": null,
       "body_html": "<h2>Problem</h2>\n<p>Computer actions were only inferable from AssistantMessage tool calls,\nApproval, and ToolResult. There was no single structured record binding action,\ntarget, observation, purpose, and outcome.</p>\n<h2>Scope</h2>\n<ul>\n<li>Add <code>Event::ComputerAction</code> with action label, window id, observation id,\nsanitized purpose, ok/error, and type length + SHA-256.</li>\n<li>Emit one event for every successfully parsed computer action, including\npolicy/approval denials and backend errors.</li>\n<li>Never store typed text or screenshots in this event.</li>\n<li>Append after the action execution; parse failures have no action to audit.</li>\n<li>Ignore the event in context projection.</li>\n<li>Test click + type records and typed redaction metadata.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nOne structured event per parsed action.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nType audit has chars + SHA-256, no text.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nClick audit records window/observation.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nPurpose and error are bounded/sanitized.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nProjection ignores it; old logs remain readable.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass.</li>\n</ul>\n<h2>Notes</h2>\n<p>Observe has no model-supplied observation id; its captured id remains in the\nToolResult. A later slice can include it in the audit event.</p>\n",
       "path": "docs/board/M9-120-computer-audit.md"
+    },
+    {
+      "id": "M9-121",
+      "title": "Observe audit records the captured target",
+      "status": "done",
+      "milestone": "M9",
+      "module": "loop",
+      "size": "S",
+      "priority": "P1",
+      "updated": "2026-10-24",
+      "completed": "2026-10-24",
+      "depends_on": [
+        "M9-120"
+      ],
+      "docs": [
+        "adr-0037"
+      ],
+      "blocked_reason": null,
+      "body_html": "<h2>Problem</h2>\n<p><code>computer_action</code> for observe had an empty observation id and often window 0,\nbecause the model does not supply those fields for observe. The captured target\nonly existed in the ToolResult text.</p>\n<h2>Scope</h2>\n<ul>\n<li>Audit observe success with the backend's captured window id and observation\nid.</li>\n<li>Audit observe failures/denials through the wrapper with whatever target the\nmodel supplied.</li>\n<li>Keep exactly one action event per parsed observe.</li>\n<li>No screenshot data or base64 in the event.</li>\n<li>Regression asserts window 7 + observation <code>obs-1</code>.</li>\n</ul>\n<h2>Acceptance</h2>\n<ul>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nObserve success records captured window/observation.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo duplicate event on success.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nFailure/denial still records a failed action.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nNo image data stored.</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nTests/clippy pass.</li>\n</ul>\n<h2>Notes</h2>\n<p>The event remains metadata-only; the ToolResult carries dimensions/expiry, and\n<code>--computer-keep-frames</code> is the only durable screenshot path.</p>\n",
+      "path": "docs/board/M9-121-observe-audit.md"
     }
   ],
   "docs": [
@@ -6598,7 +6618,7 @@
   ],
   "meta": {
     "schema_version": 1,
-    "cards": 201,
+    "cards": 202,
     "modules": 15,
     "docs": 63,
     "generator": "cargo xtask dashboard"

@@ -977,6 +977,24 @@ fn audit_computer(
     purpose: &str,
     result: &niucode_tools::ToolResult,
 ) -> Result<()> {
+    audit_computer_target(
+        session,
+        action,
+        purpose,
+        result,
+        action.window_id(),
+        action.observation_id().map(ToString::to_string),
+    )
+}
+
+fn audit_computer_target(
+    session: &SessionLog,
+    action: &ComputerAction,
+    purpose: &str,
+    result: &niucode_tools::ToolResult,
+    window_id: Option<WindowId>,
+    observation_id: Option<String>,
+) -> Result<()> {
     let (text_chars, text_sha256) = match action {
         ComputerAction::Type { text, .. } => {
             let digest: String = Sha256::digest(text.as_bytes())
@@ -989,11 +1007,8 @@ fn audit_computer(
     };
     session.append(&Event::ComputerAction {
         action: action_label(action).to_string(),
-        window_id: action.window_id().map(|window| window.0).unwrap_or(0),
-        observation_id: action
-            .observation_id()
-            .map(|id| id.to_string())
-            .unwrap_or_default(),
+        window_id: window_id.map(|window| window.0).unwrap_or(0),
+        observation_id: observation_id.unwrap_or_default(),
         purpose: clean_display(purpose, 200),
         ok: result.ok,
         error: (!result.ok).then(|| clean_display(&result.output, 240)),
@@ -1034,7 +1049,9 @@ async fn execute_computer(
         _provider, session, config, io, call, messages, &action, &purpose,
     )
     .await?;
-    audit_computer(session, &action, &purpose, &execution.result)?;
+    if !(matches!(action, ComputerAction::Observe { .. }) && execution.result.ok) {
+        audit_computer(session, &action, &purpose, &execution.result)?;
+    }
     Ok(execution)
 }
 
@@ -1227,8 +1244,17 @@ async fn execute_computer_action(
                 }
             }
         }
+        let result = niucode_tools::ToolResult { ok: true, output };
+        audit_computer_target(
+            session,
+            action,
+            purpose,
+            &result,
+            Some(capture.observation.window.id),
+            Some(capture.observation.id.to_string()),
+        )?;
         return Ok(ComputerExecution {
-            result: niucode_tools::ToolResult { ok: true, output },
+            result,
             images: vec![data_url],
         });
     }
