@@ -38,5 +38,4 @@ writes became a click loop, unlike the TUI's session-allow choice.
 
 ## Notes
 
-There is no per-tool session allowlist and no revoke control; a future approval
-model can scope by tool or add an explicit revoke.
+**M9-062** scopes this to the specific tool. There is no revoke control yet.

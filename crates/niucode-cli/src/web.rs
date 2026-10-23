@@ -4,7 +4,7 @@
 //! `POST /api/prompt` runs one read-only, approval-free agent turn; browser
 //! approvals and streaming deltas are later slices (ADR-0036).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -52,6 +52,11 @@ pub struct Options {
     pub switch_session_provider: Option<SwitchSessionProvider>,
 }
 
+struct PendingApproval {
+    tool: String,
+    sender: mpsc::Sender<bool>,
+}
+
 struct State {
     path: Mutex<PathBuf>,
     snapshot: Mutex<Vec<u8>>,
@@ -65,12 +70,12 @@ struct State {
     context_provider: Option<ContextProvider>,
     brand: String,
     allow_new: bool,
-    allow_session: AtomicBool,
+    allowed_tools: Mutex<HashSet<String>>,
     new_session_provider: Option<NewSessionProvider>,
     switch_session_provider: Option<SwitchSessionProvider>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
-    pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
+    pending: Mutex<HashMap<String, PendingApproval>>,
     next_approval: AtomicU64,
 }
 
@@ -151,7 +156,7 @@ pub async fn serve(options: Options) -> Result<()> {
             context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
             allow_new: options.allow_new,
-            allow_session: AtomicBool::new(false),
+            allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: options.new_session_provider,
             switch_session_provider: options.switch_session_provider,
             busy: AtomicBool::new(false),
@@ -320,18 +325,23 @@ async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Resul
         .get("allowed")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if allowed
-        && value
-            .get("session")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    {
-        state.allow_session.store(true, Ordering::SeqCst);
+    let session = value
+        .get("session")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let pending = state.pending.lock().unwrap().remove(id);
+    if allowed && session {
+        if let Some(pending) = &pending {
+            state
+                .allowed_tools
+                .lock()
+                .unwrap()
+                .insert(pending.tool.clone());
+        }
     }
-    let sender = state.pending.lock().unwrap().remove(id);
-    match sender {
-        Some(sender) => {
-            let _ = sender.send(allowed);
+    match pending {
+        Some(pending) => {
+            let _ = pending.sender.send(allowed);
             send(
                 &mut stream,
                 "200 OK",
@@ -391,7 +401,7 @@ async fn switch_session(mut stream: TcpStream, state: Arc<State>, body: &str) ->
             let snapshot = session_snapshot(&path)?;
             *state.path.lock().unwrap() = path.clone();
             *state.snapshot.lock().unwrap() = snapshot;
-            state.allow_session.store(false, Ordering::SeqCst);
+            state.allowed_tools.lock().unwrap().clear();
             let _ = state.live.send(json!({"type": "session_switched"}));
             send(
                 &mut stream,
@@ -458,7 +468,7 @@ async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     state.busy.store(false, Ordering::SeqCst);
     match result {
         Ok(path) => {
-            state.allow_session.store(false, Ordering::SeqCst);
+            state.allowed_tools.lock().unwrap().clear();
             let body = serde_json::to_vec(&json!({
                 "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
                 "path": path.display().to_string(),
@@ -540,7 +550,12 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
         config.system_prompt = prompt.clone();
     }
     let mut approver = |request: &niucode_agent::ApprovalRequest| {
-        if approval_state.allow_session.load(Ordering::Relaxed) {
+        if approval_state
+            .allowed_tools
+            .lock()
+            .unwrap()
+            .contains(&request.tool)
+        {
             return true;
         }
         let id = format!(
@@ -548,11 +563,13 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
             approval_state.next_approval.fetch_add(1, Ordering::SeqCst)
         );
         let (sender, receiver) = mpsc::channel();
-        approval_state
-            .pending
-            .lock()
-            .unwrap()
-            .insert(id.clone(), sender);
+        approval_state.pending.lock().unwrap().insert(
+            id.clone(),
+            PendingApproval {
+                tool: request.tool.clone(),
+                sender,
+            },
+        );
         let _ = approval_state.live.send(json!({
             "type": "approval",
             "id": id,
@@ -994,7 +1011,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
-            allow_session: AtomicBool::new(false),
+            allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1022,7 +1039,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new,
-            allow_session: AtomicBool::new(false),
+            allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1186,7 +1203,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
-            allow_session: AtomicBool::new(false),
+            allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
             busy: AtomicBool::new(false),
@@ -1404,7 +1421,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
-                allow_session: AtomicBool::new(false),
+                allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1481,7 +1498,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
-                allow_session: AtomicBool::new(false),
+                allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1561,7 +1578,13 @@ mod tests {
         let state = state();
         let state_for_assert = state.clone();
         let (sender, receiver) = mpsc::channel();
-        state.pending.lock().unwrap().insert("a-1".into(), sender);
+        state.pending.lock().unwrap().insert(
+            "a-1".into(),
+            PendingApproval {
+                tool: "write".into(),
+                sender,
+            },
+        );
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let task = tokio::spawn(serve_listener(listener, state));
@@ -1586,7 +1609,11 @@ mod tests {
             String::from_utf8_lossy(&reply)
         );
         assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
-        assert!(state_for_assert.allow_session.load(Ordering::SeqCst));
+        assert!(state_for_assert
+            .allowed_tools
+            .lock()
+            .unwrap()
+            .contains("write"));
         task.abort();
     }
 
@@ -1633,7 +1660,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
-                allow_session: AtomicBool::new(false),
+                allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
                 busy: AtomicBool::new(false),
@@ -1760,7 +1787,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
-        assert!(INDEX.contains("Allow session"));
+        assert!(INDEX.contains("Allow tool"));
         assert!(INDEX.contains("expires in"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));
@@ -1798,7 +1825,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("/export"));
-        assert!(INDEX.contains("Allow session"));
+        assert!(INDEX.contains("Allow tool"));
         assert!(INDEX.contains("expires in"));
         assert!(INDEX.contains("switchThread"));
         assert!(INDEX.contains("session_switched"));

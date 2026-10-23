@@ -271,7 +271,7 @@ function renderApproval(e) {
   card.appendChild(node('div','meta',e.summary || ''));
   if (e.preview) card.appendChild(renderPreview(e.preview));
   const allow = node('button',null,'Allow');
-  const always = node('button','allow-session','Allow session');
+  const always = node('button','allow-session','Allow tool');
   const deny = node('button','deny','Deny');
   let remaining = 300;
   const countdown = node('div','meta','expires in 5:00');
