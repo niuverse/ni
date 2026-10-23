@@ -40,11 +40,13 @@ pub struct Options {
     pub context: Option<Value>,
     /// Optional live context. When set, `/api/context` calls it per request.
     pub context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
+    /// Allow `POST /api/new` to start a fresh session in the same directory.
+    pub allow_new: bool,
 }
 
 struct State {
-    path: PathBuf,
-    snapshot: Vec<u8>,
+    path: Mutex<PathBuf>,
+    snapshot: Mutex<Vec<u8>>,
     provider: Option<Arc<dyn Provider>>,
     preset: String,
     model: String,
@@ -54,6 +56,7 @@ struct State {
     context: Vec<u8>,
     context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
     brand: String,
+    allow_new: bool,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -123,8 +126,8 @@ pub async fn serve(options: Options) -> Result<()> {
     serve_listener(
         listener,
         Arc::new(State {
-            path,
-            snapshot,
+            path: Mutex::new(path),
+            snapshot: Mutex::new(snapshot),
             provider: Some(provider),
             preset: options.preset,
             model,
@@ -136,6 +139,7 @@ pub async fn serve(options: Options) -> Result<()> {
             ))?,
             context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
+            allow_new: options.allow_new,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -163,8 +167,9 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
+    let current_path = state.path.lock().unwrap().clone();
     if method == "GET" && path == "/api/events" {
-        return stream_events(stream, state.path.clone(), state.live.subscribe()).await;
+        return stream_events(stream, current_path, state.live.subscribe()).await;
     }
     if method == "POST" && path == "/api/prompt" {
         return prompt(stream, state, body).await;
@@ -178,7 +183,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         return send(&mut stream, "200 OK", "application/json", body).await;
     }
     if method == "GET" && path == "/api/export" {
-        let markdown = match load(&state.path) {
+        let markdown = match load(&current_path) {
             Ok(loaded) => export_markdown(&loaded.events),
             Err(error) => {
                 return send(
@@ -202,6 +207,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
             "approval": "ask",
             "network": "off",
             "busy": state.busy.load(Ordering::Relaxed),
+            "allow_new": state.allow_new,
         });
         return send(
             &mut stream,
@@ -211,10 +217,14 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         )
         .await;
     }
+    if method == "POST" && path == "/api/new" {
+        return new_session(stream, state).await;
+    }
     if method == "POST" && path == "/api/approval" {
         return approval(stream, state, body).await;
     }
-    let (status, kind, body) = response(method, path, &state.snapshot);
+    let snapshot = state.snapshot.lock().unwrap().clone();
+    let (status, kind, body) = response(method, path, &snapshot);
     send(&mut stream, status, kind, body).await
 }
 
@@ -317,12 +327,88 @@ async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Resul
     }
 }
 
+async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
+    if !state.allow_new {
+        return send(
+            &mut stream,
+            "403 Forbidden",
+            "application/json",
+            br#"{"error":"new sessions are not enabled"}"#.to_vec(),
+        )
+        .await;
+    }
+    if state.busy.swap(true, Ordering::SeqCst) {
+        return send(
+            &mut stream,
+            "409 Conflict",
+            "application/json",
+            br#"{"error":"a turn is already running"}"#.to_vec(),
+        )
+        .await;
+    }
+    let result = create_session(&state);
+    state.busy.store(false, Ordering::SeqCst);
+    match result {
+        Ok(path) => {
+            let body = serde_json::to_vec(&json!({
+                "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
+                "path": path.display().to_string(),
+            }))?;
+            send(&mut stream, "200 OK", "application/json", body).await
+        }
+        Err(error) => {
+            send(
+                &mut stream,
+                "500 Internal Server Error",
+                "application/json",
+                serde_json::to_vec(&json!({"error": error.to_string()}))?,
+            )
+            .await
+        }
+    }
+}
+
+fn create_session(state: &State) -> Result<PathBuf> {
+    let current = state.path.lock().unwrap().clone();
+    let parent = current
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let log = SessionLog::create(parent)?;
+    let id = log.id().to_string();
+    log.append(&Event::SessionStart {
+        id: id.clone(),
+        cwd: state.cwd.display().to_string(),
+        model: state.model.clone(),
+        provider: state.preset.clone(),
+        ts: now_ms(),
+    })?;
+    log.append(&Event::Policy {
+        sandbox: "workspace-write".into(),
+        approval: "ask".into(),
+        network: "off".into(),
+        backend: "web".into(),
+        ts: now_ms(),
+    })?;
+    let path = log.path().to_path_buf();
+    drop(log);
+    *state.path.lock().unwrap() = path.clone();
+    *state.snapshot.lock().unwrap() = serde_json::to_vec(&json!({
+        "id": id,
+        "path": path.display().to_string(),
+        "warnings": [],
+        "events": [],
+    }))?;
+    Ok(path)
+}
+
 async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: String) -> Result<()> {
     let live = state.live.clone();
     let approval_state = state.clone();
-    let loaded = load(&state.path)?;
+    let path = state.path.lock().unwrap().clone();
+    let loaded = load(&path)?;
     let history = project_history(&loaded.events)?;
-    let mut log = SessionLog::open(&state.path)?;
+    let mut log = SessionLog::open(&path)?;
     let mut config = AgentConfig::new(state.model.clone(), state.cwd.clone());
     config.provider = state.preset.clone();
     config.max_steps = state.max_steps;
@@ -772,8 +858,8 @@ mod tests {
 
     fn state_with(context: Vec<u8>) -> Arc<State> {
         Arc::new(State {
-            path: PathBuf::new(),
-            snapshot: br#"{"events":[]}"#.to_vec(),
+            path: Mutex::new(PathBuf::new()),
+            snapshot: Mutex::new(br#"{"events":[]}"#.to_vec()),
             provider: None,
             preset: "deepseek".into(),
             model: "deepseek-flash".into(),
@@ -783,6 +869,7 @@ mod tests {
             context,
             context_provider: None,
             brand: "niucode".into(),
+            allow_new: true,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -931,6 +1018,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn new_session_creates_another_log() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let state = Arc::new(State {
+            path: Mutex::new(path.clone()),
+            snapshot: Mutex::new(Vec::new()),
+            provider: None,
+            preset: "deepseek".into(),
+            model: "deepseek-flash".into(),
+            cwd: directory.path().to_path_buf(),
+            max_steps: 1,
+            system_prompt: None,
+            context: br#"{}"#.to_vec(),
+            context_provider: None,
+            brand: "niucode".into(),
+            allow_new: true,
+            busy: AtomicBool::new(false),
+            live: broadcast::channel(8).0,
+            pending: Mutex::new(HashMap::new()),
+            next_approval: AtomicU64::new(1),
+        });
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state.clone()));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"POST /api/new HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 200"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        let new_path = state.path.lock().unwrap().clone();
+        assert_ne!(new_path, path);
+        assert!(new_path.exists());
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn live_context_provider_is_called_per_request() {
         use std::sync::atomic::AtomicUsize;
         let mut state = state_with(Vec::new());
@@ -987,8 +1118,8 @@ mod tests {
         let task = tokio::spawn(serve_listener(
             listener,
             Arc::new(State {
-                path: path.clone(),
-                snapshot: Vec::new(),
+                path: Mutex::new(path.clone()),
+                snapshot: Mutex::new(Vec::new()),
                 provider: None,
                 preset: "deepseek".into(),
                 model: "deepseek-flash".into(),
@@ -998,6 +1129,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                allow_new: true,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1060,8 +1192,8 @@ mod tests {
         let task = tokio::spawn(serve_listener(
             listener,
             Arc::new(State {
-                path: path.clone(),
-                snapshot: Vec::new(),
+                path: Mutex::new(path.clone()),
+                snapshot: Mutex::new(Vec::new()),
                 provider: Some(provider),
                 preset: "scripted".into(),
                 model: "scripted".into(),
@@ -1071,6 +1203,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                allow_new: true,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1206,8 +1339,8 @@ mod tests {
         let task = tokio::spawn(serve_listener(
             listener,
             Arc::new(State {
-                path: path.clone(),
-                snapshot: Vec::new(),
+                path: Mutex::new(path.clone()),
+                snapshot: Mutex::new(Vec::new()),
                 provider: Some(provider),
                 preset: "scripted".into(),
                 model: "scripted".into(),
@@ -1217,6 +1350,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                allow_new: true,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1302,6 +1436,7 @@ mod tests {
         assert!(INDEX.contains("usageTotals"));
         assert!(INDEX.contains("/api/export"));
         assert!(INDEX.contains("filterTranscript"));
+        assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1326,6 +1461,7 @@ mod tests {
         assert!(INDEX.contains("usageTotals"));
         assert!(INDEX.contains("/api/export"));
         assert!(INDEX.contains("filterTranscript"));
+        assert!(INDEX.contains("/new"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

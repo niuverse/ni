@@ -339,6 +339,7 @@ const COMMANDS = [
   { name: '/status', description: 'model, cwd, and policy' },
   { name: '/report', description: 'show the weekly report in context' },
   { name: '/clear', description: 'clear the view only; session stays' },
+  { name: '/new', description: 'start a new session (reloads)' },
 ];
 let commandItems = [], commandIndex = 0;
 const HISTORY_KEY = 'niucode.prompt.history';
@@ -423,7 +424,7 @@ form.onsubmit = async event => {
   rememberPrompt(prompt);
   const command = prompt.split(/\s+/)[0];
   if (command === '/help') {
-    add('meta','commands: /help · /status · /report · /clear · anything else goes to the agent');
+    add('meta','commands: /help · /status · /report · /clear · /new · anything else goes to the agent');
     input.value = ''; growComposer(); status.textContent = 'local command'; return;
   }
   if (command === '/status') {
@@ -439,6 +440,17 @@ form.onsubmit = async event => {
     await loadContext();
     status.textContent = 'local command · report shown in context';
     input.value = ''; growComposer(); return;
+  }
+  if (command === '/new') {
+    try {
+      const response = await fetch('/api/new', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'new session failed');
+      add('meta', 'new session ' + (data.id || '') + ' · reloading');
+      input.value = ''; growComposer(); status.textContent = 'local command';
+      setTimeout(() => location.reload(), 500);
+    } catch (error) { add('meta', 'new session: ' + error.message); }
+    return;
   }
   if (command === '/clear') {
     log.textContent = ''; streaming = null; streamText = '';

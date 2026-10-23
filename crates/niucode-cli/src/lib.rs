@@ -628,6 +628,7 @@ pub async fn run() -> Result<()> {
                 brand: None,
                 context: None,
                 context_provider: None,
+                allow_new: true,
             })
             .await?;
             Ok(())
