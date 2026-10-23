@@ -47,7 +47,9 @@ niucode capability with niuse policy/UX, not a product-layer fork.
 5. **Lifecycle.** After the session is armed, the model may start/stop
    observation. The agent advertises `computer` only when a runtime is
    configured; `niucode exec --computer` and `niucode tui --computer` connect to
-   X11 and arm it. The TUI `/computer` command reports state, re-arms, or stops
+   X11 and arm it; `niucode web --computer` attaches the same runtime to browser
+   prompts and reports it in `/api/status`. The TUI `/computer` command reports
+   state, re-arms, or stops
    (policy off + disarm). Ctrl-C and `/computer stop` invoke the same emergency
    stop, which also releases held modifiers/buttons. Input still follows policy. The user can stop or downgrade at
    any time; a global emergency stop releases held keys/buttons. Observation is

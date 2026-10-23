@@ -132,7 +132,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </head>
 <body>
 <a class="skip" href="#log">Skip to transcript</a>
-<header><button id="toggle-context" class="chip" title="Toggle context" aria-label="Toggle product context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip" aria-live="polite">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast" aria-label="Toggle theme">☾</button><button id="download" class="chip" title="download session Markdown" aria-label="Download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live" aria-live="polite">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context" aria-label="Toggle product context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="computer" class="chip">computer off</span><span id="busy" class="chip" aria-live="polite">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast" aria-label="Toggle theme">☾</button><button id="download" class="chip" title="download session Markdown" aria-label="Download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live" aria-live="polite">○ connecting</span></header>
 <div id="ctx-backdrop" hidden></div>
 <aside id="context" aria-label="Product context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off" aria-label="Filter product context"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off" aria-label="Search transcript"><span id="log-count"></span></div><div id="log" role="log" aria-live="polite" aria-label="Transcript"></div></main>
@@ -346,6 +346,8 @@ async function refreshStatus() {
     document.getElementById('model').textContent = status.model || status.provider || 'model';
     document.getElementById('cwd').textContent = status.cwd || '';
     document.getElementById('mode').textContent = (status.sandbox || '') + ' / ' + (status.approval || '');
+    const computer = status.computer || { policy: 'off', armed: false };
+    document.getElementById('computer').textContent = computer.policy === 'off' ? 'computer off' : 'computer ' + computer.policy + (computer.armed ? ' ✓' : ' paused');
     if (turnStart === null) document.getElementById('busy').textContent = status.busy ? 'working' : 'idle';
   } catch (_) {}
 }
@@ -667,7 +669,7 @@ form.onsubmit = async event => {
   if (command === '/status') {
     try {
       const s = await fetch('/api/status').then(r => r.json());
-      add('meta', 'model ' + (s.model || '?') + ' · ' + (s.cwd || '?') + ' · ' + (s.sandbox || '?') + ' / ' + (s.approval || '?') + ' · net ' + (s.network || '?'));
+      add('meta', 'model ' + (s.model || '?') + ' · ' + (s.cwd || '?') + ' · ' + (s.sandbox || '?') + ' / ' + (s.approval || '?') + ' · net ' + (s.network || '?') + ' · computer ' + ((s.computer || {}).policy || 'off'));
       input.value = ''; growComposer(); status.textContent = 'local command';
     } catch (error) { status.textContent = 'status failed: ' + error.message; }
     return;

@@ -445,6 +445,9 @@ enum Command {
         /// Maximum model turns per browser prompt (0 = auto)
         #[arg(long, default_value_t = 0)]
         max_steps: usize,
+        /// Native desktop policy: off, observe, control, or autonomous
+        #[arg(long, default_value = "off", value_parser = ["off", "observe", "control", "autonomous"])]
+        computer: String,
     },
     /// Start the interactive linear TUI
     Tui {
@@ -648,6 +651,7 @@ pub async fn run() -> Result<()> {
             model,
             cwd,
             max_steps,
+            computer,
         }) => {
             web::serve(web::Options {
                 session,
@@ -663,6 +667,7 @@ pub async fn run() -> Result<()> {
                 allow_new: true,
                 new_session_provider: None,
                 switch_session_provider: None,
+                computer,
             })
             .await?;
             Ok(())

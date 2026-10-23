@@ -56,6 +56,8 @@ pub struct Options {
     pub new_session_provider: Option<NewSessionProvider>,
     /// Optional embedder hook for switching to an allowlisted session id.
     pub switch_session_provider: Option<SwitchSessionProvider>,
+    /// Native desktop policy attached to browser prompts.
+    pub computer: String,
 }
 
 struct PendingApproval {
@@ -80,6 +82,7 @@ struct State {
     allowed_tools: Mutex<HashSet<String>>,
     new_session_provider: Option<NewSessionProvider>,
     switch_session_provider: Option<SwitchSessionProvider>,
+    computer: Option<Arc<Mutex<niucode_agent::ComputerRuntime>>>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, PendingApproval>>,
@@ -96,6 +99,10 @@ pub async fn serve(options: Options) -> Result<()> {
     let provider = ProviderFactory::new(false, None)?
         .build(&options.preset, &model)
         .context("build web provider")?;
+    let mut computer_config = AgentConfig::new(model.clone(), options.cwd.clone());
+    computer_config.provider = options.preset.clone();
+    crate::configure_computer(&mut computer_config, &options.computer)?;
+    let computer = computer_config.computer;
     if !path.exists() {
         let parent = path
             .parent()
@@ -168,6 +175,7 @@ pub async fn serve(options: Options) -> Result<()> {
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: options.new_session_provider,
             switch_session_provider: options.switch_session_provider,
+            computer,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -347,6 +355,16 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
             "network": "off",
             "busy": state.busy.load(Ordering::Relaxed),
             "allow_new": state.allow_new,
+            "computer": state.computer.as_ref().map_or_else(
+                || json!({"policy": "off", "armed": false}),
+                |runtime| {
+                    let runtime = runtime.lock().unwrap();
+                    json!({
+                        "policy": runtime.policy().as_str(),
+                        "armed": runtime.is_armed(),
+                    })
+                },
+            ),
         });
         return send(
             &mut stream,
@@ -786,6 +804,7 @@ async fn run_prompt(
     config.sandbox = SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off);
     config.approval = ApprovalMode::Ask;
     config.allow_unsandboxed = false;
+    config.computer = state.computer.clone();
     if let Some(prompt) = &state.system_prompt {
         config.system_prompt = prompt.clone();
     }
@@ -1452,6 +1471,7 @@ mod tests {
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
+            computer: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1481,6 +1501,7 @@ mod tests {
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
+            computer: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1955,6 +1976,7 @@ mod tests {
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
             switch_session_provider: None,
+            computer: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -2145,6 +2167,10 @@ mod tests {
         assert!(text.contains("\"model\":\"deepseek-flash\""), "{text}");
         assert!(text.contains("\"sandbox\":\"workspace-write\""), "{text}");
         assert!(text.contains("\"approval\":\"ask\""), "{text}");
+        assert!(
+            text.contains("\"computer\":{\"armed\":false,\"policy\":\"off\""),
+            "{text}"
+        );
         task.abort();
     }
 
@@ -2174,6 +2200,7 @@ mod tests {
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
+                computer: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -2252,6 +2279,7 @@ mod tests {
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
+                computer: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -2415,6 +2443,7 @@ mod tests {
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
                 switch_session_provider: None,
+                computer: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -2559,6 +2588,7 @@ mod tests {
         assert!(INDEX.contains("tok-keyword"));
         assert!(INDEX.contains("/api/context"));
         assert!(INDEX.contains("/api/status"));
+        assert!(INDEX.contains("id=\"computer\""));
         assert!(INDEX.contains("beginTurn"));
         assert!(INDEX.contains("toggle-context"));
         assert!(INDEX.contains("ctx-filter"));
