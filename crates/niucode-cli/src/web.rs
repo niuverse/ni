@@ -960,6 +960,7 @@ fn markdown_html(text: &str) -> String {
     let mut options = MarkdownOptions::empty();
     options.insert(MarkdownOptions::ENABLE_TABLES);
     options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
+    options.insert(MarkdownOptions::ENABLE_TASKLISTS);
     let parser = Parser::new_ext(&text, options).map(|event| match event {
         pulldown_cmark::Event::Html(raw) => pulldown_cmark::Event::Text(raw),
         pulldown_cmark::Event::InlineHtml(raw) => pulldown_cmark::Event::Text(raw),
@@ -1433,6 +1434,14 @@ mod tests {
         assert!(html.contains("data-blocked=\"javascript:"), "{html}");
         assert!(!html.contains("href=\"data:"), "{html}");
         assert!(!html.contains("href=\"javascript:"), "{html}");
+    }
+
+    #[test]
+    fn task_lists_render_as_checkboxes() {
+        let html = markdown_html("- [x] done\n- [ ] todo");
+        assert!(html.contains("type=\"checkbox\""), "{html}");
+        assert!(html.contains("checked"), "{html}");
+        assert!(html.contains("disabled"), "{html}");
     }
 
     #[test]
