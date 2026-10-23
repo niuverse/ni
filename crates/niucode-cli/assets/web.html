@@ -33,6 +33,10 @@ aside input { width:100%; margin:0 0 10px; background:#0d1117; color:var(--text)
 .msg.assistant pre { position:relative; background:#010409; border:1px solid #30363d; border-radius:6px; padding:10px; overflow-x:auto; }
 .copy-code { position:absolute; top:6px; right:6px; padding:2px 7px; font-size:11px; border:1px solid #30363d; border-radius:5px; background:#161b22; color:var(--dim); cursor:pointer; opacity:.75; }
 .copy-code:hover { opacity:1; color:var(--text); }
+.cmd-menu { position:fixed; bottom:86px; left:50%; transform:translateX(-50%); width:min(900px,calc(100vw - 36px)); background:var(--panel); border:1px solid #30363d; border-radius:8px; box-shadow:0 8px 28px #0008; overflow:hidden; z-index:5; }
+.cmd-item { display:flex; gap:10px; padding:7px 12px; cursor:pointer; font:12px ui-monospace,monospace; }
+.cmd-item:hover, .cmd-item.active { background:#21262d; }
+.cmd-item b { color:var(--accent); min-width:80px; } .cmd-item span { color:var(--dim); }
 .msg.assistant code { background:#161b22; border-radius:4px; padding:1px 4px; }
 .msg.assistant pre code { background:none; padding:0; }
 .msg.assistant math { font-size:1.05em; }
@@ -80,7 +84,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <main id="log"></main>
-<footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
+<footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
 const id = document.getElementById('id');
@@ -286,6 +290,12 @@ source.onmessage = event => { try { render(JSON.parse(event.data)); } catch (_) 
 const form = document.getElementById('composer');
 const input = document.getElementById('prompt');
 const send = document.getElementById('send');
+const COMMANDS = [
+  { name: '/help', description: 'list local commands' },
+  { name: '/status', description: 'model, cwd, and policy' },
+  { name: '/report', description: 'show the weekly report in context' },
+];
+let commandItems = [], commandIndex = 0;
 const HISTORY_KEY = 'niucode.prompt.history';
 let history = [];
 let historyIndex = -1;
@@ -313,7 +323,7 @@ function growComposer() {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
 }
-input.addEventListener('input', growComposer);
+input.addEventListener('input', () => { growComposer(); updateCommandMenu(); });
 input.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
@@ -324,8 +334,42 @@ input.addEventListener('keydown', event => {
   } else if (event.key === 'ArrowDown' && historyIndex !== -1) {
     event.preventDefault();
     newerHistory();
+  } else if (event.key === 'Tab' && commandItems.length) {
+    event.preventDefault();
+    fillCommand(commandItems[commandIndex].name);
+  } else if (event.key === 'ArrowDown' && commandItems.length) {
+    event.preventDefault();
+    commandIndex = (commandIndex + 1) % commandItems.length;
+    updateCommandMenu();
+  } else if (event.key === 'ArrowUp' && commandItems.length) {
+    event.preventDefault();
+    commandIndex = (commandIndex - 1 + commandItems.length) % commandItems.length;
+    updateCommandMenu();
   }
 });
+function updateCommandMenu() {
+  const menu = document.getElementById('cmd-menu');
+  const value = input.value;
+  if (!value.startsWith('/') || value.includes(' ')) { menu.hidden = true; commandItems = []; return; }
+  commandItems = COMMANDS.filter(command => command.name.startsWith(value));
+  commandIndex = Math.min(commandIndex, Math.max(commandItems.length - 1, 0));
+  menu.textContent = '';
+  if (!commandItems.length) { menu.hidden = true; return; }
+  commandItems.forEach((command, index) => {
+    const item = node('div','cmd-item' + (index === commandIndex ? ' active' : ''));
+    item.appendChild(node('b',null,command.name));
+    item.appendChild(node('span',null,command.description));
+    item.onclick = () => fillCommand(command.name);
+    menu.appendChild(item);
+  });
+  menu.hidden = false;
+}
+function fillCommand(name) {
+  input.value = name;
+  document.getElementById('cmd-menu').hidden = true;
+  input.focus();
+  growComposer();
+}
 const status = document.getElementById('status');
 form.onsubmit = async event => {
   event.preventDefault();
