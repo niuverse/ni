@@ -34,8 +34,9 @@ the missing piece is a local transport and a rendering client.
    `latex2mathml`, with escaped fallback and no remote assets. An embedder may
    supply `brand` and `context`; a live `context_provider` is called per
    `/api/context` request, feeding a collapsible/filterable sidebar, and
-   `/api/status` exposes model/cwd/policy for the header. Approval previews and
-   tool calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase` events
+   `/api/status` exposes model/cwd/policy for the header. A finished turn emits
+   `context_changed` so the sidebar refetches. Approval previews and tool
+   calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase` events
    drive a client-side turn timer; `text_delta` carries accumulated rendered
    HTML, and the durable usage comes from `turn_end`. Read-only remains the
    default for the CLI.

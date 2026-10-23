@@ -257,6 +257,7 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
         };
         let result = runtime.block_on(run_prompt(turn.clone(), provider, prompt));
         turn.busy.store(false, Ordering::SeqCst);
+        let _ = turn.live.send(json!({"type": "context_changed"}));
         if let Err(error) = result {
             eprintln!("web: prompt failed: {error:#}");
         }
@@ -959,6 +960,18 @@ mod tests {
         delta.expect("text delta over SSE");
         assert!(String::from_utf8_lossy(&live).contains("\"type\":\"phase\""));
         assert!(String::from_utf8_lossy(&live).contains("\"html\":"));
+        let changed = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if String::from_utf8_lossy(&live).contains("context_changed") {
+                    return;
+                }
+                let mut chunk = [0_u8; 1024];
+                let count = events.read(&mut chunk).await.unwrap();
+                live.extend_from_slice(&chunk[..count]);
+            }
+        })
+        .await;
+        changed.expect("context_changed after turn");
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -1122,6 +1135,7 @@ mod tests {
         assert!(INDEX.contains("Shift+Enter"));
         assert!(INDEX.contains("prompt.history"));
         assert!(INDEX.contains("copy-code"));
+        assert!(INDEX.contains("context_changed"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1138,6 +1152,7 @@ mod tests {
         assert!(INDEX.contains("Shift+Enter"));
         assert!(INDEX.contains("prompt.history"));
         assert!(INDEX.contains("copy-code"));
+        assert!(INDEX.contains("context_changed"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
