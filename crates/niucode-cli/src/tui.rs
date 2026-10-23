@@ -478,11 +478,9 @@ pub async fn run(
                         if !text_started {
                             if line_open {
                                 println!();
-                                line_open = false;
                             }
                             if thinking {
                                 eprintln!();
-                                thinking = false;
                             }
                             flush_usage(err, &mut pending_usage, turn_no);
                             print!("{} ", out.accent(theme::ASSISTANT));
@@ -510,7 +508,6 @@ pub async fn run(
                     AgentEvent::ToolCall { name, input } => {
                         if thinking {
                             eprintln!();
-                            thinking = false;
                         }
                         if line_open {
                             println!();
@@ -539,7 +536,6 @@ pub async fn run(
                     } => {
                         if thinking {
                             eprintln!();
-                            thinking = false;
                         }
                         if line_open {
                             println!();
@@ -556,7 +552,6 @@ pub async fn run(
                     AgentEvent::TurnEnd { usage } => {
                         if thinking {
                             eprintln!();
-                            thinking = false;
                         }
                         if line_open {
                             println!();

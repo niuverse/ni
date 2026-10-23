@@ -348,7 +348,7 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
             "id": id,
             "tool": request.tool,
             "summary": request.summary,
-            "preview": request.preview,
+            "preview": preview_json(request.preview.as_ref()),
         }));
         let allowed = receiver
             .recv_timeout(Duration::from_secs(300))
@@ -447,6 +447,53 @@ async fn write_chunk(stream: &mut TcpStream, text: &str) -> Result<()> {
     stream.write_all(text.as_bytes()).await?;
     stream.write_all(b"\r\n").await?;
     Ok(())
+}
+
+fn preview_json(preview: Option<&niucode_tools::ChangePreview>) -> Value {
+    let Some(preview) = preview else {
+        return Value::Null;
+    };
+    let body = match &preview.body {
+        niucode_tools::PreviewBody::Diff { files } => json!({
+            "kind": "diff",
+            "files": files.iter().map(|file| json!({
+                "path": file.path,
+                "is_new": file.is_new,
+                "added": file.added,
+                "removed": file.removed,
+                "hunks": file.hunks.iter().map(|hunk| json!({
+                    "old_start": hunk.old_start,
+                    "old_len": hunk.old_len,
+                    "new_start": hunk.new_start,
+                    "new_len": hunk.new_len,
+                    "lines": hunk.lines.iter().map(|line| json!({
+                        "kind": match line.kind {
+                            niucode_tools::LineKind::Context => "context",
+                            niucode_tools::LineKind::Add => "add",
+                            niucode_tools::LineKind::Remove => "remove",
+                        },
+                        "old_line": line.old_line,
+                        "new_line": line.new_line,
+                        "text": line.text,
+                    })).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        }),
+        niucode_tools::PreviewBody::Command { command } => json!({
+            "kind": "command",
+            "command": command,
+        }),
+        niucode_tools::PreviewBody::Note { message } => json!({
+            "kind": "note",
+            "message": message,
+        }),
+    };
+    json!({
+        "body": body,
+        "added": preview.added,
+        "removed": preview.removed,
+        "warning": preview.warning,
+    })
 }
 
 fn add_html(value: &mut Value) {

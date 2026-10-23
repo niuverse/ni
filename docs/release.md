@@ -75,3 +75,18 @@ skipped them.
 ## If a release is wrong
 
 Yank the affected version (`cargo yank --version 0.1.0 <crate>`) and publish `0.1.1`; do not reuse a version.
+
+## Pre-release verification
+
+Run these before bumping versions or publishing:
+
+```sh
+cargo fmt --all --check
+cargo +1.88.0 check --workspace --all-targets
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo package -p niucode --allow-dirty
+```
+
+The package tarball must include `assets/web.html`; the web approval path must
+not depend on unreleased derives from sibling crates.
