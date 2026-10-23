@@ -202,6 +202,11 @@ pub fn tool_timings(times: &HashMap<String, Duration>, width: usize) -> Option<S
     ))
 }
 
+/// Motion can be disabled without changing the status text.
+pub fn animation_enabled() -> bool {
+    std::env::var_os("NIUCODE_REDUCED_MOTION").is_none() && std::env::var_os("NO_MOTION").is_none()
+}
+
 pub fn activity(
     state: &str,
     tools: usize,
@@ -314,6 +319,11 @@ mod tests {
         assert!(first.contains('▍') || first.contains('▏'), "{first}");
         assert_ne!(first, second);
         assert!(!activity("responding", 0, 0, false, 80, false).contains('▍'));
+        assert!(
+            animation_enabled()
+                == (std::env::var_os("NIUCODE_REDUCED_MOTION").is_none()
+                    && std::env::var_os("NO_MOTION").is_none())
+        );
     }
 
     #[test]

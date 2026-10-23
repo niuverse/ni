@@ -48,6 +48,8 @@ client — without turning the event log into presentation data.
   **M9-051** adds an aggregated per-tool timing line at task completion.
 - Completion transitions that do not reflow history.
 - Respect `NO_COLOR`, `TERM=dumb`, and reduced-motion environments.
+  `NIUCODE_REDUCED_MOTION=1` / `NO_MOTION=1` disables TUI animation while keeping
+  the status line.
 
 ### P4 · Web surface
 

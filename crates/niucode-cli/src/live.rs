@@ -467,7 +467,15 @@ pub async fn run(
                     } else {
                         status.clone()
                     };
-                    let footer = crate::presentation::activity(&footer_status, tools_completed, started.elapsed().as_millis(), Theme::detect_stdout().is_ansi(), terminal.size().0, streaming);
+                    let footer = crate::presentation::activity(
+                        &footer_status,
+                        tools_completed,
+                        started.elapsed().as_millis(),
+                        Theme::detect_stdout().is_ansi()
+                            && crate::presentation::animation_enabled(),
+                        terminal.size().0,
+                        streaming,
+                    );
                     editor.draw(&mut terminal, "niucode ▸ ", &footer, &transcript.pending)?;
                 }
             }
