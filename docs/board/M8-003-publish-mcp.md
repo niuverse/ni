@@ -1,12 +1,13 @@
 +++
 id = "M8-003"
 title = "Publish niucode-mcp at 0.1.5"
-status = "doing"
+status = "done"
 milestone = "M8"
 module = "mcp"
 size = "S"
 priority = "P1"
 updated = "2026-10-23"
+completed = "2026-10-23"
 depends_on = ["M8-001"]
 docs = ["release", "mcp"]
 +++
@@ -29,7 +30,7 @@ The crate is release-ready, but the upload is a human action.
 - [x] `cargo publish -p niucode-mcp --dry-run` reaches the dry-run upload step.
 - [x] The publish script and release doc include the crate in order.
 - [x] The crate is published on crates.io (2026-10-23).
-- [ ] `cargo package -p niuse` passes against the registry. It currently fails because crates.io `niuse-core` 0.1.11 predates the plan API; niuse 0.1.12 is the next release.
+- [x] `cargo package -p niuse` passes against the registry after niucode 0.1.6 and niuse 0.1.12.
 
 ## Notes
 

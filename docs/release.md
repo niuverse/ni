@@ -4,18 +4,21 @@ title = "Releasing niucode crates"
 kind = "doc"
 status = "living"
 order = 55
-summary = "Version 0.1.0, publish order, and the license/token prerequisites for the first public crates."
+summary = "Version 0.1.6, publish order, and the license/token prerequisites for the public crates."
 +++
 
 ## Version
 
-All publishable crates share the workspace version **0.1.5**. Treat them as one release: bump `[workspace.package] version` and publish the whole set together. niuse will depend on `niucode-* = "0.1.0"` while keeping path dependencies for local development.
+All publishable crates share the workspace version **0.1.6**. Treat them as one
+release: bump `[workspace.package] version` and publish the whole set together.
+niuse 0.1.12 depends on `niucode-* = "0.1.6"` while keeping path dependencies
+for local development.
 
-Version `0.1.5` adds embedder command registration in help/completion on top of
-0.1.4's post-turn prompts, plus the new `niucode-mcp` read-only client crate.
-Because `niucode-mcp` is new, it can be published at 0.1.5 alongside the
-existing set; already-published crates are skipped by the script. It stays
-pre-1.0.
+Version `0.1.6` is the API niuse 0.1.12 packages against: it includes
+`EmbedderTool`, the TUI session seams, MCP mount audit, and the accepted
+ADR-0034 write path (`write_tools`, `--allow-mcp-write`). 0.1.5 on the registry
+predated those APIs even though the source had moved; the coordinated release
+fixes that version-discipline gap. It stays pre-1.0.
 
 ## Prerequisites
 
