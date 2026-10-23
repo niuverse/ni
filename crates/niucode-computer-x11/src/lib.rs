@@ -307,6 +307,19 @@ impl X11Backend {
         self.keysym_keycode(0xffe1)
     }
 
+    /// Release common modifiers and mouse buttons. Safe to call repeatedly.
+    pub fn emergency_stop(&self) -> Result<(), X11Error> {
+        for keysym in [0xffe1, 0xffe3, 0xffe9, 0xffeb] {
+            if let Ok(keycode) = self.keysym_keycode(keysym) {
+                let _ = self.fake(3, keycode, 0, 0);
+            }
+        }
+        for button in 1..=7 {
+            let _ = self.fake(5, button, 0, 0);
+        }
+        self.connection.flush().map_err(protocol)
+    }
+
     fn window_info(&self, window: u32) -> Option<WindowInfo> {
         let attributes = self
             .connection
@@ -451,6 +464,10 @@ impl ComputerBackend for X11Backend {
         observation: &Observation,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         X11Backend::perform(self, action, observation).map_err(|error| Box::new(error) as _)
+    }
+
+    fn emergency_stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        X11Backend::emergency_stop(self).map_err(|error| Box::new(error) as _)
     }
 }
 
@@ -736,5 +753,6 @@ mod tests {
             sleep(Duration::from_millis(20));
         }
         assert!(keyed, "XTEST key did not reach the window");
+        backend.emergency_stop().expect("release input");
     }
 }

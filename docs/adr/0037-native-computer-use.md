@@ -48,7 +48,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    observation. The agent advertises `computer` only when a runtime is
    configured; `niucode exec --computer` and `niucode tui --computer` connect to
    X11 and arm it. The TUI `/computer` command reports state, re-arms, or stops
-   (policy off + disarm). Input still follows policy. The user can stop or downgrade at
+   (policy off + disarm). Ctrl-C and `/computer stop` invoke the same emergency
+   stop, which also releases held modifiers/buttons. Input still follows policy. The user can stop or downgrade at
    any time; a global emergency stop releases held keys/buttons. Observation is
    never a hidden background capture.
 6. **Multimodal.** Provider content gains `text | image` parts. First transport

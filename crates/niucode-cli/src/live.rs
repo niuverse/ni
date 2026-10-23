@@ -427,7 +427,10 @@ pub async fn run(
                 }
             }
             result = &mut run, if completed.is_none() => { completed = Some(result); }
-            _ = tokio::signal::ctrl_c() => client.cancel(),
+            _ = tokio::signal::ctrl_c() => {
+                crate::stop_computer(config);
+                client.cancel();
+            }
             _ = ticks.tick() => {
                 // Bound input work per tick. The level-triggered TTY backend requires a positive poll timeout; it does not poll at Duration::ZERO.
                 for _ in 0..32 {
@@ -438,7 +441,10 @@ pub async fn run(
                             action => {
                                 let mut restored = false;
                                 match action {
-                                    ViewAction::Cancel => client.cancel(),
+                                    ViewAction::Cancel => {
+                                        crate::stop_computer(config);
+                                        client.cancel();
+                                    }
                                     ViewAction::Approve { id, allowed, session } => {
                                         *allow_session |= session;
                                         send(&client,RuntimeCommand::Approve { request_id:id,allowed })?;
@@ -452,7 +458,10 @@ pub async fn run(
                     } else if let Some(input) = editor.handle(event, terminal.size().0, "niucode ▸ ") {
                         let queued = matches!(&input, Input::Queue(_));
                         match input {
-                            Input::Interrupted | Input::Eof => client.cancel(),
+                            Input::Interrupted | Input::Eof => {
+                                crate::stop_computer(config);
+                                client.cancel();
+                            }
                             Input::Details => { terminal.clear()?; view = Some(View::history(session, terminal.size().0, approval_keys)?); }
                             Input::Line(text) | Input::Queue(text) => {
                                 // Local commands cannot silently become steering instructions.

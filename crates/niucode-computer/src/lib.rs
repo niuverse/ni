@@ -449,6 +449,12 @@ pub trait ComputerBackend: Send {
         action: &ComputerAction,
         observation: &Observation,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Release held input and stop accepting actions. Backends should make
+    /// this best-effort; the session is disarmed regardless.
+    fn emergency_stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 }
 
 /// JSON schema advertised to the model. The model never sees window kinds or

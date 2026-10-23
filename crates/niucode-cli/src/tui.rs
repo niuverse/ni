@@ -422,11 +422,10 @@ pub async fn run(
                             Ok(()) => eprintln!("computer: armed"),
                             Err(error) => eprintln!("computer: cannot arm: {error}"),
                         },
-                        ComputerCommand::Stop => {
-                            runtime.set_policy(niucode_computer::ComputerPolicy::Off);
-                            runtime.disarm();
-                            eprintln!("computer: stopped and disarmed");
-                        }
+                        ComputerCommand::Stop => match runtime.emergency_stop() {
+                            Ok(()) => eprintln!("computer: stopped, disarmed, input released"),
+                            Err(error) => eprintln!("computer: stopped (release failed: {error})"),
+                        },
                     }
                 }
                 None => {
@@ -798,7 +797,10 @@ pub async fn run(
                 tokio::pin!(run);
                 tokio::select! {
                     result = &mut run => Some(result),
-                    _ = tokio::signal::ctrl_c() => None,
+                    _ = tokio::signal::ctrl_c() => {
+                        crate::stop_computer(&run_config);
+                        None
+                    }
                 }
             };
             if let Some(Ok(outcome)) = &result {

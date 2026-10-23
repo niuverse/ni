@@ -1410,7 +1410,23 @@ async fn run_actor_once(
     tokio::pin!(run);
     tokio::select! {
         result = &mut run => Some(result),
-        _ = tokio::signal::ctrl_c() => None,
+        _ = tokio::signal::ctrl_c() => {
+            stop_computer(config);
+            None
+        }
+    }
+}
+
+pub(crate) fn stop_computer(config: &AgentConfig) {
+    let Some(runtime) = &config.computer else {
+        return;
+    };
+    match runtime.lock() {
+        Ok(mut runtime) => match runtime.emergency_stop() {
+            Ok(()) => eprintln!("computer: emergency stop · policy off, input released"),
+            Err(error) => eprintln!("computer: emergency stop (backend release failed: {error})"),
+        },
+        Err(_) => eprintln!("computer: emergency stop (runtime lock poisoned)"),
     }
 }
 

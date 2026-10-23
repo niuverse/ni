@@ -115,6 +115,16 @@ impl ComputerRuntime {
         self.session.disarm();
     }
 
+    /// Emergency stop: turn policy off, disarm, release held input. Returns the
+    /// backend release error (if any) after the session is already stopped.
+    pub fn emergency_stop(&mut self) -> anyhow::Result<()> {
+        self.session.set_policy(ComputerPolicy::Off);
+        self.session.disarm();
+        self.backend
+            .emergency_stop()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))
+    }
+
     pub fn observe(&mut self, window: Option<WindowId>) -> Result<niucode_computer::Capture> {
         let capture = self
             .backend
@@ -1649,6 +1659,49 @@ mod tests {
             niucode_provider::MessageContent::Text(text) => text,
         };
         assert!(text.contains("observation obs-1"));
+    }
+
+    #[derive(Clone, Default)]
+    struct StopFlag(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+    struct StopBackend {
+        flag: StopFlag,
+    }
+
+    impl niucode_computer::ComputerBackend for StopBackend {
+        fn observe(
+            &mut self,
+            _window: Option<WindowId>,
+        ) -> Result<niucode_computer::Capture, Box<dyn std::error::Error + Send + Sync>> {
+            Err("unused".into())
+        }
+
+        fn perform(
+            &mut self,
+            _action: &ComputerAction,
+            _observation: &niucode_computer::Observation,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+
+        fn emergency_stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.flag.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn emergency_stop_disarms_and_releases_input() {
+        let flag = StopFlag::default();
+        let mut runtime = ComputerRuntime::new(
+            Box::new(StopBackend { flag: flag.clone() }),
+            ComputerPolicy::Control,
+        );
+        runtime.arm().expect("arm");
+        runtime.emergency_stop().expect("stop");
+        assert_eq!(runtime.policy(), ComputerPolicy::Off);
+        assert!(!runtime.is_armed());
+        assert!(flag.0.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[tokio::test]
