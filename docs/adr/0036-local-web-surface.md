@@ -33,7 +33,8 @@ the missing piece is a local transport and a rendering client.
    client uses that HTML only for final messages. Math uses native MathML from
    `latex2mathml`, with escaped fallback and no remote assets. An embedder may
    supply `brand` and `context`; `/api/context` feeds a generic sidebar and
-   `/api/status` exposes model/cwd/policy for the header. SSE `phase` events
+   `/api/status` exposes model/cwd/policy for the header. Approval previews are
+   rendered as escaped structured diffs/commands, not raw JSON. SSE `phase` events
    drive a client-side turn timer; `text_delta` carries accumulated rendered
    HTML, and the durable usage comes from `turn_end`. Read-only remains the
    default for the CLI.

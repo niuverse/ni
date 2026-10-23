@@ -440,6 +440,16 @@ mod tests {
     }
 
     #[test]
+    fn preview_serializes_with_a_kind_tag_for_clients() {
+        let note = serde_json::to_value(ChangePreview::note("review me")).unwrap();
+        assert_eq!(note["body"]["kind"], "note");
+        assert_eq!(note["body"]["message"], "review me");
+        let command = serde_json::to_value(ChangePreview::command("cargo test")).unwrap();
+        assert_eq!(command["body"]["kind"], "command");
+        assert_eq!(command["body"]["command"], "cargo test");
+    }
+
+    #[test]
     fn bash_preview_echoes_the_command() {
         let directory = temp_workspace("bash");
         let tools = toolbox(&directory);

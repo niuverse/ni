@@ -55,6 +55,13 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 .approval { border:1px solid #d29922; border-radius:8px; padding:12px; margin:14px 0; background:#1c1710; }
 .approval h3 { margin:0 0 6px; color:#d29922; font-size:14px; }
 .approval pre { white-space:pre-wrap; color:var(--dim); font-size:12px; }
+.preview { border:1px solid #30363d; border-radius:6px; margin:8px 0; overflow:auto; max-height:360px; background:#0d1117; }
+.diff-file { border-bottom:1px solid #21262d; }
+.diff-head { padding:5px 8px; color:var(--dim); font-size:12px; background:#161b22; }
+.diff-line { display:flex; gap:8px; font:12px/1.45 ui-monospace,monospace; white-space:pre; padding:0 8px; }
+.diff-line.add { background:#12261a; color:#aff5b4; }
+.diff-line.remove { background:#2d1214; color:#ffb3ba; }
+.diff-num { color:#6e7681; min-width:3ch; text-align:right; user-select:none; }
 .approval button { margin-right:8px; } .deny { background:#30363d; color:var(--text); }
 </style>
 </head>
@@ -122,11 +129,43 @@ function render(e) {
   else if (e.type === 'phase') { if (e.phase === 'done') endTurn(); else beginTurn(e.phase); }
   else if (e.type === 'turn_end') { const elapsed = endTurn(); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); }
 }
+function renderPreview(preview) {
+  const box = node('div','preview');
+  if (!preview || !preview.body) { box.appendChild(node('div','meta','preview unavailable')); return box; }
+  const body = preview.body;
+  if (body.kind === 'command') {
+    const pre = node('pre'); pre.textContent = body.command || ''; box.appendChild(pre); return box;
+  }
+  if (body.kind === 'note') { box.appendChild(node('div','meta', body.message || '')); return box; }
+  if (body.kind !== 'diff') { box.appendChild(node('div','meta','preview unavailable')); return box; }
+  let lines = 0;
+  for (const file of body.files || []) {
+    const section = node('div','diff-file');
+    const head = node('div','diff-head');
+    head.textContent = (file.is_new ? 'new ' : '') + file.path + '  +' + file.added + ' −' + file.removed;
+    section.appendChild(head);
+    for (const hunk of file.hunks || []) {
+      for (const line of hunk.lines || []) {
+        if (lines++ > 200) break;
+        const row = node('div','diff-line ' + (line.kind || 'context'));
+        const old = node('span','diff-num', line.old_line == null ? '' : String(line.old_line));
+        const neu = node('span','diff-num', line.new_line == null ? '' : String(line.new_line));
+        const mark = node('span',null, line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' ');
+        const text = node('span',null,line.text || '');
+        row.append(old, neu, mark, text); section.appendChild(row);
+      }
+    }
+    box.appendChild(section);
+  }
+  if (preview.warning) box.appendChild(node('div','meta',preview.warning));
+  return box;
+}
+
 function renderApproval(e) {
   const card = node('div','approval');
   card.appendChild(node('h3',null,'Approval · '+e.tool));
   card.appendChild(node('div','meta',e.summary || ''));
-  if (e.preview) card.appendChild(node('pre',null,JSON.stringify(e.preview, null, 2).slice(0, 4000)));
+  if (e.preview) card.appendChild(renderPreview(e.preview));
   const allow = node('button',null,'Allow');
   const deny = node('button','deny','Deny');
   const finish = async allowed => {

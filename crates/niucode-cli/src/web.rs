@@ -1064,6 +1064,8 @@ mod tests {
         assert!(INDEX.contains("fetch('/api/prompt'"));
         assert!(INDEX.contains("text_delta"));
         assert!(INDEX.contains("renderApproval"));
+        assert!(INDEX.contains("renderPreview"));
+        assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
         assert!(INDEX.contains("tok-keyword"));
