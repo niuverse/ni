@@ -32,7 +32,8 @@ use a real Markdown/KaTeX renderer.
 3. Buffer consecutive pipe-table lines and render them as a box table only when
    the block ends. Column widths are cell-width based and capped to the viewport.
    Header rows are bold and borders dim via line metadata; styling never changes
-   cell width. Cell inline styling remains a later pass.
+   cell width. Cell inline styles are carried as byte ranges and applied to
+   spans in both inline and linear modes.
 4. Code fences bypass Markdown parsing and keep the existing syntax highlight;
    the fence markers are replaced by a `▎ language` label.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,

@@ -228,33 +228,118 @@ impl Theme {
         self,
         text: &str,
         kind: crate::table::TableLineKind,
+        styles: &[crate::table::StyledRange],
     ) -> ratatui::text::Line<'static> {
-        use ratatui::style::Modifier;
-        let mut line = self.row(text, false);
-        if self.ansi {
-            let modifier = match kind {
+        use ratatui::{
+            style::{Color, Modifier, Style},
+            text::Span,
+        };
+        let mut spans = Vec::new();
+        if self.ansi && !styles.is_empty() {
+            let mut cursor = 0;
+            for range in styles {
+                if range.start > cursor {
+                    spans.push(Span::raw(text[cursor..range.start].to_string()));
+                }
+                let mut style = Style::default();
+                if range.style.bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if range.style.italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                if range.style.code {
+                    style = style.fg(Color::Cyan);
+                }
+                if range.style.link {
+                    style = style.fg(Color::Cyan).add_modifier(Modifier::UNDERLINED);
+                }
+                if range.style.strike {
+                    style = style.add_modifier(Modifier::CROSSED_OUT);
+                }
+                if range.style.math {
+                    style = style.fg(Color::Magenta).add_modifier(Modifier::ITALIC);
+                }
+                spans.push(Span::styled(
+                    text[range.start..range.end].to_string(),
+                    style,
+                ));
+                cursor = range.end;
+            }
+            if cursor < text.len() {
+                spans.push(Span::raw(text[cursor..].to_string()));
+            }
+        } else {
+            spans.push(Span::raw(text.to_string()));
+        }
+        let modifier = if !self.ansi {
+            None
+        } else {
+            match kind {
                 crate::table::TableLineKind::Header => Some(Modifier::BOLD),
                 crate::table::TableLineKind::Border => Some(Modifier::DIM),
                 crate::table::TableLineKind::Row => None,
-            };
-            if let Some(modifier) = modifier {
-                for span in &mut line.spans {
-                    span.style = span.style.add_modifier(modifier);
-                }
+            }
+        };
+        if let Some(modifier) = modifier {
+            for span in &mut spans {
+                span.style = span.style.add_modifier(modifier);
             }
         }
-        line
+        ratatui::text::Line::from(spans)
     }
 
-    pub fn render_table_row(self, text: &str, kind: crate::table::TableLineKind) -> String {
+    pub fn render_table_row(
+        self,
+        text: &str,
+        kind: crate::table::TableLineKind,
+        styles: &[crate::table::StyledRange],
+    ) -> String {
         if !self.ansi {
-            return self.render_row(text, false);
+            return text.to_string();
         }
-        let row = self.render_row(text, false);
+        let mut body = String::new();
+        let mut cursor = 0;
+        for range in styles {
+            if range.start > cursor {
+                body.push_str(&text[cursor..range.start]);
+            }
+            let mut attrs = Vec::new();
+            if range.style.bold {
+                attrs.push("1");
+            }
+            if range.style.italic {
+                attrs.push("3");
+            }
+            if range.style.code {
+                attrs.push("36");
+            }
+            if range.style.link {
+                attrs.push("4");
+            }
+            if range.style.strike {
+                attrs.push("9");
+            }
+            if range.style.math {
+                attrs.push("35");
+                attrs.push("3");
+            }
+            if attrs.is_empty() {
+                body.push_str(&text[range.start..range.end]);
+            } else {
+                body.push_str(&format!(
+                    "\x1b[{}m{}\x1b[0m",
+                    attrs.join(";"),
+                    &text[range.start..range.end]
+                ));
+            }
+            cursor = range.end;
+        }
+        body.push_str(&text[cursor..]);
         match kind {
-            crate::table::TableLineKind::Header => format!("\x1b[1m{row}\x1b[0m"),
-            crate::table::TableLineKind::Border => format!("\x1b[2m{row}\x1b[0m"),
-            crate::table::TableLineKind::Row => row,
+            crate::table::TableLineKind::Header => format!("\x1b[1m{body}\x1b[0m"),
+            crate::table::TableLineKind::Border => format!("\x1b[2m{body}\x1b[0m"),
+            crate::table::TableLineKind::Row => body,
         }
     }
 
@@ -345,21 +430,39 @@ mod tests {
     fn table_header_and_border_get_modifiers() {
         use ratatui::style::Modifier;
         let theme = Theme::ansi_forced();
-        let header = theme.table_row("│ name │", crate::table::TableLineKind::Header);
+        let header = theme.table_row("│ name │", crate::table::TableLineKind::Header, &[]);
         assert!(header
             .spans
             .iter()
             .all(|span| span.style.add_modifier.contains(Modifier::BOLD)));
-        let border = theme.table_row("┌────┐", crate::table::TableLineKind::Border);
+        let border = theme.table_row("┌────┐", crate::table::TableLineKind::Border, &[]);
         assert!(border
             .spans
             .iter()
             .all(|span| span.style.add_modifier == Modifier::DIM));
         assert!(Theme::plain()
-            .table_row("│ name │", crate::table::TableLineKind::Header)
+            .table_row("│ name │", crate::table::TableLineKind::Header, &[])
             .spans
             .iter()
             .all(|span| span.style.add_modifier.is_empty()));
+    }
+
+    #[test]
+    fn table_cell_inline_styles_are_applied() {
+        use ratatui::style::Modifier;
+        let lines =
+            crate::table::render(&["| head | value |".into(), "| **bold** | 1 |".into()], 80);
+        let row = Theme::ansi_forced().table_row(&lines[3].text, lines[3].kind, &lines[3].styles);
+        assert!(row
+            .spans
+            .iter()
+            .any(|span| span.style.add_modifier.contains(Modifier::BOLD)));
+        assert!(row
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>()
+            .contains("bold"));
     }
 
     #[test]

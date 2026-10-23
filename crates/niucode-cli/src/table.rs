@@ -1,11 +1,13 @@
 //! Terminal table renderer for Markdown pipe tables.
 //!
 //! Rows are buffered by the transcript until the block ends, because column
-//! widths need the whole table. Cell text is inline-Markdown-stripped here;
-//! header/border tone is carried as line metadata, while styling inside cells
-//! is a later pass.
+//! widths need the whole table. Cell text carries inline-Markdown styles as
+//! byte ranges into the final line; the terminal applies them without changing
+//! cell width.
 
 use unicode_width::UnicodeWidthStr;
+
+use crate::markdown::Style;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TableLineKind {
@@ -15,9 +17,23 @@ pub enum TableLineKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StyledRange {
+    pub start: usize,
+    pub end: usize,
+    pub style: Style,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableLine {
     pub text: String,
     pub kind: TableLineKind,
+    pub styles: Vec<StyledRange>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Cell {
+    text: String,
+    styles: Vec<StyledRange>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,30 +48,40 @@ pub fn is_row(line: &str) -> bool {
     trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() > 1
 }
 
-fn cells(line: &str) -> Vec<String> {
+fn cell(raw: &str) -> Cell {
+    let mut text = String::new();
+    let mut styles = Vec::new();
+    for span in crate::markdown::inline(raw.trim()) {
+        let start = text.len();
+        text.push_str(&span.text);
+        if span.style != Style::default() {
+            styles.push(StyledRange {
+                start,
+                end: text.len(),
+                style: span.style,
+            });
+        }
+    }
+    Cell { text, styles }
+}
+
+fn cells(line: &str) -> Vec<Cell> {
     let trimmed = line.trim();
     let body = trimmed
         .strip_prefix('|')
         .unwrap_or(trimmed)
         .strip_suffix('|')
         .unwrap_or(trimmed);
-    body.split('|')
-        .map(|cell| {
-            crate::markdown::inline(cell.trim())
-                .into_iter()
-                .map(|span| span.text)
-                .collect::<String>()
-        })
-        .collect()
+    body.split('|').map(cell).collect()
 }
 
-fn separator(cells: &[String]) -> Option<Vec<Align>> {
+fn separator(cells: &[Cell]) -> Option<Vec<Align>> {
     if cells.is_empty() {
         return None;
     }
     let mut aligns = Vec::new();
     for cell in cells {
-        let trimmed = cell.trim();
+        let trimmed = cell.text.trim();
         if trimmed.is_empty()
             || !trimmed
                 .chars()
@@ -77,10 +103,27 @@ fn separator(cells: &[String]) -> Option<Vec<Align>> {
     Some(aligns)
 }
 
+fn border_line(widths: &[usize], left: &str, middle: &str, right: &str) -> TableLine {
+    let mut text = String::from(left);
+    for (index, width) in widths.iter().enumerate() {
+        text.push_str(&"─".repeat(*width + 2));
+        text.push_str(if index + 1 == widths.len() {
+            right
+        } else {
+            middle
+        });
+    }
+    TableLine {
+        text,
+        kind: TableLineKind::Border,
+        styles: Vec::new(),
+    }
+}
+
 /// Render a table block. The returned lines contain no ANSI styling; the
-/// terminal applies the row tone once, so width stays stable.
+/// terminal maps `styles` to spans, so width stays stable.
 pub fn render(lines: &[String], max_width: usize) -> Vec<TableLine> {
-    let mut rows: Vec<Vec<String>> = lines
+    let mut rows: Vec<Vec<Cell>> = lines
         .iter()
         .filter(|line| is_row(line))
         .map(|line| cells(line))
@@ -106,7 +149,7 @@ pub fn render(lines: &[String], max_width: usize) -> Vec<TableLine> {
     let mut widths = vec![1usize; columns];
     for row in &rows {
         for (index, cell) in row.iter().enumerate() {
-            widths[index] = widths[index].max(cell.width());
+            widths[index] = widths[index].max(cell.text.width());
         }
     }
     // Keep the block inside the viewport; truncate the widest columns first.
@@ -118,59 +161,58 @@ pub fn render(lines: &[String], max_width: usize) -> Vec<TableLine> {
         }
     }
 
-    let border_line = |left: &str, middle: &str, right: &str| {
-        let mut line = String::from(left);
-        for (index, width) in widths.iter().enumerate() {
-            line.push_str(&"─".repeat(*width + 2));
-            line.push_str(if index + 1 == columns { right } else { middle });
-        }
-        line
-    };
-    let mut out = vec![TableLine {
-        text: border_line("┌", "┬", "┐"),
-        kind: TableLineKind::Border,
-    }];
+    let mut out = vec![border_line(&widths, "┌", "┬", "┐")];
     for (row_index, row) in rows.iter().enumerate() {
-        let mut line = String::from("│");
+        let mut text = String::from("│");
+        let mut styles = Vec::new();
         for (index, width) in widths.iter().enumerate() {
-            let cell = row.get(index).map(String::as_str).unwrap_or("");
+            let cell = row.get(index);
+            let plain = cell.map(|cell| cell.text.as_str()).unwrap_or("");
             let available = *width;
-            let mut text = cell.to_string();
-            if text.width() > available {
-                text = truncate(&text, available);
-            }
-            let pad = available.saturating_sub(text.width());
+            let (cell_text, keep_styles) = if plain.width() > available {
+                (truncate(plain, available), false)
+            } else {
+                (plain.to_string(), true)
+            };
+            let pad = available.saturating_sub(cell_text.width());
             let (left, right) = match aligns.get(index).copied().unwrap_or(Align::Left) {
                 Align::Left => (0, pad),
                 Align::Right => (pad, 0),
                 Align::Center => (pad / 2, pad - pad / 2),
             };
-            line.push(' ');
-            line.push_str(&" ".repeat(left));
-            line.push_str(&text);
-            line.push_str(&" ".repeat(right));
-            line.push(' ');
-            line.push('│');
+            text.push(' ');
+            text.push_str(&" ".repeat(left));
+            if keep_styles {
+                if let Some(cell) = cell {
+                    let offset = text.len();
+                    for style in &cell.styles {
+                        styles.push(StyledRange {
+                            start: offset + style.start,
+                            end: offset + style.end,
+                            style: style.style,
+                        });
+                    }
+                }
+            }
+            text.push_str(&cell_text);
+            text.push_str(&" ".repeat(right));
+            text.push(' ');
+            text.push('│');
         }
         out.push(TableLine {
-            text: line,
+            text,
             kind: if row_index == 0 {
                 TableLineKind::Header
             } else {
                 TableLineKind::Row
             },
+            styles,
         });
         if row_index == 0 {
-            out.push(TableLine {
-                text: border_line("├", "┼", "┤"),
-                kind: TableLineKind::Border,
-            });
+            out.push(border_line(&widths, "├", "┼", "┤"));
         }
     }
-    out.push(TableLine {
-        text: border_line("└", "┴", "┘"),
-        kind: TableLineKind::Border,
-    });
+    out.push(border_line(&widths, "└", "┴", "┘"));
     out
 }
 
@@ -234,12 +276,18 @@ mod tests {
     }
 
     #[test]
-    fn inline_markers_are_stripped_from_cells() {
+    fn inline_styles_become_ranges_without_markers() {
         let lines = render(&["| **bold** | `code` |".into()], 80);
         assert!(lines[1].text.contains("bold"));
         assert!(lines[1].text.contains("code"));
         assert!(!lines[1].text.contains('*'));
         assert!(!lines[1].text.contains('`'));
+        assert!(lines[1].styles.iter().any(|range| range.style.bold));
+        assert!(lines[1].styles.iter().any(|range| range.style.code));
+        for range in &lines[1].styles {
+            assert!(range.start < range.end);
+            assert!(range.end <= lines[1].text.len());
+        }
     }
 
     #[test]
