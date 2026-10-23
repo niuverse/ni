@@ -3,10 +3,11 @@
 //! The event log is the truth. A projection is a lossy model context built from
 //! that log; compaction appends a new event and never rewrites history.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::{bail, Result};
-use niucode_core::{Event, ToolCall};
+use niucode_attachments::AttachmentStore;
+use niucode_core::{AttachmentKind, Event, ToolCall};
 use niucode_provider::{ChatMessage, MessageContent, ToolSpec};
 
 pub const DEFAULT_CONTEXT_BUDGET: usize = 64_000;
@@ -130,7 +131,58 @@ pub fn estimate_context(messages: &[ChatMessage], tools: &[ToolSpec]) -> usize {
 /// inserted at the cutoff, older compactions are ignored, and the compaction
 /// event itself is never projected at its physical position.
 pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
-    let active_compaction = events
+    project_history_inner(events, None)
+}
+
+/// Rebuild history with attachment content. Only the most recent
+/// `recent_images` unique user images are sent again; older ones become an
+/// explicit omission marker. Text attachments are always resolved unless the
+/// file is missing, in which case the marker says so.
+pub fn project_history_with_attachments(
+    events: &[Event],
+    store: &AttachmentStore,
+    recent_images: usize,
+) -> Result<Vec<ChatMessage>> {
+    let (cutoff, _) = active_compaction(events);
+    let mut selected = HashSet::new();
+    let mut seen = HashSet::new();
+    for event in events[cutoff..].iter().rev() {
+        if let Event::UserMessage { attachments, .. } = event {
+            for attachment in attachments.iter().rev() {
+                if attachment.kind == AttachmentKind::Image
+                    && seen.insert(attachment.sha256.clone())
+                    && selected.len() < recent_images
+                {
+                    selected.insert(attachment.sha256.clone());
+                }
+            }
+        }
+    }
+    project_history_inner(events, Some((store, &selected)))
+}
+
+fn attachment_fence(attachment: &niucode_core::AttachmentRef, content: &str) -> String {
+    format!(
+        "\n\n<attachment name={:?} sha256={:?}>\n````\n{}\n````\n</attachment>",
+        attachment.name.as_deref().unwrap_or("attachment"),
+        attachment.sha256,
+        content.replace("````", "` ` ` `")
+    )
+}
+
+fn attachment_omitted(attachment: &niucode_core::AttachmentRef) -> String {
+    format!(
+        "\n\n[image omitted: {}]",
+        attachment
+            .alt
+            .as_deref()
+            .or(attachment.name.as_deref())
+            .unwrap_or("image")
+    )
+}
+
+fn active_compaction(events: &[Event]) -> (usize, &str) {
+    events
         .iter()
         .enumerate()
         .rev()
@@ -141,9 +193,15 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
                 (!summary.is_empty() && cutoff <= index).then_some((cutoff, summary.as_str()))
             }
             _ => None,
-        });
+        })
+        .unwrap_or((0, ""))
+}
 
-    let (cutoff, summary) = active_compaction.unwrap_or((0, ""));
+fn project_history_inner(
+    events: &[Event],
+    attachment_store: Option<(&AttachmentStore, &HashSet<String>)>,
+) -> Result<Vec<ChatMessage>> {
+    let (cutoff, summary) = active_compaction(events);
     let mut messages = Vec::new();
     let mut pending_tools: Vec<String> = Vec::new();
 
@@ -184,7 +242,47 @@ pub fn project_history(events: &[Event]) -> Result<Vec<ChatMessage>> {
             | Event::TaskStarted { .. }
             | Event::TaskFinished { .. }
             | Event::SessionEnd { .. } => {}
-            Event::UserMessage { text, .. } | Event::InputApplied { text, .. } => {
+            Event::UserMessage {
+                text, attachments, ..
+            } => {
+                flush_pending_tools(&mut messages, &mut pending_tools);
+                let mut text = text.clone();
+                let mut images = Vec::new();
+                if let Some((store, selected)) = attachment_store {
+                    for attachment in attachments {
+                        match attachment.kind {
+                            AttachmentKind::Text => match store.text(attachment) {
+                                Ok(content) => {
+                                    text.push_str(&attachment_fence(attachment, &content))
+                                }
+                                Err(_) => text.push_str(&format!(
+                                    "\n\n[attachment missing: {}]",
+                                    attachment
+                                        .name
+                                        .as_deref()
+                                        .unwrap_or(attachment.sha256.as_str())
+                                )),
+                            },
+                            AttachmentKind::Image => {
+                                if selected.contains(&attachment.sha256) {
+                                    match store.image_data_url(attachment) {
+                                        Ok(url) => images.push(url),
+                                        Err(_) => text.push_str(&attachment_omitted(attachment)),
+                                    }
+                                } else {
+                                    text.push_str(&attachment_omitted(attachment));
+                                }
+                            }
+                        }
+                    }
+                }
+                if images.is_empty() {
+                    messages.push(ChatMessage::user(text));
+                } else {
+                    messages.push(ChatMessage::user_with_images(text, images));
+                }
+            }
+            Event::InputApplied { text, .. } => {
                 flush_pending_tools(&mut messages, &mut pending_tools);
                 messages.push(ChatMessage::user(text.clone()));
             }
@@ -753,6 +851,50 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].text(), Some("answer"));
     }
+    #[test]
+    fn history_keeps_only_recent_two_user_images() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AttachmentStore::open(directory.path()).unwrap();
+        let first = store
+            .put(b"\x89PNG\r\n\x1a\nfirst", Some("one.png"), Some("one"))
+            .unwrap();
+        let second = store
+            .put(b"\x89PNG\r\n\x1a\nsecond", Some("two.png"), Some("two"))
+            .unwrap();
+        let third = store
+            .put(b"\x89PNG\r\n\x1a\nthird", Some("three.png"), Some("three"))
+            .unwrap();
+        let script = store.put(b"print('hi')\n", Some("a.py"), None).unwrap();
+        let events = vec![
+            Event::UserMessage {
+                text: "first".into(),
+                attachments: vec![first, script],
+                ts: 1,
+            },
+            Event::UserMessage {
+                text: "second".into(),
+                attachments: vec![second],
+                ts: 2,
+            },
+            Event::UserMessage {
+                text: "third".into(),
+                attachments: vec![third],
+                ts: 3,
+            },
+        ];
+        let messages = project_history_with_attachments(&events, &store, 2).unwrap();
+        assert_eq!(messages.len(), 3);
+        assert!(!messages[0].has_images());
+        assert!(messages[0].text().unwrap().contains("[image omitted: one]"));
+        assert!(messages[0]
+            .text()
+            .unwrap()
+            .contains("<attachment name=\"a.py\""));
+        assert!(messages[1].has_images());
+        assert!(messages[2].has_images());
+        assert_eq!(messages[2].content.as_ref().unwrap().image_count(), 1);
+    }
+
     #[test]
     fn image_parts_reserve_visual_tokens() {
         let message =

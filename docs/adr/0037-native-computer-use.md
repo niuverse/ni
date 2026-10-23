@@ -48,6 +48,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    SHA-256, no base64 in JSONL), recent two are re-sent, older ones become
    `[image omitted: alt]`. User images and the current screenshot share a
    visual budget (max four per request); screenshots are ephemeral by default.
+   Resumed sessions rebuild history through the same projection, so compaction
+   and the recent-image window use one rule.
 7. **Text attachments.** `@path` / `/attach` / CLI flags / Web drop-paste; a
    script is text context and is never auto-executed. Per-file 20k chars /
    ~4k tokens; total attachments at most 25% of context; over budget rejects

@@ -279,12 +279,16 @@ pub async fn run_with_attachments(
     session: &mut SessionLog,
     config: &AgentConfig,
     prompt: &str,
-    history: Vec<ChatMessage>,
     attachments: Vec<AttachmentRef>,
     store: &AttachmentStore,
     approver: &mut dyn FnMut(&ApprovalRequest) -> bool,
     observer: &mut dyn FnMut(AgentEvent),
 ) -> Result<RunOutcome> {
+    let history = crate::context::project_history_with_attachments(
+        &niucode_core::load(session.path())?.events,
+        store,
+        2,
+    )?;
     run_inner(
         provider,
         session,
@@ -1267,7 +1271,6 @@ mod tests {
             &mut session,
             &config,
             "look at this",
-            Vec::new(),
             vec![image, script],
             &store,
             &mut |_| true,
