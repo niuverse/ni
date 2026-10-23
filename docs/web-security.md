@@ -18,14 +18,15 @@ truth; the browser is a client.
 - Trusted: the local OS user, the local browser, the session log, the workspace.
 - Untrusted: model output, tool output, Markdown links/images, other web origins,
   foreign `Host` headers.
-- Not trusted: other local processes/users on a shared machine. Loopback has no
-  authentication; any local principal that can connect can call the API.
+- Not trusted: other local processes/users on a shared machine. A per-run random
+  token plus HttpOnly cookie gates the local API; it is not remote auth.
 
 ## Controls
 
 | Risk | Control | Test / evidence |
 | --- | --- | --- |
 | Remote network exposure | bind `127.0.0.1` only | server construction |
+| Local API access | per-run random token + HttpOnly SameSite cookie | `access_tokens_are_required_and_cookie_bootstrapped` |
 | DNS rebinding / foreign Host | loopback `Host` allowlist | `cross_origin_and_foreign_host_requests_are_rejected` |
 | Cross-site POST | loopback `Origin` check on POST | same test |
 | Framing / clickjacking | `X-Frame-Options: DENY`, `frame-ancestors 'none'` | response headers |
@@ -39,8 +40,10 @@ truth; the browser is a client.
 
 ## Residual risks
 
-- No token or authentication: another local process/user can use the API. The
-  guards stop browser origins, not local sockets.
+- The token is a local isolation measure, not OS-level auth: another process
+  running as the same user can read the startup URL, browser cookie store, or
+  process memory. The guards stop browser origins and unsolicited local callers,
+  not a hostile same-user process.
 - The server trusts the workspace/path passed on the command line; it does not
   sandbox its own process.
 - Browser extensions, devtools, or a compromised local browser bypass the

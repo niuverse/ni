@@ -69,6 +69,7 @@ struct State {
     context: Vec<u8>,
     context_provider: Option<ContextProvider>,
     brand: String,
+    token: Option<String>,
     allow_new: bool,
     allowed_tools: Mutex<HashSet<String>>,
     new_session_provider: Option<NewSessionProvider>,
@@ -131,12 +132,13 @@ pub async fn serve(options: Options) -> Result<()> {
         "events": events,
     }))?;
     let (live, _) = broadcast::channel(256);
+    let token = random_token();
     let listener = TcpListener::bind(("127.0.0.1", options.port))
         .await
         .context("bind 127.0.0.1")?;
     let address = listener.local_addr()?;
     println!(
-        "web: http://{address}/ · {} events · workspace-write + ask · Ctrl-C to stop",
+        "web: http://{address}/?token={token} · {} events · workspace-write + ask · Ctrl-C to stop",
         loaded.events.len()
     );
     serve_listener(
@@ -155,6 +157,7 @@ pub async fn serve(options: Options) -> Result<()> {
             ))?,
             context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
+            token: Some(token),
             allow_new: options.allow_new,
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: options.new_session_provider,
@@ -186,6 +189,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
+    let route = path.split('?').next().unwrap_or(path);
     if let Some(host) = header(head, "host") {
         if !loopback_host(host) {
             return send(
@@ -210,14 +214,31 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
             }
         }
     }
+    let query_authorized = state
+        .token
+        .as_deref()
+        .is_some_and(|token| query_token(path) == Some(token));
+    let cookie_authorized = state
+        .token
+        .as_deref()
+        .is_some_and(|token| cookie_token(head) == Some(token));
+    if state.token.is_some() && !query_authorized && !cookie_authorized {
+        return send(
+            &mut stream,
+            "401 Unauthorized",
+            "application/json",
+            br#"{"error":"missing or invalid token"}"#.to_vec(),
+        )
+        .await;
+    }
     let current_path = state.path.lock().unwrap().clone();
-    if method == "GET" && path == "/api/events" {
+    if method == "GET" && route == "/api/events" {
         return stream_events(stream, current_path, state.live.subscribe()).await;
     }
-    if method == "POST" && path == "/api/prompt" {
+    if method == "POST" && route == "/api/prompt" {
         return prompt(stream, state, body).await;
     }
-    if method == "GET" && path == "/api/context" {
+    if method == "GET" && route == "/api/context" {
         let body = if let Some(provider) = &state.context_provider {
             serde_json::to_vec(&provider())?
         } else {
@@ -225,7 +246,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         };
         return send(&mut stream, "200 OK", "application/json", body).await;
     }
-    if method == "GET" && path == "/api/export" {
+    if method == "GET" && route == "/api/export" {
         let markdown = match load(&current_path) {
             Ok(loaded) => export_markdown(&loaded.events),
             Err(error) => {
@@ -240,7 +261,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         };
         return send_download(&mut stream, markdown).await;
     }
-    if method == "GET" && path == "/api/status" {
+    if method == "GET" && route == "/api/status" {
         let status = json!({
             "brand": state.brand,
             "provider": state.preset,
@@ -260,17 +281,22 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         )
         .await;
     }
-    if method == "POST" && path == "/api/new" {
+    if method == "POST" && route == "/api/new" {
         return new_session(stream, state).await;
     }
-    if method == "POST" && path == "/api/switch" {
+    if method == "POST" && route == "/api/switch" {
         return switch_session(stream, state, body).await;
     }
-    if method == "POST" && path == "/api/approval" {
+    if method == "POST" && route == "/api/approval" {
         return approval(stream, state, body).await;
     }
     let snapshot = state.snapshot.lock().unwrap().clone();
-    let (status, kind, body) = response(method, path, &snapshot);
+    if route == "/" && query_authorized && !cookie_authorized {
+        if let Some(token) = &state.token {
+            return send_with_cookie(&mut stream, token).await;
+        }
+    }
+    let (status, kind, body) = response(method, route, &snapshot);
     send(&mut stream, status, kind, body).await
 }
 
@@ -698,6 +724,54 @@ async fn write_chunk(stream: &mut TcpStream, text: &str) -> Result<()> {
     stream.write_all(text.as_bytes()).await?;
     stream.write_all(b"\r\n").await?;
     Ok(())
+}
+
+fn cookie_token(head: &str) -> Option<&str> {
+    header(head, "cookie")?.split(';').find_map(|part| {
+        part.trim()
+            .strip_prefix("niucode_token=")
+            .filter(|token| !token.is_empty())
+    })
+}
+
+fn query_token(path: &str) -> Option<&str> {
+    path.split_once('?')?.1.split('&').find_map(|part| {
+        part.strip_prefix("token=")
+            .filter(|token| !token.is_empty())
+    })
+}
+
+async fn send_with_cookie(stream: &mut TcpStream, token: &str) -> Result<()> {
+    let body = INDEX.as_bytes();
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nSet-Cookie: niucode_token={token}; HttpOnly; SameSite=Strict; Path=/\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await?;
+    stream.write_all(body).await?;
+    stream.shutdown().await?;
+    Ok(())
+}
+
+fn random_token() -> String {
+    let mut bytes = [0_u8; 16];
+    #[cfg(unix)]
+    {
+        use std::io::Read;
+        if let Ok(mut file) = std::fs::File::open("/dev/urandom") {
+            let _ = file.read_exact(&mut bytes);
+        }
+    }
+    if bytes.iter().all(|byte| *byte == 0) {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or(0);
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = (nanos >> ((index % 16) * 8)) as u8;
+        }
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
@@ -1144,6 +1218,7 @@ mod tests {
             context,
             context_provider: None,
             brand: "niucode".into(),
+            token: None,
             allow_new: true,
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
@@ -1172,6 +1247,7 @@ mod tests {
             context: br#"{}"#.to_vec(),
             context_provider: None,
             brand: "niucode".into(),
+            token: None,
             allow_new,
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
@@ -1240,6 +1316,50 @@ mod tests {
         assert!(loopback_origin("http://localhost:8799"));
         assert!(!loopback_origin("https://evil.example"));
         assert!(!loopback_origin("null"));
+    }
+
+    #[tokio::test]
+    async fn access_tokens_are_required_and_cookie_bootstrapped() {
+        let mut state = state_at(PathBuf::from("unused.jsonl"), true);
+        Arc::get_mut(&mut state).unwrap().token = Some("secret".into());
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+        for (request, expected) in [
+            (
+                "GET /api/health HTTP/1.1\r\nHost: localhost\r\n\r\n",
+                "HTTP/1.1 401",
+            ),
+            (
+                "GET /api/health?token=secret HTTP/1.1\r\nHost: localhost\r\n\r\n",
+                "HTTP/1.1 200",
+            ),
+            (
+                "GET / HTTP/1.1\r\nHost: localhost\r\nCookie: niucode_token=secret\r\n\r\n",
+                "HTTP/1.1 200",
+            ),
+        ] {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut reply = Vec::new();
+            stream.read_to_end(&mut reply).await.unwrap();
+            assert!(
+                String::from_utf8_lossy(&reply).starts_with(expected),
+                "{}",
+                String::from_utf8_lossy(&reply)
+            );
+        }
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET /?token=secret HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("Set-Cookie: niucode_token=secret"), "{text}");
+        task.abort();
     }
 
     #[tokio::test]
@@ -1391,6 +1511,7 @@ mod tests {
             context: br#"{}"#.to_vec(),
             context_provider: None,
             brand: "niucode".into(),
+            token: None,
             allow_new: true,
             allowed_tools: Mutex::new(HashSet::new()),
             new_session_provider: None,
@@ -1609,6 +1730,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                token: None,
                 allow_new: true,
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
@@ -1686,6 +1808,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                token: None,
                 allow_new: true,
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,
@@ -1848,6 +1971,7 @@ mod tests {
                 context: br#"{}"#.to_vec(),
                 context_provider: None,
                 brand: "niucode".into(),
+                token: None,
                 allow_new: true,
                 allowed_tools: Mutex::new(HashSet::new()),
                 new_session_provider: None,

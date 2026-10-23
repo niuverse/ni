@@ -21,9 +21,11 @@ the missing piece is a local transport and a rendering client.
 ## Decision
 
 1. **Local only.** Bind `127.0.0.1`; no `0.0.0.0`, no remote auth, no cloud
-   relay. Reject non-loopback `Host` headers and, for POST, foreign/`null`
-   `Origin`s; serve a strict CSP and `X-Frame-Options: DENY`. A future opt-in
-   remote mode needs its own ADR and threat model.
+   relay. Each run prints a random token URL; the token bootstraps an HttpOnly
+   SameSite cookie required by page/API/SSE/export routes. Reject non-loopback
+   `Host` headers and, for POST, foreign/`null` `Origin`s; serve a strict CSP and
+   `X-Frame-Options: DENY`. A future opt-in remote mode needs its own ADR and
+   threat model.
 2. **Start read-only.** v0 serves one session plus a live tail: `GET /`,
    `GET /api/session`, `GET /api/health`, `GET /api/events` (chunked SSE), and
    `POST /api/prompt` for one read-only turn at a time (202/409). Runtime deltas
