@@ -2,6 +2,7 @@
 use crate::text_layout::{clean_text, clip};
 use niucode_agent::TaskReview;
 use niucode_core::ProcessOutcome;
+use serde_json::Value;
 
 pub fn startup(
     project: &str,
@@ -145,6 +146,42 @@ pub fn evidence(review: &TaskReview) -> String {
     body
 }
 
+/// One compact line for a tool call. Never includes file contents or outputs.
+pub fn tool_call(name: &str, input: &Value, width: usize) -> String {
+    let detail = tool_detail(input);
+    let line = match detail {
+        Some(detail) => format!("→ {name} · {detail}"),
+        None => format!("→ {name}"),
+    };
+    clip(&clean_text(&line), width)
+}
+
+/// One compact line for a finished tool; failures stay explicit.
+pub fn tool_result(name: &str, ok: bool, summary: &str, width: usize) -> String {
+    let mark = if ok { "✓" } else { "✗" };
+    let summary = clip(&clean_text(summary), width.saturating_sub(name.len() + 4));
+    if summary.is_empty() {
+        clip(&format!("{mark} {name}"), width)
+    } else {
+        clip(&format!("{mark} {name} · {summary}"), width)
+    }
+}
+
+fn tool_detail(input: &Value) -> Option<String> {
+    let object = input.as_object()?;
+    for key in [
+        "path", "command", "query", "pattern", "url", "prompt", "goal",
+    ] {
+        if let Some(value) = object.get(key).and_then(Value::as_str) {
+            let value = clean_text(value);
+            if !value.is_empty() {
+                return Some(clip(&value, 72));
+            }
+        }
+    }
+    None
+}
+
 pub fn activity(
     state: &str,
     tools: usize,
@@ -257,5 +294,28 @@ mod tests {
         assert!(first.contains('▍') || first.contains('▏'), "{first}");
         assert_ne!(first, second);
         assert!(!activity("responding", 0, 0, false, 80, false).contains('▍'));
+    }
+
+    #[test]
+    fn tool_lines_stay_compact_and_name_the_target() {
+        use serde_json::json;
+        assert_eq!(
+            tool_call(
+                "write",
+                &json!({"path": "src/main.rs", "content": "secret"}),
+                80
+            ),
+            "→ write · src/main.rs"
+        );
+        assert_eq!(
+            tool_call("bash", &json!({"command": "cargo test"}), 80),
+            "→ bash · cargo test"
+        );
+        assert_eq!(tool_call("read", &json!({}), 80), "→ read");
+        assert_eq!(
+            tool_result("write", true, "2 files", 80),
+            "✓ write · 2 files"
+        );
+        assert_eq!(tool_result("bash", false, "exit 1", 80), "✗ bash · exit 1");
     }
 }

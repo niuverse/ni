@@ -132,7 +132,10 @@ impl Theme {
             Some(Tone::Success)
         } else if trimmed.starts_with('!') {
             Some(Tone::Warning)
-        } else if trimmed.starts_with('#') || trimmed.starts_with("@@") || trimmed.starts_with('▎')
+        } else if trimmed.starts_with('#')
+            || trimmed.starts_with("@@")
+            || trimmed.starts_with('▎')
+            || trimmed.starts_with('→')
         {
             Some(Tone::Accent)
         } else if trimmed.starts_with("```") {

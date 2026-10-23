@@ -42,7 +42,8 @@ client — without turning the event log into presentation data.
 
 - Streaming caret or shimmer that can be disabled. **M9-006** adds a
   `▍`/`▏` caret and a per-tool elapsed timer.
-- Per-tool progress with elapsed time and a stable collapsed line.
+- Per-tool progress with elapsed time and a stable collapsed line. **M9-027**
+  adds one `→ tool` marker per type per turn; failures stay explicit.
 - Completion transitions that do not reflow history.
 - Respect `NO_COLOR`, `TERM=dumb`, and reduced-motion environments.
 

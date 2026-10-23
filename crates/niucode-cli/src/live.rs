@@ -294,6 +294,7 @@ pub async fn run(
     let mut streaming = false;
     let mut running_tool: Option<(String, Instant)> = None;
     let mut tools_completed = 0;
+    let mut seen_tools = std::collections::HashSet::new();
     let mut transcript = Transcript::new();
     let mut view: Option<View> = None;
     let mut unacknowledged: Vec<(String, String)> = Vec::new();
@@ -318,12 +319,20 @@ pub async fn run(
                             transcript.delta(&mut terminal, view.is_some(), &text)?;
                         }
                         RuntimeEvent::Agent(AgentEvent::ReasoningDelta(_)) => status = "thinking · Ctrl-O recorded details".into(),
-                        RuntimeEvent::Agent(AgentEvent::ToolCall { name, .. }) => {
+                        RuntimeEvent::Agent(AgentEvent::ToolCall { name, input }) => {
                             transcript.flush(&mut terminal, view.is_some())?;
                             streaming = false;
+                            let _ = input;
+                            if seen_tools.insert(name.clone()) {
+                                let line = crate::presentation::tool_call(
+                                    &name,
+                                    &serde_json::Value::Null,
+                                    terminal.size().0,
+                                );
+                                transcript.print(&mut terminal, view.is_some(), line)?;
+                            }
                             running_tool = Some((name.clone(), Instant::now()));
                             status = format!("running {name}");
-
                         }
                         RuntimeEvent::Agent(AgentEvent::ToolResult { name, ok, summary, .. }) => {
                             tools_completed += 1;
@@ -331,8 +340,13 @@ pub async fn run(
                             running_tool = None;
                             status = format!("{name} finished");
                             if !ok {
-                                let message = crate::text_layout::clip(&crate::text_layout::clean_text(&format!("! {name}: {summary} · Ctrl-O details")), terminal.size().0);
-                                transcript.print(&mut terminal, view.is_some(), message)?;
+                                let line = crate::presentation::tool_result(
+                                    &name,
+                                    false,
+                                    &summary,
+                                    terminal.size().0,
+                                );
+                                transcript.print(&mut terminal, view.is_some(), line)?;
                             }
                         }
                         RuntimeEvent::Agent(AgentEvent::Warning(message)) | RuntimeEvent::Notice(message) => {
@@ -344,6 +358,7 @@ pub async fn run(
                         RuntimeEvent::Agent(AgentEvent::TurnEnd { .. }) => {
                             streaming = false;
                             running_tool = None;
+                            seen_tools.clear();
                             transcript.flush(&mut terminal, view.is_some())?;
                         }
                         RuntimeEvent::Agent(AgentEvent::Phase(phase)) => status = phase.as_str().into(),
