@@ -114,6 +114,10 @@ pub struct OpenAiConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// Whether the endpoint/model accepts OpenAI-compatible `image_url`
+    /// content parts. Presets derive this from the catalog; custom endpoints
+    /// opt in with [`OpenAiConfig::with_image_support`].
+    pub supports_images: bool,
     /// DeepSeek-specific `thinking` control; `None` for plain OpenAI-compatible
     /// providers.
     pub thinking: Option<ThinkingMode>,
@@ -131,10 +135,16 @@ impl OpenAiConfig {
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
+            supports_images: false,
             thinking: None,
             reasoning_effort: None,
             connect_timeout: Duration::from_secs(10),
         }
+    }
+
+    pub fn with_image_support(mut self, supports: bool) -> Self {
+        self.supports_images = supports;
+        self
     }
 
     pub fn with_thinking(mut self, mode: ThinkingMode) -> Self {
@@ -191,6 +201,7 @@ impl OpenAiConfig {
                 Ok(Self {
                     base_url,
                     api_key: String::new(),
+                    supports_images: crate::catalog::model_supports_images(&model),
                     model,
                     thinking,
                     reasoning_effort,
@@ -210,6 +221,7 @@ impl OpenAiConfig {
                 Ok(Self {
                     base_url,
                     api_key: String::new(),
+                    supports_images: crate::catalog::model_supports_images(&model),
                     model,
                     thinking: None,
                     reasoning_effort: None,
@@ -241,6 +253,15 @@ pub struct OpenAiProvider {
 }
 
 impl OpenAiProvider {
+    fn ensure_image_support(&self, request: &CompletionRequest) -> Result<(), ProviderError> {
+        if request.messages.iter().any(ChatMessage::has_images) && !self.config.supports_images {
+            return Err(ProviderError::UnsupportedImages {
+                model: self.config.model.clone(),
+            });
+        }
+        Ok(())
+    }
+
     pub fn new(config: OpenAiConfig) -> Result<Self, ProviderError> {
         Self::with_name("openai-compatible", config)
     }
@@ -324,6 +345,7 @@ impl Provider for OpenAiProvider {
     }
 
     async fn stream(&self, request: CompletionRequest) -> Result<EventStream, ProviderError> {
+        self.ensure_image_support(&request)?;
         let body = self.build_body(&request);
 
         let response = self
@@ -447,6 +469,46 @@ mod tests {
     use crate::message::ToolSpec;
     use crate::StreamEvent;
     use niucode_core::Usage;
+
+    #[test]
+    fn image_parts_serialize_and_text_only_models_are_rejected() {
+        let request = CompletionRequest::new("model").with_message(ChatMessage::user_with_images(
+            "look",
+            vec!["data:image/png;base64,AAAA".into()],
+        ));
+        assert!(request.messages[0].has_images());
+        assert_eq!(
+            request.messages[0].content.as_ref().unwrap().image_count(),
+            1
+        );
+
+        assert!(crate::catalog::model_supports_images("gpt-4o"));
+        assert!(!crate::catalog::model_supports_images("deepseek-flash"));
+        let text_only = OpenAiProvider::new(OpenAiConfig::new(
+            "https://example.invalid",
+            "key",
+            "deepseek-flash",
+        ))
+        .unwrap();
+        assert!(matches!(
+            text_only.ensure_image_support(&request),
+            Err(ProviderError::UnsupportedImages { .. })
+        ));
+
+        let vision = OpenAiProvider::new(
+            OpenAiConfig::new("https://example.invalid", "key", "gpt-4o").with_image_support(true),
+        )
+        .unwrap();
+        assert!(vision.ensure_image_support(&request).is_ok());
+        let body = vision.build_body(&request);
+        assert_eq!(body["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(body["messages"][0]["content"][0]["text"], "look");
+        assert_eq!(body["messages"][0]["content"][1]["type"], "image_url");
+        assert_eq!(
+            body["messages"][0]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AAAA"
+        );
+    }
 
     #[test]
     fn deepseek_body_contains_thinking_and_stream_options() {

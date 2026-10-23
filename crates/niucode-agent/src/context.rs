@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use anyhow::{bail, Result};
 use niucode_core::{Event, ToolCall};
-use niucode_provider::{ChatMessage, ToolSpec};
+use niucode_provider::{ChatMessage, MessageContent, ToolSpec};
 
 pub const DEFAULT_CONTEXT_BUDGET: usize = 64_000;
 pub const DEFAULT_COMPACT_AT_PERCENT: u8 = 75;
@@ -79,9 +79,22 @@ pub fn estimate_text_tokens(text: &str) -> usize {
 }
 
 pub fn estimate_message_tokens(message: &ChatMessage) -> usize {
+    const IMAGE_TOKENS: usize = 1_024;
     let mut tokens = 4;
     if let Some(content) = &message.content {
-        tokens += estimate_text_tokens(content);
+        match content {
+            MessageContent::Text(text) => tokens += estimate_text_tokens(text),
+            MessageContent::Parts(parts) => {
+                for part in parts {
+                    match part {
+                        niucode_provider::ContentPart::Text { text } => {
+                            tokens += estimate_text_tokens(text)
+                        }
+                        niucode_provider::ContentPart::ImageUrl { .. } => tokens += IMAGE_TOKENS,
+                    }
+                }
+            }
+        }
     }
     if let Some(reasoning) = &message.reasoning_content {
         tokens += estimate_text_tokens(reasoning);
@@ -593,9 +606,9 @@ mod tests {
         let messages = project_history(&events).expect("project");
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].role, niucode_provider::Role::System);
-        assert_eq!(messages[0].content.as_deref(), Some("HANDOFF"));
-        assert_eq!(messages[1].content.as_deref(), Some("kept request"));
-        assert_eq!(messages[2].content.as_deref(), Some("kept answer"));
+        assert_eq!(messages[0].text(), Some("HANDOFF"));
+        assert_eq!(messages[1].text(), Some("kept request"));
+        assert_eq!(messages[2].text(), Some("kept answer"));
     }
 
     #[test]
@@ -612,13 +625,13 @@ mod tests {
         ];
 
         let messages = project_history(&events).expect("project");
-        assert_eq!(messages[0].content.as_deref(), Some("NEW HANDOFF"));
+        assert_eq!(messages[0].text(), Some("NEW HANDOFF"));
         assert!(messages
             .iter()
-            .all(|message| message.content.as_deref() != Some("OLD HANDOFF")));
+            .all(|message| message.text() != Some("OLD HANDOFF")));
         assert!(messages
             .iter()
-            .any(|message| message.content.as_deref() == Some("three")));
+            .any(|message| message.text() == Some("three")));
     }
 
     #[test]
@@ -643,8 +656,8 @@ mod tests {
         ];
         let messages = project_history(&events).expect("project");
         assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0].content.as_deref(), Some("request"));
-        assert_eq!(messages[1].content.as_deref(), Some("answer"));
+        assert_eq!(messages[0].text(), Some("request"));
+        assert_eq!(messages[1].text(), Some("answer"));
     }
 
     #[test]
@@ -737,6 +750,13 @@ mod tests {
         ];
         let messages = project_history(&events).expect("project");
         assert_eq!(messages.len(), 2);
-        assert_eq!(messages[1].content.as_deref(), Some("answer"));
+        assert_eq!(messages[1].text(), Some("answer"));
+    }
+    #[test]
+    fn image_parts_reserve_visual_tokens() {
+        let message =
+            ChatMessage::user_with_images("look", vec!["data:image/png;base64,AAAA".into()]);
+        assert!(estimate_message_tokens(&message) >= 1_024);
+        assert_eq!(message.content.as_ref().unwrap().image_count(), 1);
     }
 }

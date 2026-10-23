@@ -16,6 +16,7 @@ pub struct ModelDescriptor {
     pub max_output: usize,
     pub supports_tools: bool,
     pub supports_reasoning: bool,
+    pub supports_images: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +37,7 @@ const DEEPSEEK_MODELS: &[ModelDescriptor] = &[
         max_output: 8_000,
         supports_tools: true,
         supports_reasoning: true,
+        supports_images: false,
     },
     ModelDescriptor {
         id: "deepseek-pro",
@@ -44,6 +46,7 @@ const DEEPSEEK_MODELS: &[ModelDescriptor] = &[
         max_output: 8_000,
         supports_tools: true,
         supports_reasoning: true,
+        supports_images: false,
     },
     ModelDescriptor {
         id: "deepseek-reasoner",
@@ -52,6 +55,7 @@ const DEEPSEEK_MODELS: &[ModelDescriptor] = &[
         max_output: 8_000,
         supports_tools: true,
         supports_reasoning: true,
+        supports_images: false,
     },
 ];
 
@@ -63,6 +67,7 @@ const OPENAI_MODELS: &[ModelDescriptor] = &[
         max_output: 16_384,
         supports_tools: true,
         supports_reasoning: false,
+        supports_images: true,
     },
     ModelDescriptor {
         id: "gpt-4o",
@@ -71,6 +76,7 @@ const OPENAI_MODELS: &[ModelDescriptor] = &[
         max_output: 16_384,
         supports_tools: true,
         supports_reasoning: false,
+        supports_images: true,
     },
     ModelDescriptor {
         id: "o4-mini",
@@ -79,6 +85,7 @@ const OPENAI_MODELS: &[ModelDescriptor] = &[
         max_output: 100_000,
         supports_tools: true,
         supports_reasoning: true,
+        supports_images: true,
     },
 ];
 
@@ -114,6 +121,15 @@ pub fn find_model(provider: &str, model: &str) -> Option<&'static ModelDescripto
         .models
         .iter()
         .find(|candidate| candidate.id == model)
+}
+
+/// Whether any catalog entry claims image input for this model id. Custom
+/// endpoints can still opt in explicitly through `OpenAiConfig`.
+pub fn model_supports_images(model: &str) -> bool {
+    PROVIDERS
+        .iter()
+        .flat_map(|provider| provider.models)
+        .any(|descriptor| descriptor.id == model && descriptor.supports_images)
 }
 
 pub fn context_window(provider: &str, model: &str) -> usize {

@@ -63,7 +63,7 @@ async fn system_prompt_and_history_reach_the_provider() {
 
     let requests = provider.requests();
     assert_eq!(
-        requests[0].messages[0].content.as_deref(),
+        requests[0].messages[0].text(),
         Some("embedder prompt"),
         "the configured system prompt must be sent unchanged"
     );
@@ -85,7 +85,7 @@ async fn system_prompt_and_history_reach_the_provider() {
     let contents: Vec<&str> = second
         .messages
         .iter()
-        .filter_map(|message| message.content.as_deref())
+        .filter_map(|message| message.text())
         .collect();
     assert!(contents.contains(&"one"), "previous user turn is missing");
     assert!(contents.contains(&"first"), "previous answer is missing");

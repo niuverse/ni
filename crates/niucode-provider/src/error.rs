@@ -15,6 +15,8 @@ pub enum ProviderError {
     Auth(String),
     #[error("context overflow: {0}")]
     ContextOverflow(String),
+    #[error("model {model} does not support image input; choose a vision model or enable image support explicitly")]
+    UnsupportedImages { model: String },
     #[error("http {status}: {message}")]
     Http {
         status: u16,

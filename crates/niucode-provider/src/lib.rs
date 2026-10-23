@@ -19,7 +19,8 @@ pub use catalog::{
 pub use error::ProviderError;
 pub use fixture::{RecordedEvent, RecordedFixture, RecordingProvider, ReplayProvider};
 pub use message::{
-    ChatMessage, CompletionRequest, FunctionSpec, Role, ToolSpec, WireFunction, WireToolCall,
+    ChatMessage, CompletionRequest, ContentPart, FunctionSpec, ImageUrl, MessageContent, Role,
+    ToolSpec, WireFunction, WireToolCall,
 };
 pub use openai::{OpenAiConfig, OpenAiProvider, Preset, ReasoningEffort, ThinkingMode};
 pub use scripted::ScriptedProvider;

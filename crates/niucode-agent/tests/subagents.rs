@@ -228,10 +228,7 @@ async fn two_subagents_run_in_parallel_with_independent_logs() {
     let final_request = &requests[3];
     assert_eq!(final_request.messages.len(), 4);
     assert_eq!(final_request.messages[3].role, Role::Tool);
-    let result = final_request.messages[3]
-        .content
-        .as_deref()
-        .expect("tool result");
+    let result = final_request.messages[3].text().expect("tool result");
     assert!(result.starts_with("subagent: 2 task(s)"));
     for (_, path, _) in &spawns {
         assert!(result.contains(path));

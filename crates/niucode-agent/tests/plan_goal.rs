@@ -100,7 +100,7 @@ async fn plan_mode_narrows_tools_and_injects_goal_and_directive() {
         .messages
         .iter()
         .find(|message| message.role == Role::System)
-        .and_then(|message| message.content.as_deref())
+        .and_then(|message| message.text())
         .expect("system message");
     assert!(system.contains("Plan mode"));
     assert!(system.contains("Active goal"));

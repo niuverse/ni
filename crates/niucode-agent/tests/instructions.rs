@@ -85,14 +85,14 @@ async fn agents_md_changes_apply_to_the_next_turn() {
     .expect("second run");
 
     let requests = provider.requests();
-    let first_system = requests[0].messages[0].content.as_deref().expect("system");
+    let first_system = requests[0].messages[0].text().expect("system");
     assert!(first_system.contains("root rule: keep it small"));
     assert!(first_system.contains("child rule: use tabs"));
     let child_position = first_system.find("child rule").expect("child");
     let root_position = first_system.find("root rule").expect("root");
     assert!(child_position < root_position, "nearest instructions first");
 
-    let second_system = requests[1].messages[0].content.as_deref().expect("system");
+    let second_system = requests[1].messages[0].text().expect("system");
     assert!(second_system.contains("child rule: use spaces"));
     assert!(!second_system.contains("child rule: use tabs"));
 

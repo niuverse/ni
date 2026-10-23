@@ -1196,8 +1196,7 @@ mod tests {
         assert_eq!(history.len(), 3);
         assert_eq!(history[1].role, Role::Tool);
         assert!(history[1]
-            .content
-            .as_deref()
+            .text()
             .is_some_and(|content| content.contains("outcome unknown")));
         assert_eq!(history[2].role, Role::User);
     }
@@ -1249,7 +1248,7 @@ mod tests {
         assert!(requests[0]
             .messages
             .iter()
-            .any(|message| message.content.as_deref() == Some("first task")));
+            .any(|message| message.text() == Some("first task")));
 
         fs::remove_dir_all(directory).expect("cleanup");
     }

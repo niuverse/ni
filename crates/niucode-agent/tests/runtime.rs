@@ -108,12 +108,9 @@ async fn accepts_during_provider_wait_deduplicates_and_orders_queued_tasks() {
     assert!(pending_inputs(&events).is_empty());
     let requests = provider.scripted.requests();
     assert_eq!(requests.len(), 3);
+    assert_eq!(requests[1].messages.last().unwrap().text(), Some("adjust"));
     assert_eq!(
-        requests[1].messages.last().unwrap().content.as_deref(),
-        Some("adjust")
-    );
-    assert_eq!(
-        requests[2].messages.last().unwrap().content.as_deref(),
+        requests[2].messages.last().unwrap().text(),
         Some("next task")
     );
 }

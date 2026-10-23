@@ -155,18 +155,14 @@ async fn compaction_preserves_a_replayable_projection_and_changes() {
     assert_eq!(compacted.messages[0].role, niucode_provider::Role::System);
     assert_eq!(compacted.messages[1].role, niucode_provider::Role::System);
     assert!(compacted.messages[1]
-        .content
-        .as_deref()
+        .text()
         .is_some_and(|content| content.contains("# Session handoff")));
-    assert_eq!(
-        compacted.messages[2].content.as_deref(),
-        Some("second request")
-    );
+    assert_eq!(compacted.messages[2].text(), Some("second request"));
     assert!(
         compacted
             .messages
             .iter()
-            .all(|message| message.content.as_deref() != Some("first request")),
+            .all(|message| message.text() != Some("first request")),
         "the summarized request must not also be projected raw"
     );
 
@@ -215,7 +211,7 @@ async fn compaction_failure_keeps_the_original_context_and_warns() {
         requests[0]
             .messages
             .last()
-            .and_then(|message| message.content.as_deref()),
+            .and_then(|message| message.text()),
         Some("keep this request")
     );
     let loaded = load(session.path()).expect("load");
