@@ -1885,7 +1885,7 @@ fn usage_json(usage: &niucode_core::Usage) -> serde_json::Value {
     })
 }
 
-fn event_json(event: &AgentEvent) -> serde_json::Value {
+pub(crate) fn event_json(event: &AgentEvent) -> serde_json::Value {
     match event {
         AgentEvent::Phase(phase) => json!({"type": "phase", "phase": phase.as_str()}),
         AgentEvent::TextDelta(text) => json!({"type": "text_delta", "text": text}),

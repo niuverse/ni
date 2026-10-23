@@ -17,6 +17,7 @@ use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::broadcast;
 
 use crate::provider_factory::ProviderFactory;
 
@@ -40,6 +41,7 @@ struct State {
     cwd: PathBuf,
     max_steps: usize,
     busy: AtomicBool,
+    live: broadcast::Sender<Value>,
 }
 
 pub async fn serve(options: Options) -> Result<()> {
@@ -84,6 +86,7 @@ pub async fn serve(options: Options) -> Result<()> {
         "warnings": loaded.warnings,
         "events": loaded.events,
     }))?;
+    let (live, _) = broadcast::channel(256);
     let listener = TcpListener::bind(("127.0.0.1", options.port))
         .await
         .context("bind 127.0.0.1")?;
@@ -103,6 +106,7 @@ pub async fn serve(options: Options) -> Result<()> {
             cwd: options.cwd,
             max_steps: options.max_steps,
             busy: AtomicBool::new(false),
+            live,
         }),
     )
     .await
@@ -127,7 +131,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
     if method == "GET" && path == "/api/events" {
-        return stream_events(stream, state.path.clone()).await;
+        return stream_events(stream, state.path.clone(), state.live.subscribe()).await;
     }
     if method == "POST" && path == "/api/prompt" {
         return prompt(stream, state, body).await;
@@ -204,6 +208,7 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
 }
 
 async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: String) -> Result<()> {
+    let live = state.live.clone();
     let loaded = load(&state.path)?;
     let history = project_history(&loaded.events)?;
     let mut log = SessionLog::open(&state.path)?;
@@ -214,7 +219,9 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
     config.approval = ApprovalMode::Never;
     config.allow_unsandboxed = false;
     let mut approver = |_request: &niucode_agent::ApprovalRequest| false;
-    let mut observer = |_event| {};
+    let mut observer = move |event: niucode_agent::AgentEvent| {
+        let _ = live.send(crate::event_json(&event));
+    };
     run_with_history(
         provider.as_ref(),
         &mut log,
@@ -239,33 +246,45 @@ async fn send(stream: &mut TcpStream, status: &str, kind: &str, body: Vec<u8>) -
     Ok(())
 }
 
-async fn stream_events(mut stream: TcpStream, path: PathBuf) -> Result<()> {
+async fn stream_events(
+    mut stream: TcpStream,
+    path: PathBuf,
+    mut live: broadcast::Receiver<Value>,
+) -> Result<()> {
     let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\nTransfer-Encoding: chunked\r\n\r\n";
     stream.write_all(head.as_bytes()).await?;
     let mut offset = 0_u64;
     let mut partial = String::new();
     let mut tick = tokio::time::interval(Duration::from_millis(350));
     loop {
-        tick.tick().await;
-        let bytes = match tokio::fs::read(&path).await {
-            Ok(bytes) => bytes,
-            Err(_) => continue,
-        };
-        if bytes.len() as u64 > offset {
-            let fresh = &bytes[offset as usize..];
-            offset = bytes.len() as u64;
-            partial.push_str(&String::from_utf8_lossy(fresh));
-            while let Some(index) = partial.find('\n') {
-                let rest = partial.split_off(index + 1);
-                let line = std::mem::replace(&mut partial, rest);
-                let line = line.trim_end_matches('\r');
-                if line.is_empty() {
-                    continue;
+        tokio::select! {
+            _ = tick.tick() => {
+                let bytes = match tokio::fs::read(&path).await {
+                    Ok(bytes) => bytes,
+                    Err(_) => continue,
+                };
+                if bytes.len() as u64 > offset {
+                    let fresh = &bytes[offset as usize..];
+                    offset = bytes.len() as u64;
+                    partial.push_str(&String::from_utf8_lossy(fresh));
+                    while let Some(index) = partial.find('\n') {
+                        let rest = partial.split_off(index + 1);
+                        let line = std::mem::replace(&mut partial, rest);
+                        let line = line.trim_end_matches('\r');
+                        if line.is_empty() {
+                            continue;
+                        }
+                        write_chunk(&mut stream, &format!("data: {line}\n\n")).await?;
+                    }
+                } else {
+                    write_chunk(&mut stream, ": ping\n\n").await?;
                 }
-                write_chunk(&mut stream, &format!("data: {line}\n\n")).await?;
             }
-        } else {
-            write_chunk(&mut stream, ": ping\n\n").await?;
+            event = live.recv() => {
+                if let Ok(value) = event {
+                    write_chunk(&mut stream, &format!("data: {value}\n\n")).await?;
+                }
+            }
         }
     }
 }
@@ -315,6 +334,7 @@ mod tests {
             cwd: PathBuf::from("."),
             max_steps: 1,
             busy: AtomicBool::new(false),
+            live: broadcast::channel(8).0,
         })
     }
 
@@ -368,6 +388,7 @@ mod tests {
                 cwd: PathBuf::from("."),
                 max_steps: 1,
                 busy: AtomicBool::new(false),
+                live: broadcast::channel(8).0,
             }),
         ));
         let mut stream = TcpStream::connect(address).await.unwrap();
@@ -434,8 +455,16 @@ mod tests {
                 cwd: directory.path().to_path_buf(),
                 max_steps: 1,
                 busy: AtomicBool::new(false),
+                live: broadcast::channel(8).0,
             }),
         ));
+        let mut events = TcpStream::connect(address).await.unwrap();
+        events
+            .write_all(b"GET /api/events HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut headers = [0_u8; 512];
+        let _ = events.read(&mut headers).await.unwrap();
         let mut stream = TcpStream::connect(address).await.unwrap();
         let body = br#"{"prompt":"say hello"}"#;
         stream
@@ -456,6 +485,19 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&reply)
         );
+        let mut live = Vec::new();
+        let delta = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let mut chunk = [0_u8; 1024];
+                let count = events.read(&mut chunk).await.unwrap();
+                live.extend_from_slice(&chunk[..count]);
+                if String::from_utf8_lossy(&live).contains("text_delta") {
+                    return;
+                }
+            }
+        })
+        .await;
+        delta.expect("text delta over SSE");
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -473,6 +515,7 @@ mod tests {
         assert!(INDEX.contains("EventSource('/api/events')"));
         assert!(INDEX.contains("Read-only local chat"));
         assert!(INDEX.contains("fetch('/api/prompt'"));
+        assert!(INDEX.contains("text_delta"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

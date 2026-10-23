@@ -36,20 +36,17 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <script>
 const log = document.getElementById('log');
 const id = document.getElementById('id');
-function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
-function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
-const log = document.getElementById('log');
-const id = document.getElementById('id');
 const live = document.getElementById('live');
 function node(tag, cls, text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e; }
 function add(cls, text) { const d=node('div','msg '+cls,text); log.appendChild(d); return d; }
-let count = 0;
+let count = 0, streaming = null, streamText = '';
 function render(e) {
   count += 1;
   id.textContent = count + ' events';
   if (e.type === 'session_start') add('meta','session · '+e.cwd);
   else if (e.type === 'user_message') add('user', e.text);
   else if (e.type === 'assistant_message') {
+    if (streaming) { streaming.textContent = e.text || streamText; streaming = null; streamText = ''; return; }
     const d = add('assistant', e.text || '');
     if (e.tool_calls && e.tool_calls.length) {
       const det = node('details'); det.appendChild(node('summary',null,e.tool_calls.length+' tool call(s)'));
@@ -57,7 +54,12 @@ function render(e) {
       d.appendChild(det);
     }
   }
-  else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output)); add('tool','').appendChild(det); }
+  else if (e.type === 'text_delta') {
+    if (!streaming) { streaming = add('assistant',''); streamText = ''; }
+    streamText += e.text || ''; streaming.textContent = streamText;
+  }
+  else if (e.type === 'tool_call') add('tool','→ '+e.name+' '+JSON.stringify(e.input||{}));
+  else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output||e.summary||'')); add('tool','').appendChild(det); }
   else if (e.type === 'turn_end') add('meta','turn · '+JSON.stringify(e.usage));
 }
 const source = new EventSource('/api/events');
@@ -78,9 +80,8 @@ form.onsubmit = async event => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || response.statusText);
     input.value = ''; status.textContent = 'turn running…';
-  } catch (error) {
-    status.textContent = 'error: ' + error.message;
-  } finally { send.disabled = false; }
+  } catch (error) { status.textContent = 'error: ' + error.message; }
+  finally { send.disabled = false; }
 };
 </script>
 </body>
