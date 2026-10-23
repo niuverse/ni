@@ -40,6 +40,7 @@ aside input { width:100%; margin:0 0 10px; background:#0d1117; color:var(--text)
 .cmd-item { display:flex; gap:10px; padding:7px 12px; cursor:pointer; font:12px ui-monospace,monospace; }
 .cmd-item:hover, .cmd-item.active { background:#21262d; }
 .cmd-item b { color:var(--accent); min-width:80px; } .cmd-item span { color:var(--dim); }
+.latest { position:fixed; right:18px; bottom:96px; z-index:4; border:1px solid #30363d; border-radius:999px; background:var(--panel); color:var(--text); padding:7px 12px; font-size:12px; cursor:pointer; box-shadow:0 4px 16px #0007; }
 .msg.assistant code { background:#161b22; border-radius:4px; padding:1px 4px; }
 .msg.assistant pre code { background:none; padding:0; }
 .msg.assistant math { font-size:1.05em; }
@@ -86,7 +87,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <body>
 <header><button id="toggle-context" class="chip" title="Toggle context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="busy" class="chip">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="download" class="chip" title="download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <aside id="context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
-<main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off"><span id="log-count"></span></div><div id="log"></div></main>
+<button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off"><span id="log-count"></span></div><div id="log"></div></main>
 <footer><form id="composer"><textarea id="prompt" rows="1" autocomplete="off" placeholder="Ask for a task…"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
@@ -132,7 +133,21 @@ function endTurn() {
   busy.classList.remove('working');
   return elapsed.toFixed(1);
 }
+function atBottom() {
+  return window.innerHeight + window.scrollY >= document.body.offsetHeight - 160;
+}
+function scrollToLatest() {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  document.getElementById('latest').hidden = true;
+}
+function updateLatest() {
+  document.getElementById('latest').hidden = atBottom();
+}
+window.addEventListener('scroll', updateLatest, { passive: true });
+document.getElementById('latest').onclick = scrollToLatest;
 function render(e) {
+  const follow = atBottom();
+  setTimeout(() => { if (follow) scrollToLatest(); else updateLatest(); }, 0);
   count += 1;
   id.textContent = count + ' events';
   if (e.type === 'session_start') add('meta','session · '+e.cwd);

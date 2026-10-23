@@ -42,6 +42,8 @@ the missing piece is a local transport and a rendering client.
    multi-line textarea with local prompt history and `/help` `/status` `/report`
    `/clear` commands; code blocks have a Copy button, the session can be
    downloaded as derived Markdown, and a local search filters transcript nodes.
+   The viewport follows new output only when already near the bottom, with a
+   jump-to-latest control otherwise.
    Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.

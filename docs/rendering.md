@@ -51,7 +51,8 @@ client — without turning the event log into presentation data.
 
 - **v0 (M9-007)**: loopback-only read-only viewer, embedded static client,
   `/api/session`; **M9-040** adds a derived Markdown download; **M9-041** adds
-  local transcript search; **M9-043** adds an explicit new session.
+  local transcript search; **M9-043** adds an explicit new session;
+  **M9-044** follows new output only when near the bottom.
 - **Live tail (M9-008)**: `/api/events` chunked SSE, initial log + appended
   lines.
 - **Read-only chat (M9-009)**: `POST /api/prompt`, one turn at a time, hard-coded
