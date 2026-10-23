@@ -185,6 +185,7 @@ function render(e) {
   else if (e.type === 'tool_call') renderToolCall(e);
   else if (e.type === 'tool_result') renderToolResult(e);
   else if (e.type === 'context_changed') loadContext();
+  else if (e.type === 'session_switched') location.reload();
   else if (e.type === 'approval') { beginTurn('approval'); renderApproval(e); }
   else if (e.type === 'phase') { if (e.phase === 'done') endTurn(); else beginTurn(e.phase); }
   else if (e.type === 'turn_end') { const elapsed = endTurn(); addUsage(e.usage || {}); add('meta','turn · '+elapsed+'s · '+JSON.stringify(e.usage)); setTimeout(loadContext, 600); }

@@ -381,6 +381,7 @@ async fn switch_session(mut stream: TcpStream, state: Arc<State>, body: &str) ->
             let snapshot = session_snapshot(&path)?;
             *state.path.lock().unwrap() = path.clone();
             *state.snapshot.lock().unwrap() = snapshot;
+            let _ = state.live.send(json!({"type": "session_switched"}));
             send(
                 &mut stream,
                 "200 OK",
@@ -450,6 +451,7 @@ async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
                 "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
                 "path": path.display().to_string(),
             }))?;
+            let _ = state.live.send(json!({"type": "session_switched"}));
             send(&mut stream, "200 OK", "application/json", body).await
         }
         Err(error) => {
@@ -1275,6 +1277,13 @@ mod tests {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let task = tokio::spawn(serve_listener(listener, state));
+        let mut events = TcpStream::connect(address).await.unwrap();
+        events
+            .write_all(b"GET /api/events HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut headers = [0_u8; 512];
+        let _ = events.read(&mut headers).await.unwrap();
         let mut stream = TcpStream::connect(address).await.unwrap();
         let body = br#"{"id":"chapter"}"#;
         stream
@@ -1296,6 +1305,19 @@ mod tests {
             String::from_utf8_lossy(&reply)
         );
         assert_eq!(*state_for_assert.path.lock().unwrap(), target);
+        let mut seen = Vec::new();
+        let switched = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let mut chunk = [0_u8; 1024];
+                let count = events.read(&mut chunk).await.unwrap();
+                seen.extend_from_slice(&chunk[..count]);
+                if String::from_utf8_lossy(&seen).contains("session_switched") {
+                    return;
+                }
+            }
+        })
+        .await;
+        switched.expect("session_switched event");
         task.abort();
     }
 
@@ -1682,6 +1704,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));
+        assert!(INDEX.contains("session_switched"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1712,6 +1735,7 @@ mod tests {
         assert!(INDEX.contains("/new"));
         assert!(INDEX.contains("/threads"));
         assert!(INDEX.contains("switchThread"));
+        assert!(INDEX.contains("session_switched"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
