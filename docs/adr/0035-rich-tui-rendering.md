@@ -29,8 +29,8 @@ use a real Markdown/KaTeX renderer.
    `strike`) before styling. Unbalanced markers stay literal while streaming.
 2. Strip ATX heading markers and render a level-aware heading style: H1 accent
    bold underlined, H2 accent bold, H3+ cyan. List markers become bullets/tasks,
-   `>` becomes a muted quote bar (GFM alert markers become `note ·`/`tip ·`
-   labels), and horizontal rules expand to the terminal viewport at emission
+   `>` becomes a quote bar (GFM alert markers become `note ·`/`tip ·` labels
+   with per-variant tones), and horizontal rules expand to the terminal viewport at emission
    time.
 3. Buffer consecutive pipe-table lines and render them as a box table only when
    the block ends. Column widths are cell-width based and capped to the viewport.

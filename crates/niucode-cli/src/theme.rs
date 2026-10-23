@@ -22,6 +22,22 @@ pub enum Tone {
     Magenta,
 }
 
+fn quote_tone(text: &str) -> Option<Tone> {
+    if text.contains("│ warning ·") {
+        Some(Tone::Warning)
+    } else if text.contains("│ caution ·") {
+        Some(Tone::Danger)
+    } else if text.contains("│ tip ·") {
+        Some(Tone::Success)
+    } else if text.contains("│ important ·") {
+        Some(Tone::Magenta)
+    } else if text.contains("│ note ·") {
+        Some(Tone::Accent)
+    } else {
+        Some(Tone::Muted)
+    }
+}
+
 pub const PROMPT: &str = "▸";
 pub const ASSISTANT: &str = "◆";
 pub const THINKING: &str = "◇";
@@ -122,7 +138,7 @@ impl Theme {
             (text, None)
         } else if let Some(block) = crate::markdown::block(&text) {
             let tone = match block.kind {
-                crate::markdown::BlockKind::Quote => Some(Tone::Muted),
+                crate::markdown::BlockKind::Quote => quote_tone(&block.text),
                 crate::markdown::BlockKind::Task(true) => Some(Tone::Success),
                 crate::markdown::BlockKind::Rule => Some(Tone::Muted),
                 _ => None,
