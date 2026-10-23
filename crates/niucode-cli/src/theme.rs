@@ -114,6 +114,7 @@ impl Theme {
             let tone = match block.kind {
                 crate::markdown::BlockKind::Quote => Some(Tone::Muted),
                 crate::markdown::BlockKind::Task(true) => Some(Tone::Success),
+                crate::markdown::BlockKind::Rule => Some(Tone::Muted),
                 _ => None,
             };
             (block.text, tone)

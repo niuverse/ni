@@ -67,6 +67,9 @@ def main():
             "Energy $E = mc^2$ and $\\alpha \\le \\beta$.\n\n"
             "- first item\n"
             "- [ ] pending task\n"
+            "1. first numbered\n"
+            "2. second numbered\n"
+            "---\n"
             "> quoted line\n\n"
             "```rust\n"
             "fn main() {}\n"
@@ -91,6 +94,9 @@ def main():
             pane.wait_for("≤".encode())
             pane.wait_for("• first item".encode())
             pane.wait_for("☐ pending task".encode())
+            pane.wait_for("1. first numbered".encode())
+            pane.wait_for("2. second numbered".encode())
+            pane.wait_for("────".encode())
             pane.wait_for("│ quoted line".encode())
             pane.wait_for("▎ rust".encode())
             pane.wait_for(b"fn main")

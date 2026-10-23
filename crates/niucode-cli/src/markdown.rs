@@ -458,8 +458,10 @@ mod tests {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockKind {
     Bullet,
+    Ordered,
     Task(bool),
     Quote,
+    Rule,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -468,11 +470,43 @@ pub struct BlockLine {
     pub kind: BlockKind,
 }
 
+fn ordered(text: &str) -> Option<(String, &str)> {
+    let digits = text.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    let marker = text.as_bytes().get(digits)?;
+    if !matches!(marker, b'.' | b')') {
+        return None;
+    }
+    let rest = text.get(digits + 1..)?.strip_prefix(' ')?;
+    Some((format!("{}. ", &text[..digits]), rest))
+}
+
 /// Recognize a line-level Markdown block marker. Indentation is preserved.
 /// `+` is deliberately not treated as a list marker: diff output uses it.
 pub fn block(text: &str) -> Option<BlockLine> {
     let trimmed = text.trim_start();
     let indent = &text[..text.len() - trimmed.len()];
+    if trimmed.chars().count() >= 3
+        && trimmed
+            .chars()
+            .all(|character| matches!(character, '-' | '*' | '_'))
+        && trimmed
+            .chars()
+            .all(|character| character == trimmed.chars().next().unwrap())
+    {
+        return Some(BlockLine {
+            text: format!("{indent}{}", "─".repeat(40)),
+            kind: BlockKind::Rule,
+        });
+    }
+    if let Some((marker, rest)) = ordered(trimmed) {
+        return Some(BlockLine {
+            text: format!("{indent}{marker}{rest}"),
+            kind: BlockKind::Ordered,
+        });
+    }
     let rest = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
         return Some(BlockLine {
             text: format!("{indent}☐ {rest}"),
@@ -487,21 +521,21 @@ pub fn block(text: &str) -> Option<BlockLine> {
             kind: BlockKind::Task(true),
         });
     } else if let Some(rest) = trimmed.strip_prefix("- ") {
-        Some((indent, rest, BlockKind::Bullet))
+        Some((rest, BlockKind::Bullet))
     } else if let Some(rest) = trimmed.strip_prefix("* ") {
-        Some((indent, rest, BlockKind::Bullet))
+        Some((rest, BlockKind::Bullet))
     } else if let Some(rest) = trimmed.strip_prefix("> ") {
-        Some((indent, rest, BlockKind::Quote))
+        Some((rest, BlockKind::Quote))
     } else if trimmed == ">" {
-        Some((indent, "", BlockKind::Quote))
+        Some(("", BlockKind::Quote))
     } else {
         None
     };
-    rest.map(|(indent, rest, kind)| {
+    rest.map(|(rest, kind)| {
         let marker = match kind {
             BlockKind::Bullet => "• ",
             BlockKind::Quote => "│ ",
-            BlockKind::Task(_) => "",
+            _ => "",
         };
         BlockLine {
             text: format!("{indent}{marker}{rest}"),
@@ -522,12 +556,15 @@ mod block_tests {
         assert_eq!(block("- [x] done").unwrap().text, "☑ done");
         assert_eq!(block("> quoted").unwrap().text, "│ quoted");
         assert_eq!(block(">").unwrap().text, "│ ");
+        assert_eq!(block("1. numbered").unwrap().text, "1. numbered");
+        assert_eq!(block("2) next").unwrap().text, "2. next");
+        assert_eq!(block("---").unwrap().kind, BlockKind::Rule);
+        assert_eq!(block("***").unwrap().kind, BlockKind::Rule);
     }
 
     #[test]
     fn emphasis_and_plus_are_not_mistaken_for_lists() {
         assert_eq!(block("*italic*"), None);
         assert_eq!(block("+ new line"), None);
-        assert_eq!(block("1. numbered"), None);
     }
 }
