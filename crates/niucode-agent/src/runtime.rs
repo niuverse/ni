@@ -562,6 +562,7 @@ mod tests {
             tool: "write".into(),
             summary: "write file".into(),
             preview: None,
+            image: None,
         };
         let runtime = async {
             assert!(io

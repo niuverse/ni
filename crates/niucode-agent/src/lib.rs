@@ -78,6 +78,9 @@ pub struct ApprovalRequest {
     pub summary: String,
     /// Full structured preview for file-changing tools.
     pub preview: Option<ChangePreview>,
+    /// Optional target screenshot (data URL) for computer approvals. Never
+    /// persisted; bounded before it enters the runtime event.
+    pub image: Option<String>,
 }
 
 /// A read-only tool supplied by an embedder.
@@ -88,6 +91,7 @@ pub struct ApprovalRequest {
 pub struct ComputerRuntime {
     backend: Box<dyn ComputerBackend>,
     session: ComputerSession,
+    last_frame: Option<(String, String)>,
 }
 
 impl ComputerRuntime {
@@ -95,6 +99,7 @@ impl ComputerRuntime {
         Self {
             backend,
             session: ComputerSession::new(policy),
+            last_frame: None,
         }
     }
 
@@ -134,6 +139,8 @@ impl ComputerRuntime {
             .observe(window)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         self.session.remember(capture.observation.clone());
+        self.last_frame = approval_image(&capture.png)
+            .map(|url| (capture.observation.id.as_str().to_string(), url));
         Ok(capture)
     }
 
@@ -158,6 +165,14 @@ impl ComputerRuntime {
             .perform(action, observation)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         Ok(())
+    }
+
+    pub fn frame_for(&self, action: &ComputerAction) -> Option<String> {
+        let id = action.observation_id()?;
+        self.last_frame
+            .as_ref()
+            .filter(|(stored, _)| stored == id.as_str())
+            .map(|(_, url)| url.clone())
     }
 
     pub fn window_for(&self, action: &ComputerAction) -> Option<niucode_computer::WindowInfo> {
@@ -865,6 +880,7 @@ async fn run_engine(
                                 call.name
                             ),
                             preview: None,
+                            image: None,
                         };
                         let allowed = io.approve(session, &call.id, request).await?;
                         session.append(&Event::Approval {
@@ -1013,18 +1029,20 @@ async fn execute_computer(
             });
         }
         PolicyDecision::NeedsApproval => {
-            let window = runtime
-                .lock()
-                .unwrap()
-                .window_for(&action)
-                .map(|window| {
-                    format!(
-                        "{} — {}",
-                        clean_display(&window.app, 60),
-                        clean_display(&window.title, 80)
-                    )
-                })
-                .unwrap_or_else(|| "unobserved window".into());
+            let (window, approval_frame) = {
+                let runtime = runtime.lock().unwrap();
+                (
+                    runtime.window_for(&action).map(|window| {
+                        format!(
+                            "{} — {}",
+                            clean_display(&window.app, 60),
+                            clean_display(&window.title, 80)
+                        )
+                    }),
+                    runtime.frame_for(&action),
+                )
+            };
+            let window = window.unwrap_or_else(|| "unobserved window".into());
             let summary = format!(
                 "computer {} on {window}. Purpose: {}",
                 action_detail(&action),
@@ -1038,6 +1056,7 @@ async fn execute_computer(
                         tool: "computer".into(),
                         summary,
                         preview: None,
+                        image: approval_frame,
                     },
                 )
                 .await?
@@ -1089,6 +1108,7 @@ async fn execute_computer(
                 clean_display(&capture.observation.window.title, 80),
                 clean_display(&purpose, 200)
             );
+            let image = approval_image(&capture.png);
             if !io
                 .approve(
                     session,
@@ -1097,6 +1117,7 @@ async fn execute_computer(
                         tool: "computer".into(),
                         summary,
                         preview: None,
+                        image,
                     },
                 )
                 .await?
@@ -1186,6 +1207,12 @@ async fn execute_computer(
 }
 
 const MAX_VISUAL_PARTS: usize = 4;
+const MAX_APPROVAL_IMAGE: usize = 2_000_000;
+
+fn approval_image(png: &[u8]) -> Option<String> {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(png);
+    (encoded.len() <= MAX_APPROVAL_IMAGE).then(|| format!("data:image/png;base64,{encoded}"))
+}
 
 /// Keep at most `max` image parts across the whole provider request. The
 /// oldest images are replaced by a text marker; JSONL events are untouched.
@@ -1341,6 +1368,7 @@ async fn execute_builtin(
             tool: call.name.clone(),
             summary: approval_summary(call),
             preview: prepared.as_ref().map(|p| p.preview().clone()),
+            image: None,
         };
         let allowed = io.approve(session, &call.id, request).await?;
         session.append(&Event::Approval {
@@ -2065,6 +2093,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sensitive_observe_is_returned_after_approval() {
+        let directory = temp_dir("sensitive-observe-allow");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let mut config = test_config(&directory);
+        let fake = FakeComputer {
+            kind: WindowKind::Sensitive,
+            ..FakeComputer::default()
+        };
+        let runtime = Arc::new(std::sync::Mutex::new(ComputerRuntime::new(
+            Box::new(fake),
+            ComputerPolicy::Observe,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime);
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("observe".into()),
+                    name: Some("computer".into()),
+                    arguments: r#"{"action":"observe"}"#.to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("done".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        let mut approvals = 0;
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "observe the password window",
+            &mut |request| {
+                approvals += 1;
+                assert!(
+                    request.image.is_some(),
+                    "approval should carry the screenshot"
+                );
+                true
+            },
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        assert_eq!(approvals, 1);
+        let requests = provider.requests();
+        let tool = requests[1]
+            .messages
+            .iter()
+            .rev()
+            .find(|message| message.role == Role::Tool)
+            .expect("tool result");
+        assert!(tool.has_images());
+        let loaded = niucode_core::load(session.path()).expect("load");
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::Approval { tool, allowed: true, .. } if tool == "computer"
+        )));
+    }
+
+    #[tokio::test]
     async fn computer_observe_can_keep_a_frame() {
         let directory = temp_dir("computer-frame");
         let mut session = SessionLog::create(&directory).expect("session");
@@ -2172,6 +2268,10 @@ mod tests {
             "click the window",
             &mut |request| {
                 approvals += 1;
+                assert!(
+                    request.image.is_some(),
+                    "approval should carry the target frame"
+                );
                 summaries.push(request.summary.clone());
                 true
             },

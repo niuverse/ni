@@ -909,6 +909,7 @@ async fn run_prompt(
             "tool": request.tool,
             "summary": request.summary,
             "preview": preview_json(request.preview.as_ref()),
+            "image": request.image,
         }));
         let allowed = receiver
             .recv_timeout(Duration::from_secs(300))
@@ -975,7 +976,7 @@ async fn run_prompt(
 
 async fn send(stream: &mut TcpStream, status: &str, kind: &str, body: Vec<u8>) -> Result<()> {
     let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
         body.len()
     );
     stream.write_all(head.as_bytes()).await?;
@@ -1053,7 +1054,7 @@ fn query_token(path: &str) -> Option<&str> {
 async fn send_with_cookie(stream: &mut TcpStream, token: &str) -> Result<()> {
     let body = INDEX.as_bytes();
     let head = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nSet-Cookie: niucode_token={token}; HttpOnly; SameSite=Strict; Path=/\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nSet-Cookie: niucode_token={token}; HttpOnly; SameSite=Strict; Path=/\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
         body.len()
     );
     stream.write_all(head.as_bytes()).await?;

@@ -126,6 +126,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 .diff-line.add { background:#12261a; color:#aff5b4; }
 .diff-line.remove { background:#2d1214; color:#ffb3ba; }
 .diff-num { color:#6e7681; min-width:3ch; text-align:right; user-select:none; }
+.approval-shot { display:block; max-width:100%; max-height:320px; border:1px solid var(--border); border-radius:6px; margin:8px 0; image-rendering:auto; }
 .approval button { margin-right:8px; } .deny { background:var(--panel2); color:var(--text); }
 .allow-session { background:var(--panel2) !important; color:var(--accent) !important; border:1px solid var(--accent); }
 </style>
@@ -311,6 +312,13 @@ function renderApproval(e) {
   const card = node('div','approval');
   card.appendChild(node('h3',null,'Approval · '+e.tool));
   card.appendChild(node('div','meta',e.summary || ''));
+  if (typeof e.image === 'string' && e.image.startsWith('data:image/')) {
+    const shot = node('img','approval-shot');
+    shot.src = e.image;
+    shot.alt = 'target window at observation time';
+    shot.loading = 'lazy';
+    card.appendChild(shot);
+  }
   if (e.preview) card.appendChild(renderPreview(e.preview));
   const allow = node('button',null,'Allow');
   const always = node('button','allow-session','Allow tool');

@@ -331,6 +331,7 @@ mod tests {
             tool: "write".to_string(),
             summary: "write a.rs".to_string(),
             preview: Some(preview.clone()),
+            image: None,
         }
     }
 
