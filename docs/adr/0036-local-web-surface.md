@@ -35,7 +35,7 @@ the missing piece is a local transport and a rendering client.
    an approval event blocks the turn until `POST /api/approval` allows, allows
    for the tool session, or denies it (300s timeout fails closed); the card shows
    a matching countdown, and the tool allowlist is cleared on new/switch. Assistant text is rendered to HTML
-   server-side with task lists, footnotes, raw HTML escaped, `javascript:`/`data:`/`file:`/`vbscript:`
+   server-side with task lists, footnotes, GFM alerts, raw HTML escaped, `javascript:`/`data:`/`file:`/`vbscript:`
    links blocked by a parsed allowlist, external links opened in a safe new tab,
    and remote Markdown images stripped to alt text so the page never fetches
    third-party resources; the web client uses that HTML only for final messages. Math uses native MathML from

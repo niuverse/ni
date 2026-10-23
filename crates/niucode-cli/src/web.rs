@@ -962,6 +962,7 @@ fn markdown_html(text: &str) -> String {
     options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
     options.insert(MarkdownOptions::ENABLE_TASKLISTS);
     options.insert(MarkdownOptions::ENABLE_FOOTNOTES);
+    options.insert(MarkdownOptions::ENABLE_GFM);
     let parser = Parser::new_ext(&text, options).map(|event| match event {
         pulldown_cmark::Event::Html(raw) => pulldown_cmark::Event::Text(raw),
         pulldown_cmark::Event::InlineHtml(raw) => pulldown_cmark::Event::Text(raw),
@@ -1443,6 +1444,12 @@ mod tests {
         assert!(html.contains("type=\"checkbox\""), "{html}");
         assert!(html.contains("checked"), "{html}");
         assert!(html.contains("disabled"), "{html}");
+    }
+
+    #[test]
+    fn gfm_alerts_render_with_classes() {
+        let html = markdown_html("> [!NOTE]\n> body");
+        assert!(html.contains("markdown-alert-note"), "{html}");
     }
 
     #[test]

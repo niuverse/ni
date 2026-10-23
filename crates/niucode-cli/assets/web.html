@@ -59,6 +59,11 @@ aside input { width:100%; margin:0 0 10px; background:var(--bg); color:var(--tex
 .msg.assistant input[type=checkbox] { margin-right:6px; vertical-align:middle; }
 .msg.assistant .footnote-reference { font-size:11px; }
 .msg.assistant .footnote-definition { color:var(--dim); font-size:13px; border-top:1px solid var(--border); margin-top:10px; padding-top:6px; }
+.msg.assistant blockquote.markdown-alert-note { border-left-color:var(--accent); }
+.msg.assistant blockquote.markdown-alert-tip { border-left-color:#3fb950; }
+.msg.assistant blockquote.markdown-alert-warning { border-left-color:#d29922; }
+.msg.assistant blockquote.markdown-alert-caution { border-left-color:var(--err); }
+.msg.assistant blockquote[class^="markdown-alert"] { background:var(--panel2); padding:6px 10px; border-radius:0 6px 6px 0; }
 .msg.assistant blockquote { border-left:3px solid var(--border); margin:8px 0; padding-left:12px; color:var(--dim); }
 .msg.assistant table { border-collapse:collapse; margin:10px 0; display:block; overflow-x:auto; }
 .msg.assistant th,.msg.assistant td { border:1px solid var(--border); padding:5px 9px; text-align:left; }
