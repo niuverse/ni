@@ -16,6 +16,7 @@ sha2.workspace = true
 tempfile.workspace = true
 niucode-provider = { path = "../niucode-provider", version = "0.1.6" }
 regex.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 similar.workspace = true
 tokio.workspace = true

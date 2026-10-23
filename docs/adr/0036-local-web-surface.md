@@ -26,8 +26,9 @@ the missing piece is a local transport and a rendering client.
    `GET /api/session`, `GET /api/health`, `GET /api/events` (chunked SSE), and
    `POST /api/prompt` for one read-only turn at a time (202/409). Runtime deltas
    are broadcast as ephemeral SSE events while the append-only log remains the
-   durable source. Read-only is a real product surface, not a demo of implied
-   writes.
+   durable source. Browser prompts use `workspace-write` + `ApprovalMode::Ask`;
+   an approval event blocks the turn until `POST /api/approval` allows or denies
+   it (300s timeout fails closed). Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This

@@ -4,6 +4,7 @@
 //! change, so it builds the structured diff. Clients render it; the agent loop
 //! only forwards the value.
 
+use serde::Serialize;
 use similar::{DiffTag, TextDiff};
 
 use crate::{input_string, Toolbox};
@@ -11,14 +12,15 @@ use crate::{input_string, Toolbox};
 /// Number of unchanged context lines kept around each diff change.
 pub const PREVIEW_CONTEXT_LINES: usize = 3;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum LineKind {
     Context,
     Add,
     Remove,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PreviewLine {
     pub kind: LineKind,
     pub old_line: Option<usize>,
@@ -26,7 +28,7 @@ pub struct PreviewLine {
     pub text: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PreviewHunk {
     pub old_start: usize,
     pub old_len: usize,
@@ -35,7 +37,7 @@ pub struct PreviewHunk {
     pub lines: Vec<PreviewLine>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FilePreview {
     pub path: String,
     pub is_new: bool,
@@ -141,14 +143,15 @@ impl FilePreview {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
 pub enum PreviewBody {
     Diff { files: Vec<FilePreview> },
     Command { command: String },
     Note { message: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChangePreview {
     pub body: PreviewBody,
     pub added: usize,

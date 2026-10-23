@@ -4,9 +4,10 @@
 //! `POST /api/prompt` runs one read-only, approval-free agent turn; browser
 //! approvals and streaming deltas are later slices (ADR-0036).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -42,6 +43,8 @@ struct State {
     max_steps: usize,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
+    pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
+    next_approval: AtomicU64,
 }
 
 pub async fn serve(options: Options) -> Result<()> {
@@ -107,6 +110,8 @@ pub async fn serve(options: Options) -> Result<()> {
             max_steps: options.max_steps,
             busy: AtomicBool::new(false),
             live,
+            pending: Mutex::new(HashMap::new()),
+            next_approval: AtomicU64::new(1),
         }),
     )
     .await
@@ -135,6 +140,9 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     }
     if method == "POST" && path == "/api/prompt" {
         return prompt(stream, state, body).await;
+    }
+    if method == "POST" && path == "/api/approval" {
+        return approval(stream, state, body).await;
     }
     let (status, kind, body) = response(method, path, &state.snapshot);
     send(&mut stream, status, kind, body).await
@@ -207,18 +215,73 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
     .await
 }
 
+async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
+    let value = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let id = value.get("id").and_then(Value::as_str).unwrap_or("");
+    let allowed = value
+        .get("allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let sender = state.pending.lock().unwrap().remove(id);
+    match sender {
+        Some(sender) => {
+            let _ = sender.send(allowed);
+            send(
+                &mut stream,
+                "200 OK",
+                "application/json",
+                br#"{"ok":true}"#.to_vec(),
+            )
+            .await
+        }
+        None => {
+            send(
+                &mut stream,
+                "404 Not Found",
+                "application/json",
+                br#"{"error":"unknown approval"}"#.to_vec(),
+            )
+            .await
+        }
+    }
+}
+
 async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: String) -> Result<()> {
     let live = state.live.clone();
+    let approval_state = state.clone();
     let loaded = load(&state.path)?;
     let history = project_history(&loaded.events)?;
     let mut log = SessionLog::open(&state.path)?;
     let mut config = AgentConfig::new(state.model.clone(), state.cwd.clone());
     config.provider = state.preset.clone();
     config.max_steps = state.max_steps;
-    config.sandbox = SandboxPolicy::new(SandboxMode::ReadOnly, NetworkMode::Off);
-    config.approval = ApprovalMode::Never;
+    config.sandbox = SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off);
+    config.approval = ApprovalMode::Ask;
     config.allow_unsandboxed = false;
-    let mut approver = |_request: &niucode_agent::ApprovalRequest| false;
+    let mut approver = |request: &niucode_agent::ApprovalRequest| {
+        let id = format!(
+            "a-{}",
+            approval_state.next_approval.fetch_add(1, Ordering::SeqCst)
+        );
+        let (sender, receiver) = mpsc::channel();
+        approval_state
+            .pending
+            .lock()
+            .unwrap()
+            .insert(id.clone(), sender);
+        let _ = approval_state.live.send(json!({
+            "type": "approval",
+            "id": id,
+            "tool": request.tool,
+            "summary": request.summary,
+            "preview": request.preview,
+        }));
+        let allowed = receiver
+            .recv_timeout(Duration::from_secs(300))
+            .unwrap_or(false);
+        approval_state.pending.lock().unwrap().remove(&id);
+        allowed
+    };
     let mut observer = move |event: niucode_agent::AgentEvent| {
         let _ = live.send(crate::event_json(&event));
     };
@@ -335,6 +398,8 @@ mod tests {
             max_steps: 1,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
+            pending: Mutex::new(HashMap::new()),
+            next_approval: AtomicU64::new(1),
         })
     }
 
@@ -389,6 +454,8 @@ mod tests {
                 max_steps: 1,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
+                pending: Mutex::new(HashMap::new()),
+                next_approval: AtomicU64::new(1),
             }),
         ));
         let mut stream = TcpStream::connect(address).await.unwrap();
@@ -456,6 +523,8 @@ mod tests {
                 max_steps: 1,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
+                pending: Mutex::new(HashMap::new()),
+                next_approval: AtomicU64::new(1),
             }),
         ));
         let mut events = TcpStream::connect(address).await.unwrap();
@@ -510,12 +579,146 @@ mod tests {
         task.abort();
     }
 
+    #[tokio::test]
+    async fn approval_post_releases_a_pending_turn() {
+        let state = state();
+        let (sender, receiver) = mpsc::channel();
+        state.pending.lock().unwrap().insert("a-1".into(), sender);
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        let body = br#"{"id":"a-1","allowed":true}"#;
+        stream
+            .write_all(
+                format!(
+                    "POST /api/approval HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(body).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 200"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn browser_approval_allows_a_write_turn() {
+        use niucode_provider::{ScriptedProvider, StreamEvent, ToolCallDelta};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("write-1".into()),
+                    name: Some("write".into()),
+                    arguments: serde_json::json!({"path":"approved.txt","content":"yes"})
+                        .to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("written".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]));
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(
+            listener,
+            Arc::new(State {
+                path: path.clone(),
+                snapshot: Vec::new(),
+                provider: Some(provider),
+                preset: "scripted".into(),
+                model: "scripted".into(),
+                cwd: directory.path().to_path_buf(),
+                max_steps: 2,
+                busy: AtomicBool::new(false),
+                live: broadcast::channel(8).0,
+                pending: Mutex::new(HashMap::new()),
+                next_approval: AtomicU64::new(1),
+            }),
+        ));
+        let mut events = TcpStream::connect(address).await.unwrap();
+        events
+            .write_all(b"GET /api/events HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut headers = [0_u8; 512];
+        let _ = events.read(&mut headers).await.unwrap();
+        let mut prompt = TcpStream::connect(address).await.unwrap();
+        let body = br#"{"prompt":"write it"}"#;
+        prompt.write_all(format!("POST /api/prompt HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+        prompt.write_all(body).await.unwrap();
+        let mut reply = Vec::new();
+        prompt.read_to_end(&mut reply).await.unwrap();
+        assert!(String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 202"));
+        let mut seen = Vec::new();
+        let approval = "a-1".to_string();
+        let seen_approval = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                let mut chunk = [0_u8; 1024];
+                let count = events.read(&mut chunk).await.unwrap();
+                seen.extend_from_slice(&chunk[..count]);
+                if String::from_utf8_lossy(&seen).contains("\"type\":\"approval\"") {
+                    return;
+                }
+            }
+        })
+        .await;
+        seen_approval.expect("approval event");
+        let mut approve = TcpStream::connect(address).await.unwrap();
+        let body = format!(r#"{{"id":"{approval}","allowed":true}}"#);
+        approve.write_all(format!("POST /api/approval HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+        approve.write_all(body.as_bytes()).await.unwrap();
+        let mut reply = Vec::new();
+        approve.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 200"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if std::fs::read_to_string(directory.path().join("approved.txt"))
+                .ok()
+                .as_deref()
+                == Some("yes")
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "approved write missing"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        task.abort();
+    }
+
     #[test]
     fn index_uses_sse_and_has_no_remote_assets() {
         assert!(INDEX.contains("EventSource('/api/events')"));
         assert!(INDEX.contains("Read-only local chat"));
         assert!(INDEX.contains("fetch('/api/prompt'"));
         assert!(INDEX.contains("text_delta"));
+        assert!(INDEX.contains("renderApproval"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }

@@ -27,6 +27,10 @@ button { background:var(--accent); color:#07111f; border:0; border-radius:6px; p
 button:disabled { opacity:.5; cursor:default; }
 #status { max-width:900px; margin:0 auto; min-height:1.2em; }
 code { font-family:ui-monospace,monospace; color:#79c0ff; }
+.approval { border:1px solid #d29922; border-radius:8px; padding:12px; margin:14px 0; background:#1c1710; }
+.approval h3 { margin:0 0 6px; color:#d29922; font-size:14px; }
+.approval pre { white-space:pre-wrap; color:var(--dim); font-size:12px; }
+.approval button { margin-right:8px; } .deny { background:#30363d; color:var(--text); }
 </style>
 </head>
 <body>
@@ -60,7 +64,27 @@ function render(e) {
   }
   else if (e.type === 'tool_call') add('tool','→ '+e.name+' '+JSON.stringify(e.input||{}));
   else if (e.type === 'tool_result') { const det=node('details'); det.appendChild(node('summary',null,(e.ok?'✓ ':'✗ ')+'tool result')); det.appendChild(node('div','msg tool',e.output||e.summary||'')); add('tool','').appendChild(det); }
+  else if (e.type === 'approval') renderApproval(e);
   else if (e.type === 'turn_end') add('meta','turn · '+JSON.stringify(e.usage));
+}
+function renderApproval(e) {
+  const card = node('div','approval');
+  card.appendChild(node('h3',null,'Approval · '+e.tool));
+  card.appendChild(node('div','meta',e.summary || ''));
+  if (e.preview) card.appendChild(node('pre',null,JSON.stringify(e.preview, null, 2).slice(0, 4000)));
+  const allow = node('button',null,'Allow');
+  const deny = node('button','deny','Deny');
+  const finish = async allowed => {
+    allow.disabled = deny.disabled = true;
+    try {
+      const r = await fetch('/api/approval', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:e.id, allowed})});
+      if (!r.ok) throw new Error('approval failed');
+      card.appendChild(node('div','meta', allowed ? 'allowed' : 'denied'));
+    } catch (err) { card.appendChild(node('div','meta','error: '+err.message)); }
+  };
+  allow.onclick = () => finish(true); deny.onclick = () => finish(false);
+  card.appendChild(allow); card.appendChild(deny);
+  log.appendChild(card);
 }
 const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
