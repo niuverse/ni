@@ -1120,6 +1120,7 @@ mod tests {
         assert!(INDEX.contains("tool-card"));
         assert!(INDEX.contains("textarea"));
         assert!(INDEX.contains("Shift+Enter"));
+        assert!(INDEX.contains("prompt.history"));
         assert!(INDEX.contains("diff-line"));
         assert!(INDEX.contains("e.html"));
         assert!(INDEX.contains("math"));
@@ -1134,6 +1135,7 @@ mod tests {
         assert!(INDEX.contains("localStorage"));
         assert!(INDEX.contains("textarea"));
         assert!(INDEX.contains("Shift+Enter"));
+        assert!(INDEX.contains("prompt.history"));
         assert!(!INDEX.contains("http://"));
         assert!(!INDEX.contains("https://"));
     }
