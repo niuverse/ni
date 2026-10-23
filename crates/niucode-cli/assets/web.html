@@ -132,7 +132,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </head>
 <body>
 <a class="skip" href="#log">Skip to transcript</a>
-<header><button id="toggle-context" class="chip" title="Toggle context" aria-label="Toggle product context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><span id="computer" class="chip">computer off</span><span id="busy" class="chip" aria-live="polite">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast" aria-label="Toggle theme">☾</button><button id="download" class="chip" title="download session Markdown" aria-label="Download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live" aria-live="polite">○ connecting</span></header>
+<header><button id="toggle-context" class="chip" title="Toggle context" aria-label="Toggle product context">☰</button><b id="brand">niucode</b><span id="model" class="chip">model…</span><span id="cwd" class="chip">cwd…</span><span id="mode" class="chip">policy…</span><button id="computer" class="chip" title="Arm or stop computer use">computer off</button><span id="busy" class="chip" aria-live="polite">idle</span><span id="usage" class="chip" title="token usage this page">0 tok</span><button id="theme" class="chip" title="Toggle theme: dark / light / high contrast" aria-label="Toggle theme">☾</button><button id="download" class="chip" title="download session Markdown" aria-label="Download session Markdown">Download</button><span id="id" class="meta">loading…</span><span id="live" class="live" aria-live="polite">○ connecting</span></header>
 <div id="ctx-backdrop" hidden></div>
 <aside id="context" aria-label="Product context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off" aria-label="Filter product context"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off" aria-label="Search transcript"><span id="log-count"></span></div><div id="log" role="log" aria-live="polite" aria-label="Transcript"></div></main>
@@ -347,7 +347,20 @@ async function refreshStatus() {
     document.getElementById('cwd').textContent = status.cwd || '';
     document.getElementById('mode').textContent = (status.sandbox || '') + ' / ' + (status.approval || '');
     const computer = status.computer || { policy: 'off', armed: false };
-    document.getElementById('computer').textContent = computer.policy === 'off' ? 'computer off' : 'computer ' + computer.policy + (computer.armed ? ' ✓' : ' paused');
+    const computerChip = document.getElementById('computer');
+    computerChip.textContent = computer.policy === 'off' ? 'computer off' : 'computer ' + computer.policy + (computer.armed ? ' ✓' : ' paused');
+    computerChip.disabled = !computer.configured;
+    computerChip.onclick = async () => {
+      if (!computer.configured) return;
+      const action = computer.armed ? 'stop' : 'arm';
+      try {
+        const response = await fetch('/api/computer', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action}) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || action + ' failed');
+        add('meta', 'computer ' + action + ' · ' + data.policy + (data.armed ? ' armed' : ' disarmed'));
+        refreshStatus();
+      } catch (error) { add('meta', 'computer: ' + error.message); }
+    };
     if (turnStart === null) document.getElementById('busy').textContent = status.busy ? 'working' : 'idle';
   } catch (_) {}
 }

@@ -24,7 +24,8 @@ explicit maintainer go-ahead. Nothing has been uploaded for this version.
 - **Agent tool**: `computer` returns the screenshot as a tool image part;
   action failures stay ToolResults; approvals are audited.
 - **Product surfaces**: `niucode`/`niuse` exec, TUI, REPL, and web expose
-  `--computer`; TUI/REPL `/computer stop|arm`, web status chip.
+  `--computer`; TUI/REPL `/computer stop|arm`, web status chip and
+  token-gated arm/stop control.
 - **Multimodal attachments**: OpenAI-compatible image parts, capability gate,
   content-addressed store, budgeted text/image turns, TUI `/attach`/`@path`,
   Web upload/drop/paste, CLI `--attach`/`--image`.

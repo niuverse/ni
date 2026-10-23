@@ -355,16 +355,7 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
             "network": "off",
             "busy": state.busy.load(Ordering::Relaxed),
             "allow_new": state.allow_new,
-            "computer": state.computer.as_ref().map_or_else(
-                || json!({"policy": "off", "armed": false}),
-                |runtime| {
-                    let runtime = runtime.lock().unwrap();
-                    json!({
-                        "policy": runtime.policy().as_str(),
-                        "armed": runtime.is_armed(),
-                    })
-                },
-            ),
+            "computer": computer_status(&state.computer),
         });
         return send(
             &mut stream,
@@ -382,6 +373,9 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     }
     if method == "POST" && route == "/api/approval" {
         return approval(stream, state, &body).await;
+    }
+    if method == "POST" && route == "/api/computer" {
+        return computer_control(stream, state, &body).await;
     }
     let snapshot = state.snapshot.lock().unwrap().clone();
     if route == "/" && query_authorized && !cookie_authorized {
@@ -569,6 +563,86 @@ fn session_store(state: &State) -> Result<AttachmentStore> {
         .unwrap_or_else(|| Path::new("."))
         .join("attachments");
     Ok(AttachmentStore::open(root)?)
+}
+
+fn computer_status(runtime: &Option<Arc<Mutex<niucode_agent::ComputerRuntime>>>) -> Value {
+    runtime.as_ref().map_or_else(
+        || json!({"policy": "off", "armed": false, "configured": false}),
+        |runtime| {
+            let runtime = runtime.lock().unwrap();
+            json!({
+                "policy": runtime.policy().as_str(),
+                "armed": runtime.is_armed(),
+                "configured": true,
+            })
+        },
+    )
+}
+
+async fn computer_control(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
+    let Some(runtime) = state.computer.clone() else {
+        return send(
+            &mut stream,
+            "409 Conflict",
+            "application/json",
+            br#"{"error":"computer use is not configured for this server"}"#.to_vec(),
+        )
+        .await;
+    };
+    let action = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("action")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    if action != "arm" && action != "stop" {
+        return send(
+            &mut stream,
+            "400 Bad Request",
+            "application/json",
+            br#"{"error":"action must be arm or stop"}"#.to_vec(),
+        )
+        .await;
+    }
+    // Do not hold the std mutex across the response await: the handler future
+    // must stay Send.
+    let (arm_error, release_error) = {
+        let mut runtime = runtime.lock().unwrap();
+        if action == "arm" {
+            (runtime.arm().err().map(|error| error.to_string()), None)
+        } else {
+            (
+                None,
+                runtime
+                    .emergency_stop()
+                    .err()
+                    .map(|error| error.to_string()),
+            )
+        }
+    };
+    if let Some(error) = arm_error {
+        return send(
+            &mut stream,
+            "409 Conflict",
+            "application/json",
+            serde_json::to_vec(&json!({"error": error}))?,
+        )
+        .await;
+    }
+    let mut status = computer_status(&state.computer);
+    if let Some(error) = release_error {
+        status["release_error"] = Value::String(error);
+    }
+    send(
+        &mut stream,
+        "200 OK",
+        "application/json",
+        serde_json::to_vec(&status)?,
+    )
+    .await
 }
 
 async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
@@ -2151,6 +2225,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn computer_control_requires_a_configured_runtime() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state()));
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                b"POST /api/computer HTTP/1.1\r\nHost: localhost\r\nContent-Length: 17\r\n\r\n{\"action\":\"stop\"}",
+            )
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 409"), "{text}");
+        assert!(text.contains("not configured"), "{text}");
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn serves_model_and_policy_status() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -2168,7 +2262,7 @@ mod tests {
         assert!(text.contains("\"sandbox\":\"workspace-write\""), "{text}");
         assert!(text.contains("\"approval\":\"ask\""), "{text}");
         assert!(
-            text.contains("\"computer\":{\"armed\":false,\"policy\":\"off\""),
+            text.contains("\"computer\":{\"armed\":false,\"configured\":false,\"policy\":\"off\"}"),
             "{text}"
         );
         task.abort();

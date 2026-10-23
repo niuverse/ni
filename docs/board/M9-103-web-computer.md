@@ -38,5 +38,5 @@ policy entry and no visible computer state.
 
 ## Notes
 
-Arm/stop from the browser is a later slice. The runtime is process-scoped and
-mirrors the TUI/REPL policy.
+Arm/stop is a later slice (M9-106); the runtime is process-scoped and mirrors
+the TUI/REPL policy.
