@@ -113,3 +113,8 @@ client — without turning the event log into presentation data.
 - Model-provided ANSI is scrubbed.
 - Width and cursor calculations use terminal cell width, not bytes.
 - Every phase ships tests, docs, and a dashboard card.
+
+## Final audit
+
+See [the final visual audit](evidence/final-visual-audit.md) for the light, dark,
+high-contrast, and 390px compositions.
