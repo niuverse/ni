@@ -43,9 +43,13 @@ the missing piece is a local transport and a rendering client.
    `/clear` commands; code blocks have a Copy button, the session can be
    downloaded as derived Markdown, and a local search filters transcript nodes.
    The viewport follows new output only when already near the bottom, with a
-   jump-to-latest control otherwise. A persisted dark/light/high-contrast toggle and
-   `prefers-reduced-motion` affect presentation only.
-   Read-only remains the default for the CLI.
+   jump-to-latest control otherwise. A persisted dark/light/high-contrast toggle,
+   first-run OS color/contrast preferences, and `prefers-reduced-motion` affect
+   presentation only. Controls have accessible names; the transcript is a polite
+   log region. Sections tagged `threads` switch archived sessions through an
+   embedder allowlist, and successful new/switch operations broadcast
+   `session_switched`. A Rust test checks DOM IDs and `getElementById`
+   references in the embedded client. Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This
