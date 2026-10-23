@@ -332,6 +332,25 @@ form.onsubmit = async event => {
   const prompt = input.value.trim();
   if (!prompt) return;
   rememberPrompt(prompt);
+  const command = prompt.split(/\s+/)[0];
+  if (command === '/help') {
+    add('meta','commands: /help · /status · /report · anything else goes to the agent');
+    input.value = ''; growComposer(); status.textContent = 'local command'; return;
+  }
+  if (command === '/status') {
+    try {
+      const s = await fetch('/api/status').then(r => r.json());
+      add('meta', 'model ' + (s.model || '?') + ' · ' + (s.cwd || '?') + ' · ' + (s.sandbox || '?') + ' / ' + (s.approval || '?') + ' · net ' + (s.network || '?'));
+      input.value = ''; growComposer(); status.textContent = 'local command';
+    } catch (error) { status.textContent = 'status failed: ' + error.message; }
+    return;
+  }
+  if (command === '/report') {
+    document.getElementById('ctx-filter').value = 'report';
+    await loadContext();
+    status.textContent = 'local command · report shown in context';
+    input.value = ''; growComposer(); return;
+  }
   send.disabled = true; status.textContent = 'sending…'; beginTurn('sending');
   try {
     const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
