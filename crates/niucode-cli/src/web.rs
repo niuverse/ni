@@ -11,7 +11,12 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use niucode_agent::{project_history, run_with_history, AgentConfig, ApprovalMode};
+use base64::Engine;
+use niucode_agent::{
+    project_history, run_with_attachments, run_with_history, AgentConfig, ApprovalMode,
+};
+use niucode_attachments::{check_budget, AttachmentStore};
+use niucode_core::AttachmentRef;
 use niucode_core::{load, now_ms, Event, SessionLog};
 use niucode_provider::Provider;
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy};
@@ -183,7 +188,7 @@ async fn serve_listener(listener: TcpListener, state: Arc<State>) -> Result<()> 
 }
 
 async fn read_request(stream: &mut TcpStream) -> std::io::Result<(String, String)> {
-    const MAX_REQUEST: usize = 1_048_576;
+    const MAX_REQUEST: usize = 16 * 1024 * 1024;
     let mut bytes = Vec::with_capacity(8192);
     let mut chunk = [0_u8; 8192];
     let mut header_end = None;
@@ -302,6 +307,9 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     if method == "GET" && route == "/api/events" {
         return stream_events(stream, current_path, state.live.subscribe()).await;
     }
+    if method == "POST" && route == "/api/attach" {
+        return attach(stream, state, &body).await;
+    }
     if method == "POST" && route == "/api/prompt" {
         return prompt(stream, state, &body).await;
     }
@@ -395,6 +403,56 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
         )
         .await;
     }
+    let value = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let attachments: Vec<AttachmentRef> = match value.get("attachments").cloned() {
+        Some(value) => match serde_json::from_value(value) {
+            Ok(attachments) => attachments,
+            Err(_) => {
+                return send(
+                    &mut stream,
+                    "400 Bad Request",
+                    "application/json",
+                    br#"{"error":"attachments must be a list of attachment references"}"#.to_vec(),
+                )
+                .await;
+            }
+        },
+        None => Vec::new(),
+    };
+    if !attachments.is_empty() {
+        let store = match session_store(&state) {
+            Ok(store) => store,
+            Err(error) => {
+                return send(
+                    &mut stream,
+                    "500 Internal Server Error",
+                    "application/json",
+                    serde_json::to_vec(&json!({"error": error.to_string()}))?,
+                )
+                .await;
+            }
+        };
+        for attachment in &attachments {
+            if let Err(error) = store.load(attachment) {
+                return send(
+                    &mut stream,
+                    "400 Bad Request",
+                    "application/json",
+                    serde_json::to_vec(&json!({"error": error.to_string()}))?,
+                )
+                .await;
+            }
+        }
+        if let Err(error) = check_budget(&attachments, 64_000) {
+            return send(
+                &mut stream,
+                "400 Bad Request",
+                "application/json",
+                serde_json::to_vec(&json!({"error": error.to_string()}))?,
+            )
+            .await;
+        }
+    }
     if state.busy.swap(true, Ordering::SeqCst) {
         return send(
             &mut stream,
@@ -419,7 +477,7 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
                 return;
             }
         };
-        let result = runtime.block_on(run_prompt(turn.clone(), provider, prompt));
+        let result = runtime.block_on(run_prompt(turn.clone(), provider, prompt, attachments));
         turn.busy.store(false, Ordering::SeqCst);
         let _ = turn.live.send(json!({"type": "context_changed"}));
         if let Err(error) = result {
@@ -433,6 +491,66 @@ async fn prompt(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<
         br#"{"ok":true}"#.to_vec(),
     )
     .await
+}
+
+async fn attach(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
+    let value = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let data = value
+        .get("data")
+        .and_then(Value::as_str)
+        .filter(|data| !data.is_empty());
+    let Some(data) = data else {
+        return send(
+            &mut stream,
+            "400 Bad Request",
+            "application/json",
+            br#"{\"error\":\"data is required\"}"#.to_vec(),
+        )
+        .await;
+    };
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(data) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return send(
+                &mut stream,
+                "400 Bad Request",
+                "application/json",
+                br#"{\"error\":\"data must be base64\"}"#.to_vec(),
+            )
+            .await;
+        }
+    };
+    let name = value.get("name").and_then(Value::as_str);
+    let alt = value.get("alt").and_then(Value::as_str);
+    let store = session_store(&state)?;
+    let reference = match store.put(&bytes, name, alt) {
+        Ok(reference) => reference,
+        Err(error) => {
+            return send(
+                &mut stream,
+                "400 Bad Request",
+                "application/json",
+                serde_json::to_vec(&json!({"error": error.to_string()}))?,
+            )
+            .await;
+        }
+    };
+    send(
+        &mut stream,
+        "200 OK",
+        "application/json",
+        serde_json::to_vec(&reference)?,
+    )
+    .await
+}
+
+fn session_store(state: &State) -> Result<AttachmentStore> {
+    let path = state.path.lock().unwrap().clone();
+    let root = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("attachments");
+    Ok(AttachmentStore::open(root)?)
 }
 
 async fn approval(mut stream: TcpStream, state: Arc<State>, body: &str) -> Result<()> {
@@ -650,7 +768,12 @@ fn create_session(state: &State) -> Result<PathBuf> {
     Ok(path)
 }
 
-async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: String) -> Result<()> {
+async fn run_prompt(
+    state: Arc<State>,
+    provider: Arc<dyn Provider>,
+    prompt: String,
+    attachments: Vec<AttachmentRef>,
+) -> Result<()> {
     let live = state.live.clone();
     let approval_state = state.clone();
     let path = state.path.lock().unwrap().clone();
@@ -729,16 +852,31 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
             }
         }
     };
-    run_with_history(
-        provider.as_ref(),
-        &mut log,
-        &config,
-        &prompt,
-        history,
-        &mut approver,
-        &mut observer,
-    )
-    .await?;
+    if attachments.is_empty() {
+        run_with_history(
+            provider.as_ref(),
+            &mut log,
+            &config,
+            &prompt,
+            history,
+            &mut approver,
+            &mut observer,
+        )
+        .await?;
+    } else {
+        let store = session_store(&state)?;
+        run_with_attachments(
+            provider.as_ref(),
+            &mut log,
+            &config,
+            &prompt,
+            attachments,
+            &store,
+            &mut approver,
+            &mut observer,
+        )
+        .await?;
+    }
     Ok(())
 }
 
@@ -1465,6 +1603,125 @@ mod tests {
         let (head, received) = server.await.unwrap();
         assert!(head.starts_with("POST /api/prompt"));
         assert_eq!(received.len(), 20_000);
+    }
+
+    #[tokio::test]
+    async fn attachment_upload_stores_base64_under_the_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state_at(path, true)));
+
+        let png = base64::engine::general_purpose::STANDARD.encode(b"\x89PNG\r\n\x1a\nimage");
+        let body = serde_json::to_vec(&json!({"name":"shot.png","data":png})).unwrap();
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                format!(
+                    "POST /api/attach HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(&body).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert!(text.contains("image/png"), "{text}");
+        assert!(text.contains("shot.png"), "{text}");
+
+        let body = br#"{"name":"bad.png","data":"not base64"}"#.to_vec();
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                format!(
+                    "POST /api/attach HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(&body).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 400"));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn browser_prompt_sends_an_uploaded_image() {
+        use niucode_provider::{ScriptedProvider, StreamEvent};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let scripted = Arc::new(ScriptedProvider::from_turns(vec![vec![
+            StreamEvent::TextDelta("seen".into()),
+            StreamEvent::Done {
+                finish_reason: Some("stop".into()),
+            },
+        ]]));
+        let mut state = state_at(path, true);
+        Arc::get_mut(&mut state).unwrap().provider = Some(scripted.clone());
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state));
+
+        let png = base64::engine::general_purpose::STANDARD.encode(b"\x89PNG\r\n\x1a\nimage");
+        let upload = serde_json::to_vec(&json!({"name":"shot.png","data":png})).unwrap();
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                format!(
+                    "POST /api/attach HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    upload.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(&upload).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let text = String::from_utf8_lossy(&reply);
+        let attachment: AttachmentRef =
+            serde_json::from_str(text.split_once("\r\n\r\n").unwrap().1).unwrap();
+
+        let body =
+            serde_json::to_vec(&json!({"prompt":"look","attachments":[attachment]})).unwrap();
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(
+                format!(
+                    "POST /api/prompt HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        stream.write_all(&body).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 202"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        while scripted.requests().is_empty() && tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let requests = scripted.requests();
+        assert_eq!(requests.len(), 1);
+        let user = requests[0].messages.last().unwrap();
+        assert!(user.has_images(), "request did not carry the image part");
+        task.abort();
     }
 
     #[tokio::test]
@@ -2283,6 +2540,8 @@ mod tests {
         assert!(INDEX.contains("ctx-backdrop"));
         assert!(INDEX.contains("trapContextFocus"));
         assert!(INDEX.contains("pre.copyable"));
+        assert!(INDEX.contains("api/attach"));
+        assert!(INDEX.contains("pendingAttachments"));
         assert!(INDEX.contains("addMessageCopy"));
         assert!(INDEX.contains("streamRendered"));
         assert!(INDEX.contains("ctrlKey"));
@@ -2329,6 +2588,8 @@ mod tests {
         assert!(INDEX.contains("ctx-backdrop"));
         assert!(INDEX.contains("trapContextFocus"));
         assert!(INDEX.contains("pre.copyable"));
+        assert!(INDEX.contains("api/attach"));
+        assert!(INDEX.contains("pendingAttachments"));
         assert!(INDEX.contains("addMessageCopy"));
         assert!(INDEX.contains("streamRendered"));
         assert!(INDEX.contains("ctrlKey"));

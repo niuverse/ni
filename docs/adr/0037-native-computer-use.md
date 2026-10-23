@@ -49,7 +49,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    `[image omitted: alt]`. User images and the current screenshot share a
    visual budget (max four per request); screenshots are ephemeral by default.
    Resumed sessions rebuild history through the same projection, so compaction
-   and the recent-image window use one rule.
+   and the recent-image window use one rule. The local web client uploads via a
+   token-gated `/api/attach` (16MiB request cap) and sends refs with the prompt.
 7. **Text attachments.** `@path` / `/attach` / CLI `--attach`/`--image` / Web
    drop-paste; a
    script is text context and is never auto-executed. Per-file 20k chars /

@@ -109,6 +109,12 @@ textarea { resize:none; min-height:42px; max-height:160px; overflow-y:auto; line
 button { background:var(--accent); color:#07111f; border:0; border-radius:6px; padding:9px 16px; font-weight:600; cursor:pointer; }
 button:disabled { opacity:.5; cursor:default; }
 #status { max-width:900px; margin:0 auto; min-height:1.2em; }
+#attachments { display:flex; flex-wrap:wrap; gap:6px; max-width:900px; margin:0 auto 6px; }
+#attachments[hidden] { display:none; }
+.attachment-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; background:var(--panel2); padding:3px 8px; font-size:12px; }
+.attachment-chip button { background:transparent; color:var(--dim); border:0; padding:0 2px; font-weight:400; cursor:pointer; }
+#attach { background:var(--panel2); color:var(--text); border:1px solid var(--border); padding:9px 12px; }
+#file { display:none; }
 code { font-family:ui-monospace,monospace; color:#79c0ff; }
 .approval { border:1px solid #d29922; border-radius:8px; padding:12px; margin:14px 0; background:#1c1710; }
 .approval h3 { margin:0 0 6px; color:#d29922; font-size:14px; }
@@ -130,7 +136,7 @@ code { font-family:ui-monospace,monospace; color:#79c0ff; }
 <div id="ctx-backdrop" hidden></div>
 <aside id="context" aria-label="Product context"><input id="ctx-filter" placeholder="Filter context…" autocomplete="off" aria-label="Filter product context"><div id="ctx-body"><div class="ctx-empty">loading context…</div></div></aside>
 <button id="latest" class="latest" hidden>↓ Latest</button><main><div class="log-tools"><input id="log-filter" placeholder="Search transcript…" autocomplete="off" aria-label="Search transcript"><span id="log-count"></span></div><div id="log" role="log" aria-live="polite" aria-label="Transcript"></div></main>
-<footer><form id="composer"><textarea id="prompt" maxlength="100000" rows="1" autocomplete="off" placeholder="Ask for a task…" aria-label="Prompt"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
+<footer><div id="attachments" hidden aria-label="Pending attachments"></div><form id="composer"><button type="button" id="attach" title="Attach image or text file" aria-label="Attach image or text file">Attach</button><input id="file" type="file" multiple accept="image/png,image/jpeg,image/webp,text/plain,.md,.rs,.py,.sh,.toml,.json"><textarea id="prompt" maxlength="100000" rows="1" autocomplete="off" placeholder="Ask for a task…" aria-label="Prompt"></textarea><button id="send">Send</button></form><div id="cmd-menu" hidden></div><div id="status">Enter to send · Shift+Enter for a newline · ↑ history · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
 const id = document.getElementById('id');
@@ -502,6 +508,66 @@ source.onmessage = event => { try { render(JSON.parse(event.data)); } catch (_) 
 const form = document.getElementById('composer');
 const input = document.getElementById('prompt');
 const send = document.getElementById('send');
+const fileInput = document.getElementById('file');
+const attachmentsBar = document.getElementById('attachments');
+let pendingAttachments = [];
+function renderAttachments() {
+  attachmentsBar.textContent = '';
+  attachmentsBar.hidden = pendingAttachments.length === 0;
+  pendingAttachments.forEach((attachment, index) => {
+    const chip = node('span', 'attachment-chip');
+    chip.appendChild(document.createTextNode((attachment.kind === 'image' ? 'image' : 'text') + ' · ' + (attachment.name || attachment.sha256.slice(0, 8))));
+    const remove = node('button', null, '×');
+    remove.type = 'button';
+    remove.title = 'Remove attachment';
+    remove.onclick = () => { pendingAttachments.splice(index, 1); renderAttachments(); };
+    chip.appendChild(remove);
+    attachmentsBar.appendChild(chip);
+  });
+}
+function readBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      const comma = value.indexOf(',');
+      resolve(comma >= 0 ? value.slice(comma + 1) : value);
+    };
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadAttachment(file) {
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { status.textContent = 'attachment too large: ' + file.name; return; }
+  status.textContent = 'uploading ' + file.name + '…';
+  try {
+    const data = await readBase64(file);
+    const response = await fetch('/api/attach', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:file.name, data}) });
+    const ref = await response.json();
+    if (!response.ok) throw new Error(ref.error || response.statusText);
+    pendingAttachments.push(ref);
+    renderAttachments();
+    status.textContent = 'attached ' + (ref.name || file.name);
+  } catch (error) { status.textContent = 'attach failed: ' + error.message; }
+}
+document.getElementById('attach').onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  const files = [...fileInput.files];
+  fileInput.value = '';
+  for (const file of files) await uploadAttachment(file);
+};
+form.addEventListener('dragover', event => { event.preventDefault(); });
+form.addEventListener('drop', async event => {
+  event.preventDefault();
+  for (const file of [...(event.dataTransfer?.files || [])]) await uploadAttachment(file);
+});
+input.addEventListener('paste', async event => {
+  const files = [...(event.clipboardData?.files || [])];
+  if (!files.length) return;
+  event.preventDefault();
+  for (const file of files) await uploadAttachment(file);
+});
 const COMMANDS = [
   { name: '/help', description: 'list local commands' },
   { name: '/status', description: 'model, cwd, and policy' },
@@ -509,6 +575,7 @@ const COMMANDS = [
   { name: '/threads', description: 'show archived threads in context' },
   { name: '/export', description: 'download the session Markdown' },
   { name: '/clear', description: 'clear the view only; session stays' },
+  { name: 'Attach', description: 'button or drag/drop an image/text file' },
   { name: '/new', description: 'start a new session (reloads)' },
 ];
 let commandItems = [], commandIndex = 0;
@@ -643,10 +710,12 @@ form.onsubmit = async event => {
   }
   send.disabled = true; status.textContent = 'sending…'; beginTurn('sending');
   try {
-    const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
+    const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, attachments: pendingAttachments}) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || response.statusText);
-    input.value = ''; growComposer(); status.textContent = 'turn running…';
+    input.value = ''; growComposer();
+    pendingAttachments = []; renderAttachments();
+    status.textContent = 'turn running…';
   } catch (error) { status.textContent = 'error: ' + error.message; }
   finally { send.disabled = false; }
 };
