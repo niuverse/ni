@@ -52,6 +52,9 @@ agent tool turn (observe image → approved click → ButtonPress) and
 [the manual acceptance guide](computer-acceptance.md). macOS compiles and runs unit
 tests on the macOS runner; real TCC/dogfood interaction remains manual.
 
+Detailed steps, clean-install checks, and rollback are in the
+[release runbook](release-runbook.md).
+
 ## Release order
 
 1. Publish `niucode-core`, `niucode-computer`, `niucode-computer-x11`,
