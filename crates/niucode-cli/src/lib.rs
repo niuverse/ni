@@ -44,7 +44,7 @@ mod terminal;
 mod text_layout;
 mod theme;
 mod tui;
-mod web;
+pub mod web;
 mod workspace;
 
 pub use niucode_agent::{AgentEvent, EmbedderTool, RunOutcome};
@@ -623,6 +623,7 @@ pub async fn run() -> Result<()> {
                 model,
                 cwd: cwd.unwrap_or(std::env::current_dir()?),
                 max_steps,
+                system_prompt: None,
             })
             .await?;
             Ok(())

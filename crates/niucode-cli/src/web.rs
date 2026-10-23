@@ -32,6 +32,8 @@ pub struct Options {
     pub model: Option<String>,
     pub cwd: PathBuf,
     pub max_steps: usize,
+    /// Override the agent system prompt; used by niuse's product shell.
+    pub system_prompt: Option<String>,
 }
 
 struct State {
@@ -42,6 +44,7 @@ struct State {
     model: String,
     cwd: PathBuf,
     max_steps: usize,
+    system_prompt: Option<String>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -118,6 +121,7 @@ pub async fn serve(options: Options) -> Result<()> {
             model,
             cwd: options.cwd,
             max_steps: options.max_steps,
+            system_prompt: options.system_prompt,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -268,6 +272,9 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
     config.sandbox = SandboxPolicy::new(SandboxMode::WorkspaceWrite, NetworkMode::Off);
     config.approval = ApprovalMode::Ask;
     config.allow_unsandboxed = false;
+    if let Some(prompt) = &state.system_prompt {
+        config.system_prompt = prompt.clone();
+    }
     let mut approver = |request: &niucode_agent::ApprovalRequest| {
         let id = format!(
             "a-{}",
@@ -506,6 +513,7 @@ mod tests {
             model: "deepseek-flash".into(),
             cwd: PathBuf::from("."),
             max_steps: 1,
+            system_prompt: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -581,6 +589,7 @@ mod tests {
                 model: "deepseek-flash".into(),
                 cwd: PathBuf::from("."),
                 max_steps: 1,
+                system_prompt: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -650,6 +659,7 @@ mod tests {
                 model: "scripted".into(),
                 cwd: directory.path().to_path_buf(),
                 max_steps: 1,
+                system_prompt: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -778,6 +788,7 @@ mod tests {
                 model: "scripted".into(),
                 cwd: directory.path().to_path_buf(),
                 max_steps: 2,
+                system_prompt: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
