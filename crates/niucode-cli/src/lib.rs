@@ -315,6 +315,11 @@ enum WorktreeCommand {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Inspect the native computer-use backend
+    Computer {
+        #[command(subcommand)]
+        command: ComputerCommand,
+    },
     /// Inspect and create append-only session logs
     Session {
         #[command(subcommand)]
@@ -523,6 +528,16 @@ enum Command {
 }
 
 #[derive(Debug, Subcommand)]
+enum ComputerCommand {
+    /// Check display/TCC permissions, window enumeration, and a PNG probe
+    Doctor {
+        /// Emit a JSON object
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum SessionCommand {
     /// Create a session and print its path
     New {
@@ -602,6 +617,9 @@ pub async fn run() -> Result<()> {
             yes,
         }) => run_gc(apply, prune_sessions, yes),
         Some(Command::Auth { command }) => run_auth(command),
+        Some(Command::Computer { command }) => match command {
+            ComputerCommand::Doctor { json } => run_computer_doctor(json),
+        },
         Some(Command::Exec {
             prompt,
             attach,
@@ -1528,6 +1546,153 @@ pub fn configure_computer(config: &mut AgentConfig, policy: &str) -> Result<()> 
         eprintln!("warning: computer use is not supported in this build (got {policy:?})");
     }
     Ok(())
+}
+
+#[allow(clippy::needless_return)]
+fn run_computer_doctor(json: bool) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let backend = niucode_computer_x11::X11Backend::connect(None)
+            .context("connect to the X11 display (is DISPLAY set?)")?;
+        let windows = backend.list_windows().context("enumerate X11 windows")?;
+        let capture = backend.observe(None);
+        let (kind, image, bytes, error) = match &capture {
+            Ok(capture) => (
+                "x11".to_string(),
+                Some(format!(
+                    "{}x{}",
+                    capture.observation.image.width, capture.observation.image.height
+                )),
+                Some(capture.png.len()),
+                None,
+            ),
+            Err(error) => ("x11".to_string(), None, None, Some(error.to_string())),
+        };
+        let first = windows.first().map(|window| {
+            serde_json::json!({
+                "id": window.id.0,
+                "app": window.app,
+                "title": window.title,
+                "kind": format!("{:?}", window.kind),
+                "bounds": window.bounds,
+            })
+        });
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "platform": "linux",
+                    "backend": kind,
+                    "xtest": backend.has_xtest(),
+                    "windows": windows.len(),
+                    "first": first,
+                    "image": image,
+                    "png_bytes": bytes,
+                    "error": error,
+                }))?
+            );
+        } else {
+            println!("platform linux · backend x11");
+            println!("xtest:  {}", if backend.has_xtest() { "yes" } else { "no" });
+            println!("windows: {}", windows.len());
+            if let Some(window) = windows.first() {
+                println!(
+                    "first:   {} — {} · {:?} · {:?}",
+                    window.app, window.title, window.kind, window.bounds
+                );
+            }
+            match capture {
+                Ok(capture) => println!(
+                    "capture: {}x{} · {} bytes",
+                    capture.observation.image.width,
+                    capture.observation.image.height,
+                    capture.png.len()
+                ),
+                Err(error) => println!("capture: failed: {error}"),
+            }
+        }
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let screen = niucode_computer_macos::MacBackend::screen_access();
+        let accessibility = niucode_computer_macos::MacBackend::accessibility_access();
+        if !screen {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "platform": "macos",
+                        "screen_recording": false,
+                        "accessibility": accessibility,
+                        "error": "Screen Recording permission is not granted",
+                    })
+                );
+            } else {
+                println!("platform macos");
+                println!("screen recording: denied");
+                println!(
+                    "accessibility:   {}",
+                    if accessibility { "granted" } else { "denied" }
+                );
+                println!("grant Screen Recording in System Settings > Privacy & Security");
+            }
+            return Ok(());
+        }
+        let backend =
+            niucode_computer_macos::MacBackend::connect(None).context("connect to CoreGraphics")?;
+        let windows = backend.list_windows().context("enumerate macOS windows")?;
+        let capture = backend.observe(None);
+        let (image, bytes, error) = match &capture {
+            Ok(capture) => (
+                Some(format!(
+                    "{}x{}",
+                    capture.observation.image.width, capture.observation.image.height
+                )),
+                Some(capture.png.len()),
+                None,
+            ),
+            Err(error) => (None, None, Some(error.to_string())),
+        };
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "platform": "macos",
+                    "backend": "coregraphics",
+                    "screen_recording": true,
+                    "accessibility": accessibility,
+                    "windows": windows.len(),
+                    "image": image,
+                    "png_bytes": bytes,
+                    "error": error,
+                }))?
+            );
+        } else {
+            println!("platform macos · backend coregraphics");
+            println!("screen recording: granted");
+            println!(
+                "accessibility:   {}",
+                if accessibility { "granted" } else { "denied" }
+            );
+            println!("windows: {}", windows.len());
+            match capture {
+                Ok(capture) => println!(
+                    "capture: {}x{} · {} bytes",
+                    capture.observation.image.width,
+                    capture.observation.image.height,
+                    capture.png.len()
+                ),
+                Err(error) => println!("capture: failed: {error}"),
+            }
+        }
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = json;
+        bail!("computer doctor is not supported on this platform")
+    }
 }
 
 fn ingest_attachments(

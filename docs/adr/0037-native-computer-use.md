@@ -47,7 +47,9 @@ niucode capability with niuse policy/UX, not a product-layer fork.
 5. **Lifecycle.** After the session is armed, the model may start/stop
    observation. The agent advertises `computer` only when a runtime is
    configured; `niucode exec --computer` and `niucode tui --computer` connect to
-   X11 and arm it; `niucode web --computer` attaches the same runtime to browser
+   X11 and arm it; `niucode computer doctor` checks the display/TCC, window
+   list, XTEST, and capture without injecting input. `niucode web --computer`
+   attaches the same runtime to browser
    prompts and reports it in `/api/status`; the authenticated browser control
    can arm/stop the same runtime. The TUI `/computer` command reports state,
    re-arms, or stops

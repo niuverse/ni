@@ -15,7 +15,7 @@ use niucode_computer::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use thiserror::Error;
-use x11rb::connection::Connection;
+use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::xproto::{
     AtomEnum, ConnectionExt as _, ImageFormat, InputFocus, MapState, MOTION_NOTIFY_EVENT,
 };
@@ -81,6 +81,14 @@ impl X11Backend {
             atoms,
             keymap,
         })
+    }
+
+    pub fn has_xtest(&self) -> bool {
+        self.connection
+            .extension_information("XTEST")
+            .ok()
+            .flatten()
+            .is_some()
     }
 
     pub fn root(&self) -> WindowId {

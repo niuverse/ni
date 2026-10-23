@@ -67,6 +67,14 @@ pub enum MacError {
 pub struct MacBackend;
 
 impl MacBackend {
+    pub fn screen_access() -> bool {
+        ScreenCaptureAccess.preflight()
+    }
+
+    pub fn accessibility_access() -> bool {
+        accessibility_granted()
+    }
+
     pub fn connect(_display: Option<&str>) -> Result<Self, MacError> {
         if !ScreenCaptureAccess.preflight() {
             return Err(MacError::ScreenPermission);
