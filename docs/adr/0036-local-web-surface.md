@@ -36,10 +36,13 @@ the missing piece is a local transport and a rendering client.
    `/api/context` request, feeding a collapsible/filterable sidebar, and
    `/api/status` exposes model/cwd/policy for the header. A finished turn emits
    `context_changed` so the sidebar refetches. Approval previews and tool
-   calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase` events
-   drive a client-side turn timer; `text_delta` carries accumulated rendered
-   HTML, and the durable usage comes from `turn_end`. Read-only remains the
-   default for the CLI.
+   calls/results are rendered as escaped structured cards, not raw JSON. SSE `phase`
+   events drive a client-side turn timer; `text_delta` carries accumulated
+   rendered HTML, and the durable usage comes from `turn_end`. The composer is a
+   multi-line textarea with local prompt history and `/help` `/status` `/report`
+   `/clear` commands; code blocks have a Copy button, the session can be
+   downloaded as derived Markdown, and a local search filters transcript nodes.
+   Read-only remains the default for the CLI.
 3. **Same truth.** The viewer reads the append-only session log; it never
    mutates it. Static assets are embedded; the client loads no remote asset.
 4. **No build step.** One embedded HTML/CSS/JS file, no npm, no bundler. This
