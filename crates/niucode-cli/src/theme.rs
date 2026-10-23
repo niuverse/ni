@@ -146,6 +146,7 @@ impl Theme {
             || trimmed.starts_with("@@")
             || trimmed.starts_with('▎')
             || trimmed.starts_with('→')
+            || trimmed.starts_with('─')
         {
             Some(Tone::Accent)
         } else if trimmed.starts_with("```") {

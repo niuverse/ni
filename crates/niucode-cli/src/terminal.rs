@@ -31,6 +31,19 @@ struct FrameState {
     selected: Option<usize>,
     mouse: bool,
 }
+pub fn expand_rule(line: &str, width: usize) -> Option<String> {
+    let trimmed = line.trim_start_matches(' ');
+    let indent = line.len() - trimmed.len();
+    if trimmed.chars().count() < 3 || !trimmed.chars().all(|character| character == '─') {
+        return None;
+    }
+    let target = width.saturating_sub(1).saturating_sub(indent).max(3);
+    if target == trimmed.chars().count() {
+        return None;
+    }
+    Some(format!("{}{}", " ".repeat(indent), "─".repeat(target)))
+}
+
 pub struct TerminalSession {
     last_frame: Option<FrameState>,
     origin: Option<u16>,
@@ -255,6 +268,8 @@ impl TerminalSession {
         } else {
             Theme::plain()
         };
+        let expanded = expand_rule(line, self.size().0);
+        let line = expanded.as_deref().unwrap_or(line);
         if let Some(t) = &mut self.inline {
             let width = t.size()?.width.saturating_sub(1).max(1) as usize;
             for row in wrap(line, width) {
@@ -566,6 +581,14 @@ mod tests {
         assert!(buffer[(1, 0)].symbol().is_empty());
         assert_eq!(buffer[(2, 0)].symbol(), "文");
         assert!(buffer[(3, 0)].symbol().is_empty());
+    }
+
+    #[test]
+    fn rules_expand_to_the_viewport_minus_one() {
+        assert_eq!(expand_rule("───", 10).as_deref(), Some("─────────"));
+        assert_eq!(expand_rule("  ───", 10).as_deref(), Some("  ───────"));
+        assert_eq!(expand_rule("plain", 10), None);
+        assert_eq!(expand_rule("───", 4), None);
     }
 
     #[test]
