@@ -57,7 +57,8 @@ client — without turning the event log into presentation data.
   **M9-049** switches archived sessions through an embedder allowlist and
   broadcasts `session_switched` (**M9-050**);
   **M9-044** follows new output only when near the bottom; **M9-045** adds
-  light/reduced-motion support; **M9-052** adds high contrast.
+  light/reduced-motion support; **M9-052** adds high contrast; **M9-053** adds
+  accessible names, a log region, and OS preference defaults.
 - **Live tail (M9-008)**: `/api/events` chunked SSE, initial log + appended
   lines.
 - **Read-only chat (M9-009)**: `POST /api/prompt`, one turn at a time, hard-coded
