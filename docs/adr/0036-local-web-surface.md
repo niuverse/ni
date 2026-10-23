@@ -22,7 +22,8 @@ the missing piece is a local transport and a rendering client.
 
 1. **Local only.** Bind `127.0.0.1`; no `0.0.0.0`, no remote auth, no cloud
    relay. Each run prints a random token URL; the token bootstraps an HttpOnly
-   SameSite cookie required by page/API/SSE/export routes. Reject non-loopback
+   SameSite cookie required by page/API/SSE/export routes. A bare page request
+   gets a small explanatory 401 page; APIs keep JSON errors. Reject non-loopback
    `Host` headers and, for POST, foreign/`null` `Origin`s; serve a strict CSP and
    `X-Frame-Options: DENY`. A future opt-in remote mode needs its own ADR and
    threat model.

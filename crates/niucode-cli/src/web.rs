@@ -24,6 +24,7 @@ use tokio::sync::broadcast;
 use crate::provider_factory::ProviderFactory;
 
 const INDEX: &str = include_str!("../assets/web.html");
+const UNAUTHORIZED: &str = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>niucode · token required</title><body style=\"font:15px system-ui;background:#0d1117;color:#e6edf3;padding:40px\"><h1>Token required</h1><p>Open the tokenized URL printed by <code>niucode web</code> (or <code>niuse web</code>).</p><p>Bare loopback URLs are rejected so other local pages cannot drive the agent.</p></body></html>";
 
 type ContextProvider = Arc<dyn Fn() -> Value + Send + Sync>;
 type NewSessionProvider = Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>;
@@ -223,6 +224,15 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
         .as_deref()
         .is_some_and(|token| cookie_token(head) == Some(token));
     if state.token.is_some() && !query_authorized && !cookie_authorized {
+        if route == "/" {
+            return send(
+                &mut stream,
+                "401 Unauthorized",
+                "text/html; charset=utf-8",
+                UNAUTHORIZED.as_bytes().to_vec(),
+            )
+            .await;
+        }
         return send(
             &mut stream,
             "401 Unauthorized",
@@ -1359,6 +1369,18 @@ mod tests {
         let text = String::from_utf8_lossy(&reply);
         assert!(text.starts_with("HTTP/1.1 200"), "{text}");
         assert!(text.contains("Set-Cookie: niucode_token=secret"), "{text}");
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert!(
+            String::from_utf8_lossy(&reply).contains("Token required"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
         task.abort();
     }
 
