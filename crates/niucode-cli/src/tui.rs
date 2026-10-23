@@ -236,6 +236,23 @@ fn inline_tui_allowed() -> bool {
     !ghostty_terminal()
 }
 
+/// Expand user-typed `@path` tokens only when the path exists. Missing tokens
+/// stay literal so email handles and nonexistent paths are not swallowed.
+fn split_at_paths(input: &str) -> (String, Vec<PathBuf>) {
+    let mut kept = Vec::new();
+    let mut paths = Vec::new();
+    for token in input.split_whitespace() {
+        if let Some(path) = token.strip_prefix('@') {
+            if !path.is_empty() && Path::new(path).exists() {
+                paths.push(PathBuf::from(path));
+                continue;
+            }
+        }
+        kept.push(token);
+    }
+    (kept.join(" "), paths)
+}
+
 fn print_attachment_chips(attachments: &[AttachmentRef], out: Theme) {
     if attachments.is_empty() {
         eprintln!("{}", out.dim("no pending attachments"));
@@ -348,10 +365,52 @@ pub async fn run(
             }
             input
         };
-        let prompt = input.trim();
-        if prompt.is_empty() {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
             continue;
         }
+        let (prompt_owned, at_paths) = if trimmed.contains('@') {
+            split_at_paths(trimmed)
+        } else {
+            (trimmed.to_string(), Vec::new())
+        };
+        if !at_paths.is_empty() {
+            if attachment_store.is_none() {
+                let root = session
+                    .path()
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join("attachments");
+                match AttachmentStore::open(root) {
+                    Ok(store) => attachment_store = Some(store),
+                    Err(error) => {
+                        eprintln!("{} attach: {error:#}", err.paint(Tone::Danger, theme::ERR));
+                        continue;
+                    }
+                }
+            }
+            let store = attachment_store.as_ref().expect("store checked above");
+            match crate::ingest_attachments(&at_paths, None, store) {
+                Ok(mut refs) => {
+                    pending_attachments.append(&mut refs);
+                    if let Err(error) =
+                        check_budget(&pending_attachments, config.context.budget_tokens)
+                    {
+                        eprintln!("{} {error}", err.paint(Tone::Warning, theme::WARN));
+                    } else {
+                        print_attachment_chips(&pending_attachments, out);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("{} attach: {error:#}", err.paint(Tone::Danger, theme::ERR));
+                    continue;
+                }
+            }
+        }
+        if prompt_owned.is_empty() {
+            continue;
+        }
+        let prompt = prompt_owned.as_str();
         match slash::parse(prompt) {
             SlashParsed::Command(SlashCommand::Attach(path)) => {
                 if attachment_store.is_none() {
@@ -2945,6 +3004,19 @@ mod tests {
             seen.lock().unwrap().as_deref(),
             Some(Path::new("/tmp/thread.jsonl"))
         );
+    }
+
+    #[test]
+    fn at_path_only_expands_existing_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let image = directory.path().join("shot.png");
+        std::fs::write(&image, b"\x89PNG\r\n\x1a\nimage").unwrap();
+        let (clean, paths) = split_at_paths(&format!("look @{} now", image.display()));
+        assert_eq!(clean, "look now");
+        assert_eq!(paths, [image]);
+        let (clean, paths) = split_at_paths("mail me@example.com @missing");
+        assert_eq!(clean, "mail me@example.com @missing");
+        assert!(paths.is_empty());
     }
 
     #[test]

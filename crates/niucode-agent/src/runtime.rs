@@ -420,7 +420,6 @@ pub async fn run_interactive_with_attachments(
     let mut prompt = prompt.to_string();
     let mut history = history;
     let mut attachments = attachments;
-    let mut store = store;
     loop {
         let outcome = execute_task(
             provider,
@@ -438,9 +437,13 @@ pub async fn run_interactive_with_attachments(
         if let Some(next) = io.pending.front().cloned() {
             prompt = next.text.clone();
             io.starting = Some(next);
-            history = crate::project_history(&load(session.path())?.events)?;
+            let events = load(session.path())?.events;
+            history = if let Some(store) = store {
+                crate::context::project_history_with_attachments(&events, store, 2)?
+            } else {
+                crate::project_history(&events)?
+            };
             attachments = Vec::new();
-            store = None;
         } else {
             return Ok(outcome);
         }
