@@ -128,6 +128,7 @@ impl ComputerRuntime {
     pub fn emergency_stop(&mut self) -> anyhow::Result<()> {
         self.session.set_policy(ComputerPolicy::Off);
         self.session.disarm();
+        self.last_frame = None;
         self.backend
             .emergency_stop()
             .map_err(|error| anyhow::anyhow!(error.to_string()))
@@ -2019,6 +2020,23 @@ mod tests {
         )));
         assert!(messages[1].has_images());
         assert!(messages[2].has_images());
+    }
+
+    #[test]
+    fn emergency_stop_clears_the_cached_approval_frame() {
+        let mut runtime =
+            ComputerRuntime::new(Box::<FakeComputer>::default(), ComputerPolicy::Control);
+        runtime.arm().expect("arm");
+        let capture = runtime.observe(None).expect("observe");
+        let click = ComputerAction::Click {
+            observation_id: capture.observation.id.clone(),
+            window_id: capture.observation.window.id,
+            point: niucode_computer::Point::new(1, 1),
+            button: niucode_computer::MouseButton::Left,
+        };
+        assert!(runtime.frame_for(&click).is_some());
+        runtime.emergency_stop().expect("stop");
+        assert!(runtime.frame_for(&click).is_none());
     }
 
     #[tokio::test]
