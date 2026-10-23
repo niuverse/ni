@@ -18,7 +18,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev bubblewrap xvfb
       - name: Verify Linux sandbox support
         if: runner.os == 'Linux'
         run: |

@@ -22,7 +22,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
 ## Decision
 
 1. **Platform order.** Linux X11 first, pure Rust `x11rb` + XTEST (no shelling
-   out to xdotool/scrot). macOS follows with ScreenCaptureKit, CGEvent, and AX.
+   out to xdotool/scrot). The observe backend is `niucode-computer-x11`; input
+   injection is a separate slice. macOS follows with ScreenCaptureKit, CGEvent, and AX.
    Wayland is not claimed. X11 has no application isolation; these guards are
    product policy, not an OS sandbox.
 2. **Permission tiers.** `--computer off|observe|control|autonomous`, default
