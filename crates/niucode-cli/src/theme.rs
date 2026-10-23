@@ -103,12 +103,24 @@ impl Theme {
                 Tone::Magenta => Style::default().fg(Color::Magenta),
             }
         };
-        let trimmed = text.trim_start();
         if !code {
             if let Some(heading) = crate::markdown::heading(&text) {
                 return vec![Span::styled(heading, style(Tone::Accent))].into();
             }
         }
+        let (text, block_style) = if code {
+            (text, None)
+        } else if let Some(block) = crate::markdown::block(&text) {
+            let tone = match block.kind {
+                crate::markdown::BlockKind::Quote => Some(Tone::Muted),
+                crate::markdown::BlockKind::Task(true) => Some(Tone::Success),
+                _ => None,
+            };
+            (block.text, tone)
+        } else {
+            (text, None)
+        };
+        let trimmed = text.trim_start();
         let tone = if trimmed.contains("│ - ")
             || trimmed.starts_with("✗")
             || trimmed.starts_with('-') && !trimmed.starts_with("- ")
@@ -177,10 +189,11 @@ impl Theme {
                 .collect();
             return spans.into();
         }
+        let base = block_style.map_or(Style::default(), style);
         let spans: Vec<_> = crate::markdown::inline(&text)
             .into_iter()
             .map(|span| {
-                let mut style = Style::default();
+                let mut style = base;
                 if !self.ansi {
                     return Span::styled(span.text, style);
                 }

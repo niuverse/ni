@@ -454,3 +454,80 @@ mod tests {
         assert!(spans[0].style.strike);
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockKind {
+    Bullet,
+    Task(bool),
+    Quote,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockLine {
+    pub text: String,
+    pub kind: BlockKind,
+}
+
+/// Recognize a line-level Markdown block marker. Indentation is preserved.
+/// `+` is deliberately not treated as a list marker: diff output uses it.
+pub fn block(text: &str) -> Option<BlockLine> {
+    let trimmed = text.trim_start();
+    let indent = &text[..text.len() - trimmed.len()];
+    let rest = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+        return Some(BlockLine {
+            text: format!("{indent}☐ {rest}"),
+            kind: BlockKind::Task(false),
+        });
+    } else if let Some(rest) = trimmed
+        .strip_prefix("- [x] ")
+        .or_else(|| trimmed.strip_prefix("- [X] "))
+    {
+        return Some(BlockLine {
+            text: format!("{indent}☑ {rest}"),
+            kind: BlockKind::Task(true),
+        });
+    } else if let Some(rest) = trimmed.strip_prefix("- ") {
+        Some((indent, rest, BlockKind::Bullet))
+    } else if let Some(rest) = trimmed.strip_prefix("* ") {
+        Some((indent, rest, BlockKind::Bullet))
+    } else if let Some(rest) = trimmed.strip_prefix("> ") {
+        Some((indent, rest, BlockKind::Quote))
+    } else if trimmed == ">" {
+        Some((indent, "", BlockKind::Quote))
+    } else {
+        None
+    };
+    rest.map(|(indent, rest, kind)| {
+        let marker = match kind {
+            BlockKind::Bullet => "• ",
+            BlockKind::Quote => "│ ",
+            BlockKind::Task(_) => "",
+        };
+        BlockLine {
+            text: format!("{indent}{marker}{rest}"),
+            kind,
+        }
+    })
+}
+
+#[cfg(test)]
+mod block_tests {
+    use super::*;
+
+    #[test]
+    fn bullets_tasks_and_quotes_are_recognized() {
+        assert_eq!(block("- item").unwrap().text, "• item");
+        assert_eq!(block("  * nested").unwrap().text, "  • nested");
+        assert_eq!(block("- [ ] todo").unwrap().text, "☐ todo");
+        assert_eq!(block("- [x] done").unwrap().text, "☑ done");
+        assert_eq!(block("> quoted").unwrap().text, "│ quoted");
+        assert_eq!(block(">").unwrap().text, "│ ");
+    }
+
+    #[test]
+    fn emphasis_and_plus_are_not_mistaken_for_lists() {
+        assert_eq!(block("*italic*"), None);
+        assert_eq!(block("+ new line"), None);
+        assert_eq!(block("1. numbered"), None);
+    }
+}

@@ -64,7 +64,10 @@ def main():
             "| :--- | ---: |\n"
             "| alpha | 42 |\n"
             "| beta | 7 |\n\n"
-            "Energy $E = mc^2$ and $\\alpha \\le \\beta$.\n"
+            "Energy $E = mc^2$ and $\\alpha \\le \\beta$.\n\n"
+            "- first item\n"
+            "- [ ] pending task\n"
+            "> quoted line\n"
         )
         (root / "fixture.json").write_text(json.dumps({
             "schema_version": 1,
@@ -80,6 +83,9 @@ def main():
             pane.wait_for(b"42")
             pane.wait_for("α".encode())
             pane.wait_for("≤".encode())
+            pane.wait_for("• first item".encode())
+            pane.wait_for("☐ pending task".encode())
+            pane.wait_for("│ quoted line".encode())
             # Highlight attributes and box drawing are evidence that the
             # table was rendered as a block, not printed as raw pipes.
             pane.wait_for(b"\x1b[")

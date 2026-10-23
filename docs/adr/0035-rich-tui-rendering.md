@@ -28,6 +28,7 @@ use a real Markdown/KaTeX renderer.
 1. Parse **inline** Markdown into spans (`bold`, `italic`, `code`, `link`,
    `strike`) before styling. Unbalanced markers stay literal while streaming.
 2. Strip ATX heading markers and render the heading with the accent style.
+   List markers become bullets/tasks, and `>` becomes a muted quote bar.
 3. Buffer consecutive pipe-table lines and render them as a box table only when
    the block ends. Column widths are cell-width based and capped to the
    viewport.

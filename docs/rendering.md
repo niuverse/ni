@@ -25,7 +25,8 @@ client — without turning the event log into presentation data.
 
 ### P2 · Blocks and polish
 
-- Lists, block quotes, task checkboxes, horizontal rules.
+- Lists, block quotes, task checkboxes, horizontal rules. **M9-003** covers
+  `-`/`*` bullets, `☐`/`☑` tasks, and `>` quotes; ordered lists keep `1.`.
 - Table cells reuse inline spans; numeric right alignment.
 - Math fallback conventions (`$…$`, `$$…$$`) and copy-friendly output.
   **Included in M9-002**: common symbols, `\frac`, `\sqrt`; unmatched `$` is
