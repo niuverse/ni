@@ -34,8 +34,9 @@ use a real Markdown/KaTeX renderer.
    Header rows are bold and borders dim via line metadata; styling never changes
    cell width. Cell inline styles are carried as byte ranges and applied to
    spans in both inline and linear modes.
-4. Code fences bypass Markdown parsing and keep the existing syntax highlight;
-   the fence markers are replaced by a `▎ language` label.
+4. Code fences bypass Markdown parsing; the fence markers are replaced by a
+   `▎ language` label. A line-based token classifier colors keywords, strings,
+   comments, numbers, and calls without changing text or width.
 5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,
    `\alpha`, `\frac`, `\sqrt`); `$$` blocks are buffered and lose their
    fences, and unmatched `$` stays literal. A web surface may render full TeX.

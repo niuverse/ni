@@ -31,7 +31,7 @@ client — without turning the event log into presentation data.
   header/border tone into table line metadata; **M9-020** carries cell inline
   styles as byte ranges.
 - Code fences are hidden and replaced by a `▎ language` label.
-  **M9-004**.
+  **M9-004**; **M9-021** adds line-based token highlighting.
 - Math fallback conventions (`$…$`, `$$…$$`) and copy-friendly output.
   **M9-005** buffers display blocks and strips the `$$` fences.
   **Included in M9-002**: common symbols, `\frac`, `\sqrt`; unmatched `$` is

@@ -151,41 +151,26 @@ impl Theme {
             .into();
         }
         if code {
-            let spans: Vec<_> = text
-                .split_inclusive(|c: char| !c.is_alphanumeric() && c != '_')
+            let spans: Vec<_> = crate::syntax::highlight(&text)
+                .into_iter()
                 .map(|token| {
-                    let word = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-                    let tone = if matches!(
-                        word,
-                        "fn" | "pub"
-                            | "let"
-                            | "mut"
-                            | "impl"
-                            | "use"
-                            | "struct"
-                            | "enum"
-                            | "match"
-                            | "if"
-                            | "else"
-                            | "return"
-                            | "async"
-                            | "await"
-                            | "def"
-                            | "class"
-                            | "import"
-                            | "from"
-                            | "const"
-                            | "function"
-                            | "for"
-                            | "while"
-                    ) {
-                        Tone::Magenta
-                    } else if !word.is_empty() && word.chars().all(|c| c.is_ascii_digit()) {
-                        Tone::Warning
+                    let token_style = if !self.ansi {
+                        Style::default()
                     } else {
-                        Tone::Bright
+                        match token.kind {
+                            crate::syntax::TokenKind::Keyword => {
+                                Style::default().fg(Color::Magenta)
+                            }
+                            crate::syntax::TokenKind::String => Style::default().fg(Color::Green),
+                            crate::syntax::TokenKind::Comment => {
+                                Style::default().add_modifier(Modifier::DIM)
+                            }
+                            crate::syntax::TokenKind::Number => Style::default().fg(Color::Yellow),
+                            crate::syntax::TokenKind::Function => Style::default().fg(Color::Cyan),
+                            crate::syntax::TokenKind::Plain => Style::default(),
+                        }
                     };
-                    Span::styled(token.to_owned(), style(tone))
+                    Span::styled(token.text, token_style)
                 })
                 .collect();
             return spans.into();
@@ -463,6 +448,31 @@ mod tests {
             .map(|span| span.content.as_ref())
             .collect::<String>()
             .contains("bold"));
+    }
+
+    #[test]
+    fn code_rows_classify_keywords_strings_and_comments() {
+        use ratatui::style::{Color, Modifier};
+        let row = Theme::ansi_forced().row("let x = \"hi\"; // note", true);
+        let text: String = row.spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, "let x = \"hi\"; // note");
+        assert!(row
+            .spans
+            .iter()
+            .any(|span| span.style.fg == Some(Color::Magenta)));
+        assert!(row
+            .spans
+            .iter()
+            .any(|span| span.style.fg == Some(Color::Green)));
+        assert!(row
+            .spans
+            .iter()
+            .any(|span| span.style.add_modifier.contains(Modifier::DIM)));
+        assert!(Theme::plain()
+            .row("let x = 1;", true)
+            .spans
+            .iter()
+            .all(|span| span.style == ratatui::style::Style::default()));
     }
 
     #[test]

@@ -39,6 +39,7 @@ mod review;
 mod session_ops;
 mod skills;
 mod slash;
+mod syntax;
 mod table;
 mod terminal;
 mod text_layout;
