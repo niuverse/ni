@@ -28,6 +28,8 @@ client — without turning the event log into presentation data.
 - Lists, block quotes, task checkboxes, horizontal rules.
 - Table cells reuse inline spans; numeric right alignment.
 - Math fallback conventions (`$…$`, `$$…$$`) and copy-friendly output.
+  **Included in M9-002**: common symbols, `\frac`, `\sqrt`; unmatched `$` is
+  literal.
 - Link display strategy for terminals without hyperlink support.
 
 ### P3 · Motion and progress

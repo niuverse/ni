@@ -32,8 +32,9 @@ use a real Markdown/KaTeX renderer.
    the block ends. Column widths are cell-width based and capped to the
    viewport.
 4. Code fences bypass Markdown parsing and keep the existing syntax highlight.
-5. Math is shown as readable literal text in v1 (`$...$`, `$$...$$`); a web
-   surface may render TeX. No terminal TeX engine is promised.
+5. Math uses a readable Unicode fallback for common TeX (`$...$`, `$$...$$`,
+   `\alpha`, `\frac`, `\sqrt`); unmatched `$` stays literal. A web surface
+   may render full TeX. No terminal TeX engine is promised.
 6. Rendering never writes to the session log and never trusts model-provided
    ANSI; existing sanitization stays.
 7. Styling must preserve text width: styles change attributes, not characters,

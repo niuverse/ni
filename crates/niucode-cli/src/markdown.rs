@@ -12,6 +12,7 @@ pub struct Style {
     pub code: bool,
     pub link: bool,
     pub strike: bool,
+    pub math: bool,
 }
 
 impl Style {
@@ -22,6 +23,7 @@ impl Style {
             code: self.code || other.code,
             link: self.link || other.link,
             strike: self.strike || other.strike,
+            math: self.math || other.math,
         }
     }
 }
@@ -65,6 +67,32 @@ pub fn inline(text: &str) -> Vec<Span> {
                 plain.push(next);
                 index += 1 + next.len_utf8();
                 continue;
+            }
+        }
+
+        if bytes[index] == b'$' {
+            let (marker, offset) = if text[index..].starts_with("$$") {
+                ("$$", 2)
+            } else {
+                ("$", 1)
+            };
+            if let Some(end) = text[index + offset..].find(marker) {
+                let content = &text[index + offset..index + offset + end];
+                if !content.is_empty() && !content.contains('\n') {
+                    push(
+                        &mut spans,
+                        &mut plain,
+                        Span {
+                            text: latex_fallback(content),
+                            style: Style {
+                                math: true,
+                                ..Style::default()
+                            },
+                        },
+                    );
+                    index += offset + end + marker.len();
+                    continue;
+                }
             }
         }
 
@@ -267,6 +295,88 @@ fn link(text: &str, start: usize) -> Option<(String, String, usize)> {
     Some((label, url, url_end + 1))
 }
 
+/// A readable Unicode fallback for common LaTeX. This is deliberately not a
+/// TeX engine; the web client can use KaTeX for real typesetting.
+pub fn latex_fallback(input: &str) -> String {
+    let mut text = input.to_string();
+    for (from, to) in [
+        ("\\alpha", "α"),
+        ("\\beta", "β"),
+        ("\\gamma", "γ"),
+        ("\\delta", "δ"),
+        ("\\epsilon", "ε"),
+        ("\\theta", "θ"),
+        ("\\lambda", "λ"),
+        ("\\mu", "μ"),
+        ("\\pi", "π"),
+        ("\\sigma", "σ"),
+        ("\\phi", "φ"),
+        ("\\omega", "ω"),
+        ("\\sum", "∑"),
+        ("\\prod", "∏"),
+        ("\\int", "∫"),
+        ("\\infty", "∞"),
+        ("\\leq", "≤"),
+        ("\\le", "≤"),
+        ("\\geq", "≥"),
+        ("\\ge", "≥"),
+        ("\\neq", "≠"),
+        ("\\times", "×"),
+        ("\\cdot", "·"),
+        ("\\pm", "±"),
+        ("\\approx", "≈"),
+        ("\\rightarrow", "→"),
+        ("\\to", "→"),
+    ] {
+        text = text.replace(from, to);
+    }
+    // rac{a}{b} -> a/b, \sqrt{x} -> √(x)
+    while let Some(start) = text.find("\\frac{") {
+        let Some(first_end) = matching_brace(&text, start + 5) else {
+            break;
+        };
+        let first = text[start + 6..first_end].to_string();
+        let rest = &text[first_end + 1..];
+        if !rest.starts_with('{') {
+            break;
+        }
+        let Some(second_end) = matching_brace(rest, 0) else {
+            break;
+        };
+        let second = rest[1..second_end].to_string();
+        text.replace_range(
+            start..first_end + second_end + 2,
+            &format!("{first}/{second}"),
+        );
+    }
+    while let Some(start) = text.find("\\sqrt{") {
+        let Some(end) = matching_brace(&text, start + 5) else {
+            break;
+        };
+        let body = text[start + 6..end].to_string();
+        text.replace_range(start..end + 1, &format!("√({body})"));
+    }
+    text = text.replace("\\,", " ").replace("\\;", " ");
+    text.replace(['{', '}'], "")
+}
+
+fn matching_brace(text: &str, open: usize) -> Option<usize> {
+    let mut depth = 0;
+    for (offset, character) in text[open..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +430,21 @@ mod tests {
         assert_eq!(heading("####### not a heading"), None);
         assert_eq!(heading("#hashtag"), None);
         assert_eq!(heading("#").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn math_uses_a_readable_unicode_fallback() {
+        let spans = inline("energy $E = mc^2$ and $\\alpha \\le \\beta$");
+        assert_eq!(text(&spans), "energy E = mc^2 and α ≤ β");
+        assert!(spans
+            .iter()
+            .any(|span| span.text.contains("α") && span.style.math));
+        assert_eq!(latex_fallback("\\frac{1}{2} + \\sqrt{x}"), "1/2 + √(x)");
+    }
+
+    #[test]
+    fn currency_without_a_closing_dollar_stays_literal() {
+        assert_eq!(text(&inline("costs $5 today")), "costs $5 today");
     }
 
     #[test]

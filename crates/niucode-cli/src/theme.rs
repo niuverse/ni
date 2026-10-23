@@ -199,6 +199,9 @@ impl Theme {
                 if span.style.link {
                     style = style.fg(Color::Cyan).add_modifier(Modifier::UNDERLINED);
                 }
+                if span.style.math {
+                    style = style.fg(Color::Magenta).add_modifier(Modifier::ITALIC);
+                }
                 Span::styled(span.text, style)
             })
             .collect();
