@@ -12,10 +12,11 @@ use crate::{
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use niucode_agent::{
-    run_interactive, runtime_channel, AgentConfig, AgentEvent, ApprovalRequest, RunOutcome,
-    RuntimeClient, RuntimeCommand, RuntimeEvent,
+    run_interactive_with_attachments, runtime_channel, AgentConfig, AgentEvent, ApprovalRequest,
+    RunOutcome, RuntimeClient, RuntimeCommand, RuntimeEvent,
 };
-use niucode_core::SessionLog;
+use niucode_attachments::AttachmentStore;
+use niucode_core::{AttachmentRef, SessionLog};
 use niucode_provider::{ChatMessage, Provider};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -276,6 +277,8 @@ pub async fn run(
     config: &AgentConfig,
     prompt: &str,
     history: Vec<ChatMessage>,
+    attachments: Vec<AttachmentRef>,
+    store: Option<&AttachmentStore>,
     editor: &mut LineEditor,
     allow_session: &mut bool,
     hooks: Option<SharedHooks>,
@@ -283,7 +286,16 @@ pub async fn run(
 ) -> Result<RunOutcome> {
     let (mut client, endpoint) = runtime_channel();
     let mut terminal = editor.start(Theme::detect_stdout())?;
-    let run = run_interactive(provider, session, config, prompt, history, endpoint);
+    let run = run_interactive_with_attachments(
+        provider,
+        session,
+        config,
+        prompt,
+        history,
+        attachments,
+        store,
+        endpoint,
+    );
     tokio::pin!(run);
     let mut ticks = tokio::time::interval(Duration::from_millis(25));
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

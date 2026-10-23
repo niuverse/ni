@@ -1,5 +1,7 @@
 //! Slash-command parsing for the interactive TUI.
 
+use std::path::PathBuf;
+
 /// Slash commands surfaced by completion and `/help`.
 pub const COMMANDS: &[(&str, &str)] = &[
     ("/init", "propose AGENTS.md; /init apply writes it"),
@@ -27,6 +29,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("/fork", "fork the current session [event-id]"),
     ("/status", "show model, sandbox, context, session and cache"),
     ("/session", "show the current session path and event count"),
+    ("/attach", "attach an image or text file to the next turn"),
+    ("/detach", "remove pending attachments [index]"),
     ("/last", "expand the most recent tool output"),
     ("/help", "show this help"),
     ("/exit", "leave the session"),
@@ -89,6 +93,8 @@ impl CommandRegistry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Help,
+    Attach(PathBuf),
+    Detach(Option<usize>),
     Last,
     Init { apply: bool },
     Clear,
@@ -157,6 +163,24 @@ pub fn parse(input: &str) -> Parsed {
             "" => Parsed::Command(Command::Init { apply: false }),
             "apply" => Parsed::Command(Command::Init { apply: true }),
             _ => Parsed::Usage("/init [apply]".into()),
+        };
+    }
+
+    if name == "attach" {
+        return if rest.is_empty() {
+            Parsed::Usage("/attach <path>".into())
+        } else {
+            Parsed::Command(Command::Attach(PathBuf::from(rest)))
+        };
+    }
+
+    if name == "detach" {
+        return match rest {
+            "" => Parsed::Command(Command::Detach(None)),
+            index => match index.parse::<usize>() {
+                Ok(index) if index > 0 => Parsed::Command(Command::Detach(Some(index))),
+                _ => Parsed::Usage("/detach [index]".into()),
+            },
         };
     }
 
@@ -240,6 +264,8 @@ pub fn parse(input: &str) -> Parsed {
 fn usage(command: &Command) -> String {
     match command {
         Command::Help => "/help".into(),
+        Command::Attach(_) => "/attach <path>".into(),
+        Command::Detach(_) => "/detach [index]".into(),
         Command::Last => "/last".into(),
         Command::Init { .. } => "/init".into(),
         Command::Clear => "/clear".into(),
@@ -276,6 +302,15 @@ mod tests {
     #[test]
     fn parses_known_slash_and_colon_commands() {
         assert_eq!(parse("/help"), Parsed::Command(Command::Help));
+        assert_eq!(
+            parse("/attach shot.png"),
+            Parsed::Command(Command::Attach(PathBuf::from("shot.png")))
+        );
+        assert_eq!(
+            parse("/detach 2"),
+            Parsed::Command(Command::Detach(Some(2)))
+        );
+        assert_eq!(parse("/detach"), Parsed::Command(Command::Detach(None)));
         assert_eq!(parse(":help"), Parsed::Command(Command::Help));
         assert_eq!(parse("/q"), Parsed::Command(Command::Exit));
         assert_eq!(parse(":q"), Parsed::Command(Command::Exit));

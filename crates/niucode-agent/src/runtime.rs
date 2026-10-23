@@ -392,9 +392,35 @@ pub async fn run_interactive(
     history: Vec<ChatMessage>,
     endpoint: RuntimeEndpoint,
 ) -> Result<RunOutcome> {
+    run_interactive_with_attachments(
+        provider,
+        session,
+        config,
+        prompt,
+        history,
+        Vec::new(),
+        None,
+        endpoint,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn run_interactive_with_attachments(
+    provider: &dyn Provider,
+    session: &SessionLog,
+    config: &AgentConfig,
+    prompt: &str,
+    history: Vec<ChatMessage>,
+    attachments: Vec<niucode_core::AttachmentRef>,
+    store: Option<&niucode_attachments::AttachmentStore>,
+    endpoint: RuntimeEndpoint,
+) -> Result<RunOutcome> {
     let mut io = RunIo::connected(endpoint, session)?;
     let mut prompt = prompt.to_string();
     let mut history = history;
+    let mut attachments = attachments;
+    let mut store = store;
     loop {
         let outcome = execute_task(
             provider,
@@ -402,8 +428,8 @@ pub async fn run_interactive(
             config,
             &prompt,
             history,
-            Vec::new(),
-            None,
+            attachments,
+            store,
             &mut io,
         )
         .await?;
@@ -413,6 +439,8 @@ pub async fn run_interactive(
             prompt = next.text.clone();
             io.starting = Some(next);
             history = crate::project_history(&load(session.path())?.events)?;
+            attachments = Vec::new();
+            store = None;
         } else {
             return Ok(outcome);
         }

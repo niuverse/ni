@@ -84,9 +84,14 @@ def main():
             "schema_version": 1,
             "turns": [[{"type": "text_delta", "text": text}]],
         }))
+        image = root / "shot.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\nimage")
         pane = Pane(sys.argv[1], root)
         try:
             pane.wait_for(b"\x1b[?2004h")
+            os.write(pane.master, f"/attach {image}\r".encode())
+            pane.wait_for("Image · shot.png".encode())
+            time.sleep(0.4)
             os.write(pane.master, b"show markdown\r")
             pane.wait_for(b"Rendered heading")
             pane.wait_for(b"bold")
@@ -115,6 +120,11 @@ def main():
             assert "| name | value |" not in decoded, "raw table line leaked"
             assert "```" not in decoded, "code fence leaked to the terminal"
             assert "$$" not in decoded, "display math markers leaked to the terminal"
+            sessions = [
+                path for path in root.rglob("*.jsonl")
+                if '"attachments"' in path.read_text(errors="replace")
+            ]
+            assert sessions, "the attachment ref did not reach the session log"
             print("PTY markdown: heading, emphasis, code, and table rendered")
         finally:
             pane.close()

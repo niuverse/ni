@@ -1395,7 +1395,7 @@ async fn run_actor_once(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ingest_attachments(
+pub(crate) fn ingest_attachments(
     paths: &[PathBuf],
     expected: Option<AttachmentKind>,
     store: &AttachmentStore,

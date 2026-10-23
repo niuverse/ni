@@ -27,8 +27,8 @@ mod runtime;
 mod subagent;
 pub use changes::{task_review, task_review_by_id, CommandCheck, ReviewedFile, TaskReview};
 pub use runtime::{
-    pending_inputs, run_interactive, runtime_channel, Cancelled, PendingInput, RuntimeClient,
-    RuntimeCommand, RuntimeEndpoint, RuntimeEvent,
+    pending_inputs, run_interactive, run_interactive_with_attachments, runtime_channel, Cancelled,
+    PendingInput, RuntimeClient, RuntimeCommand, RuntimeEndpoint, RuntimeEvent,
 };
 
 const MAX_PROVIDER_RETRIES: usize = 3;

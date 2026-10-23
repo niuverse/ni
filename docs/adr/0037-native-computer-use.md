@@ -51,8 +51,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    Resumed sessions rebuild history through the same projection, so compaction
    and the recent-image window use one rule. The local web client uploads via a
    token-gated `/api/attach` (16MiB request cap) and sends refs with the prompt.
-7. **Text attachments.** `@path` / `/attach` / CLI `--attach`/`--image` / Web
-   drop-paste; a
+7. **Text attachments.** TUI `/attach` + `/detach`, `@path` planned, CLI
+   `--attach`/`--image`, and Web drop-paste; a
    script is text context and is never auto-executed. Per-file 20k chars /
    ~4k tokens; total attachments at most 25% of context; over budget rejects
    instead of silently truncating. Model output never expands `@path`.

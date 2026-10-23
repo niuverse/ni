@@ -18,10 +18,11 @@ use crossterm::event::{
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use niucode_agent::{
-    build_handoff, estimate_context, project_history, run_with_history, AgentConfig, AgentEvent,
-    ApprovalMode, ApprovalRequest, RunOutcome,
+    build_handoff, estimate_context, project_history, run_with_attachments, run_with_history,
+    AgentConfig, AgentEvent, ApprovalMode, ApprovalRequest, RunOutcome,
 };
-use niucode_core::{load, now_ms, Event, EventId, SessionLog, Usage};
+use niucode_attachments::{check_budget, AttachmentStore};
+use niucode_core::{load, now_ms, AttachmentRef, Event, EventId, SessionLog, Usage};
 use niucode_provider::{ChatMessage, ModelSelection, Provider};
 use niucode_tools::{NetworkMode, SandboxMode, SandboxPolicy, Toolbox};
 use similar::TextDiff;
@@ -235,6 +236,26 @@ fn inline_tui_allowed() -> bool {
     !ghostty_terminal()
 }
 
+fn print_attachment_chips(attachments: &[AttachmentRef], out: Theme) {
+    if attachments.is_empty() {
+        eprintln!("{}", out.dim("no pending attachments"));
+        return;
+    }
+    for (index, attachment) in attachments.iter().enumerate() {
+        eprintln!(
+            "{} [{}] {:?} · {} · {} B",
+            out.dim("⬒"),
+            index + 1,
+            attachment.kind,
+            attachment
+                .name
+                .as_deref()
+                .unwrap_or(&attachment.sha256[..8]),
+            attachment.bytes
+        );
+    }
+}
+
 pub async fn run(
     mut provider: Arc<dyn Provider>,
     provider_factory: Option<&ProviderFactory>,
@@ -278,6 +299,8 @@ pub async fn run(
     let mut history = history;
     let mut allow_session = false;
     let mut last_tool: Option<ToolEcho> = None;
+    let mut pending_attachments: Vec<AttachmentRef> = Vec::new();
+    let mut attachment_store: Option<AttachmentStore> = None;
 
     loop {
         let input = if let Some(prompt) = state.pending_prompt.take() {
@@ -328,6 +351,56 @@ pub async fn run(
         let prompt = input.trim();
         if prompt.is_empty() {
             continue;
+        }
+        match slash::parse(prompt) {
+            SlashParsed::Command(SlashCommand::Attach(path)) => {
+                if attachment_store.is_none() {
+                    let root = session
+                        .path()
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join("attachments");
+                    match AttachmentStore::open(root) {
+                        Ok(store) => attachment_store = Some(store),
+                        Err(error) => {
+                            eprintln!("{} attach: {error:#}", err.paint(Tone::Danger, theme::ERR));
+                            continue;
+                        }
+                    }
+                }
+                let store = attachment_store.as_ref().expect("store checked above");
+                match crate::ingest_attachments(&[path], None, store) {
+                    Ok(mut refs) => {
+                        pending_attachments.append(&mut refs);
+                        if let Err(error) =
+                            check_budget(&pending_attachments, config.context.budget_tokens)
+                        {
+                            eprintln!("{} {error}", err.paint(Tone::Warning, theme::WARN));
+                        } else {
+                            print_attachment_chips(&pending_attachments, out);
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("{} attach: {error:#}", err.paint(Tone::Danger, theme::ERR))
+                    }
+                }
+                continue;
+            }
+            SlashParsed::Command(SlashCommand::Detach(index)) => {
+                match index {
+                    Some(index) if index <= pending_attachments.len() => {
+                        pending_attachments.remove(index - 1);
+                    }
+                    Some(index) => eprintln!(
+                        "{} no attachment {index}",
+                        err.paint(Tone::Warning, theme::WARN)
+                    ),
+                    None => pending_attachments.clear(),
+                }
+                print_attachment_chips(&pending_attachments, out);
+                continue;
+            }
+            _ => {}
         }
         match slash::parse(prompt) {
             SlashParsed::Command(command) => match handle_command(
@@ -437,6 +510,8 @@ pub async fn run(
                     &run_config,
                     prompt,
                     history.clone(),
+                    pending_attachments.clone(),
+                    attachment_store.as_ref(),
                     editor,
                     &mut allow_session,
                     hooks.clone(),
@@ -606,15 +681,33 @@ pub async fn run(
             };
 
             let result = {
-                let run = run_with_history(
-                    provider.as_ref(),
-                    session,
-                    &run_config,
-                    prompt,
-                    history.clone(),
-                    &mut approver,
-                    &mut observer,
-                );
+                let run = async {
+                    if let Some(store) = attachment_store.as_ref() {
+                        run_with_attachments(
+                            provider.as_ref(),
+                            session,
+                            &run_config,
+                            prompt,
+                            pending_attachments.clone(),
+                            store,
+                            &mut approver,
+                            &mut observer,
+                        )
+                        .await
+                    } else {
+                        run_with_history(
+                            provider.as_ref(),
+                            session,
+                            &run_config,
+                            prompt,
+                            history.clone(),
+                            &mut approver,
+                            &mut observer,
+                        )
+                        .await
+                    }
+                };
+                let run = Box::pin(run);
                 tokio::pin!(run);
                 tokio::select! {
                     result = &mut run => Some(result),
@@ -628,6 +721,7 @@ pub async fn run(
             }
             result
         };
+        pending_attachments.clear();
 
         if line_open {
             println!();
@@ -770,6 +864,7 @@ async fn handle_command(
     err: Theme,
 ) -> Result<CommandOutcome> {
     match command {
+        SlashCommand::Attach(_) | SlashCommand::Detach(_) => {}
         SlashCommand::Help => print_help(out, commands),
         SlashCommand::Last => {
             if std::io::stdout().is_terminal() {
