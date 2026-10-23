@@ -34,7 +34,8 @@ runs the doctor and writes a 0600 Markdown template.
    niucode exec --computer observe "describe the focused window"
    ```
 
-   The model must receive a screenshot; no input occurs.
+   The model must receive a screenshot; no input occurs. A password/authentication
+   window must prompt before its image is returned.
 3. Run `--computer control` and ask for one click on a harmless target.
    - The approval must name the window, button, and image-relative coordinates.
    - Deny once: the desktop must not change.

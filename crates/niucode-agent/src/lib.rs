@@ -16,7 +16,7 @@ use futures_util::StreamExt;
 use niucode_attachments::{check_budget, AttachmentStore};
 use niucode_computer::{
     parse_action, ComputerAction, ComputerBackend, ComputerPolicy, ComputerSession, PolicyDecision,
-    WindowId,
+    WindowId, WindowKind,
 };
 use niucode_core::{now_ms, AttachmentRef, Event, SessionLog, ToolCall, Usage};
 use niucode_provider::{
@@ -1064,87 +1064,124 @@ async fn execute_computer(
         PolicyDecision::Allowed => {}
     }
 
-    let mut runtime = runtime.lock().unwrap();
-    match &action {
-        ComputerAction::Observe { window_id } => match runtime.observe(*window_id) {
-            Ok(capture) => {
-                cap_visual_budget(messages, MAX_VISUAL_PARTS - 1);
-                let encoded = base64::engine::general_purpose::STANDARD.encode(&capture.png);
-                let data_url = format!("data:image/png;base64,{encoded}");
-                let mut output = format!(
-                    "observation {} · window {} · {} — {} · {}x{} · expires_at_ms={}",
-                    capture.observation.id,
-                    capture.observation.window.id.0,
-                    capture.observation.window.app,
-                    capture.observation.window.title,
-                    capture.observation.image.width,
-                    capture.observation.image.height,
-                    capture.observation.expires_at_ms
-                );
-                if config.computer_keep_frames {
-                    let root = session
-                        .path()
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."))
-                        .join("attachments");
-                    match AttachmentStore::open(root).and_then(|store| {
-                        store.put(
-                            &capture.png,
-                            Some(&format!("{}.png", capture.observation.id)),
-                            Some("computer observation"),
-                        )
-                    }) {
-                        Ok(reference) => {
-                            output.push_str(&format!(" · frame_kept sha256={}", reference.sha256));
-                        }
-                        Err(error) => {
-                            output.push_str(&format!(" · frame_keep_failed={error}"));
-                        }
-                    }
-                }
-                Ok(ComputerExecution {
-                    result: niucode_tools::ToolResult { ok: true, output },
-                    images: vec![data_url],
-                })
-            }
-            Err(error) => Ok(ComputerExecution {
-                result: niucode_tools::ToolResult {
-                    ok: false,
-                    output: format!("computer observe failed: {error:#}"),
-                },
-                images: Vec::new(),
-            }),
-        },
-        _ => {
-            let observation = match runtime.validate(&action, now_ms()) {
-                Ok(observation) => observation,
-                Err(error) => {
-                    return Ok(ComputerExecution {
-                        result: niucode_tools::ToolResult {
-                            ok: false,
-                            output: format!("computer observation rejected: {error}"),
-                        },
-                        images: Vec::new(),
-                    });
-                }
-            };
-            if let Err(error) = runtime.perform(&action, &observation) {
+    if let ComputerAction::Observe { window_id } = &action {
+        let capture = {
+            let mut runtime = runtime.lock().unwrap();
+            runtime.observe(*window_id)
+        };
+        let capture = match capture {
+            Ok(capture) => capture,
+            Err(error) => {
                 return Ok(ComputerExecution {
                     result: niucode_tools::ToolResult {
                         ok: false,
-                        output: format!("computer action failed: {error:#}"),
+                        output: format!("computer observe failed: {error:#}"),
                     },
                     images: Vec::new(),
                 });
             }
-            Ok(ComputerExecution {
-                result: niucode_tools::ToolResult {
-                    ok: true,
-                    output: format!("computer {} completed", action_label(&action)),
-                },
-                images: Vec::new(),
-            })
+        };
+        // The lock is released before this approval await.
+        if capture.observation.window.kind == WindowKind::Sensitive {
+            let summary = format!(
+                "computer observe sensitive window {} — {}. Purpose: {}",
+                clean_display(&capture.observation.window.app, 60),
+                clean_display(&capture.observation.window.title, 80),
+                clean_display(&purpose, 200)
+            );
+            if !io
+                .approve(
+                    session,
+                    &call.id,
+                    ApprovalRequest {
+                        tool: "computer".into(),
+                        summary,
+                        preview: None,
+                    },
+                )
+                .await?
+            {
+                session.append(&Event::Approval {
+                    tool: "computer".into(),
+                    allowed: false,
+                    ts: now_ms(),
+                })?;
+                return Ok(ComputerExecution {
+                    result: niucode_tools::ToolResult {
+                        ok: false,
+                        output: "sensitive-window observation denied by user".into(),
+                    },
+                    images: Vec::new(),
+                });
+            }
+            session.append(&Event::Approval {
+                tool: "computer".into(),
+                allowed: true,
+                ts: now_ms(),
+            })?;
         }
+        cap_visual_budget(messages, MAX_VISUAL_PARTS - 1);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&capture.png);
+        let data_url = format!("data:image/png;base64,{encoded}");
+        let mut output = format!(
+            "observation {} · window {} · {} — {} · {}x{} · expires_at_ms={}",
+            capture.observation.id,
+            capture.observation.window.id.0,
+            capture.observation.window.app,
+            capture.observation.window.title,
+            capture.observation.image.width,
+            capture.observation.image.height,
+            capture.observation.expires_at_ms
+        );
+        if config.computer_keep_frames {
+            let root = session
+                .path()
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("attachments");
+            match AttachmentStore::open(root).and_then(|store| {
+                store.put(
+                    &capture.png,
+                    Some(&format!("{}.png", capture.observation.id)),
+                    Some("computer observation"),
+                )
+            }) {
+                Ok(reference) => {
+                    output.push_str(&format!(" · frame_kept sha256={}", reference.sha256));
+                }
+                Err(error) => {
+                    output.push_str(&format!(" · frame_keep_failed={error}"));
+                }
+            }
+        }
+        return Ok(ComputerExecution {
+            result: niucode_tools::ToolResult { ok: true, output },
+            images: vec![data_url],
+        });
+    }
+
+    let input = {
+        let mut runtime = runtime.lock().unwrap();
+        match runtime.validate(&action, now_ms()) {
+            Ok(observation) => runtime.perform(&action, &observation),
+            Err(error) => Err(anyhow::anyhow!(error.to_string())),
+        }
+    };
+    match input {
+        Ok(()) => Ok(ComputerExecution {
+            result: niucode_tools::ToolResult {
+                ok: true,
+                output: format!("computer {} completed", action_label(&action)),
+            },
+            images: Vec::new(),
+        }),
+        Err(error) => Ok(ComputerExecution {
+            result: niucode_tools::ToolResult {
+                ok: false,
+                output: format!("computer action rejected: {error:#}"),
+            },
+            images: Vec::new(),
+        }),
     }
 }
 
@@ -1692,9 +1729,18 @@ mod tests {
         fs::remove_dir_all(directory).expect("cleanup");
     }
 
-    #[derive(Default)]
     struct FakeComputer {
         performed: Vec<ComputerAction>,
+        kind: WindowKind,
+    }
+
+    impl Default for FakeComputer {
+        fn default() -> Self {
+            Self {
+                performed: Vec::new(),
+                kind: WindowKind::Normal,
+            }
+        }
     }
 
     impl niucode_computer::ComputerBackend for FakeComputer {
@@ -1711,7 +1757,7 @@ mod tests {
                         app: "editor".into(),
                         title: "notes".into(),
                         class: None,
-                        kind: niucode_computer::WindowKind::Normal,
+                        kind: self.kind,
                         bounds: niucode_computer::Rect {
                             x: 0,
                             y: 0,
@@ -1951,6 +1997,71 @@ mod tests {
         assert_eq!(runtime.policy(), ComputerPolicy::Off);
         assert!(!runtime.is_armed());
         assert!(flag.0.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn sensitive_observe_is_denied_without_approval() {
+        let directory = temp_dir("sensitive-observe");
+        let mut session = SessionLog::create(&directory).expect("session");
+        let mut config = test_config(&directory);
+        let fake = FakeComputer {
+            kind: WindowKind::Sensitive,
+            ..FakeComputer::default()
+        };
+        let runtime = Arc::new(std::sync::Mutex::new(ComputerRuntime::new(
+            Box::new(fake),
+            ComputerPolicy::Observe,
+        )));
+        runtime.lock().unwrap().arm().expect("arm");
+        config.computer = Some(runtime);
+        let provider = ScriptedProvider::from_turns(vec![
+            vec![
+                StreamEvent::ToolCallDelta(ToolCallDelta {
+                    index: 0,
+                    id: Some("observe".into()),
+                    name: Some("computer".into()),
+                    arguments: r#"{"action":"observe"}"#.to_string(),
+                }),
+                StreamEvent::Done {
+                    finish_reason: Some("tool_calls".into()),
+                },
+            ],
+            vec![
+                StreamEvent::TextDelta("done".into()),
+                StreamEvent::Done {
+                    finish_reason: Some("stop".into()),
+                },
+            ],
+        ]);
+        let mut approvals = 0;
+        run(
+            &provider,
+            &mut session,
+            &config,
+            "observe the password window",
+            &mut |_| {
+                approvals += 1;
+                false
+            },
+            &mut |_| {},
+        )
+        .await
+        .expect("run");
+        assert_eq!(approvals, 1);
+        let requests = provider.requests();
+        let tool = requests[1]
+            .messages
+            .iter()
+            .rev()
+            .find(|message| message.role == Role::Tool)
+            .expect("tool result");
+        assert!(!tool.has_images());
+        assert!(tool.text().unwrap_or_default().contains("denied"));
+        let loaded = niucode_core::load(session.path()).expect("load");
+        assert!(loaded.events.iter().any(|event| matches!(
+            event,
+            Event::Approval { tool, allowed: false, .. } if tool == "computer"
+        )));
     }
 
     #[tokio::test]

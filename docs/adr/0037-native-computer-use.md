@@ -46,7 +46,8 @@ niucode capability with niuse policy/UX, not a product-layer fork.
    rather than executing an approximate click. Input is revalidated immediately
    before XTEST dispatch.
 5. **Lifecycle.** After the session is armed, the model may start/stop
-   observation. The agent advertises `computer` only when a runtime is
+   observation, but a backend-classified sensitive window additionally requires
+   approval before its screenshot is returned. The agent advertises `computer` only when a runtime is
    configured; `niucode exec --computer` and `niucode tui --computer` connect to
    X11 and arm it; `niucode computer doctor` checks the display/TCC, window
    list, XTEST, and capture without injecting input. `niucode web --computer`
