@@ -49,7 +49,9 @@ client — without turning the event log into presentation data.
 - **v0 (M9-007)**: loopback-only read-only viewer, embedded static client,
   `/api/session`.
 - **Live tail (M9-008)**: `/api/events` chunked SSE, initial log + appended
-  lines. See [ADR-0036](adr/0036-local-web-surface.md).
+  lines.
+- **Read-only chat (M9-009)**: `POST /api/prompt`, one turn at a time, hard-coded
+  read-only/never, embedded composer. See [ADR-0036](adr/0036-local-web-surface.md).
 - A local HTTP + SSE server over the same agent loop and event log.
 - Static, no-build client; Markdown and KaTeX rendering.
 - Session list, streaming answer, tool/approval cards, cancel.

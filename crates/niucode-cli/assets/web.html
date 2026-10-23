@@ -10,7 +10,7 @@
 body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
 header { position:sticky; top:0; background:var(--panel); border-bottom:1px solid #30363d; padding:12px 18px; display:flex; gap:12px; align-items:center; }
 header b { color:var(--accent); }
-main { max-width:900px; margin:0 auto; padding:24px 18px 80px; }
+main { max-width:900px; margin:0 auto; padding:24px 18px 140px; }
 .msg { border-left:3px solid #30363d; padding:8px 14px; margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .msg.user { border-color:var(--accent); }
 .msg.assistant { border-color:#3fb950; }
@@ -20,13 +20,19 @@ main { max-width:900px; margin:0 auto; padding:24px 18px 80px; }
 details { margin:8px 0; } summary { cursor:pointer; color:var(--dim); }
 input,button { font:inherit; }
 footer { position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid #30363d; padding:10px 18px; color:var(--dim); font-size:13px; }
+form { display:flex; gap:8px; max-width:900px; margin:0 auto 8px; }
+input { flex:1; background:#0d1117; color:var(--text); border:1px solid #30363d; border-radius:6px; padding:9px 12px; outline:none; }
+input:focus { border-color:var(--accent); }
+button { background:var(--accent); color:#07111f; border:0; border-radius:6px; padding:9px 16px; font-weight:600; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+#status { max-width:900px; margin:0 auto; min-height:1.2em; }
 code { font-family:ui-monospace,monospace; color:#79c0ff; }
 </style>
 </head>
 <body>
 <header><b>niucode</b><span id="id" class="meta">loading…</span><span id="live" class="live">○ connecting</span></header>
 <main id="log"></main>
-<footer>Read-only local viewer · interactive chat and approvals are the next slice · bind 127.0.0.1</footer>
+<footer><form id="composer"><input id="prompt" autocomplete="off" placeholder="Ask for a read-only task…"><button id="send">Send</button></form><div id="status">Read-only local chat · bind 127.0.0.1</div></footer>
 <script>
 const log = document.getElementById('log');
 const id = document.getElementById('id');
@@ -58,6 +64,24 @@ const source = new EventSource('/api/events');
 source.onopen = () => { live.textContent = '● live'; live.className = 'live on'; };
 source.onerror = () => { live.textContent = '○ reconnecting'; live.className = 'live'; };
 source.onmessage = event => { try { render(JSON.parse(event.data)); } catch (_) {} };
+const form = document.getElementById('composer');
+const input = document.getElementById('prompt');
+const send = document.getElementById('send');
+const status = document.getElementById('status');
+form.onsubmit = async event => {
+  event.preventDefault();
+  const prompt = input.value.trim();
+  if (!prompt) return;
+  send.disabled = true; status.textContent = 'sending…';
+  try {
+    const response = await fetch('/api/prompt', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.statusText);
+    input.value = ''; status.textContent = 'turn running…';
+  } catch (error) {
+    status.textContent = 'error: ' + error.message;
+  } finally { send.disabled = false; }
+};
 </script>
 </body>
 </html>

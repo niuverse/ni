@@ -404,11 +404,23 @@ enum Command {
     },
     /// Serve a read-only local web view of one session
     Web {
-        /// Session JSONL to display
+        /// Session JSONL to display and append prompts to
         session: PathBuf,
         /// Loopback port (0 chooses an ephemeral port)
         #[arg(long, default_value_t = 8787)]
         port: u16,
+        /// Provider preset: deepseek or openai
+        #[arg(long, default_value = "deepseek")]
+        preset: String,
+        /// Override the preset model
+        #[arg(long)]
+        model: Option<String>,
+        /// Working directory for read-only turns
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        /// Maximum model turns per browser prompt (0 = auto)
+        #[arg(long, default_value_t = 0)]
+        max_steps: usize,
     },
     /// Start the interactive linear TUI
     Tui {
@@ -596,8 +608,23 @@ pub async fn run() -> Result<()> {
             }
             Ok(())
         }
-        Some(Command::Web { session, port }) => {
-            web::serve(&session, port).await?;
+        Some(Command::Web {
+            session,
+            port,
+            preset,
+            model,
+            cwd,
+            max_steps,
+        }) => {
+            web::serve(web::Options {
+                session,
+                port,
+                preset,
+                model,
+                cwd: cwd.unwrap_or(std::env::current_dir()?),
+                max_steps,
+            })
+            .await?;
             Ok(())
         }
         Some(Command::Tui {
