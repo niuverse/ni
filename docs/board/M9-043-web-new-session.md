@@ -26,19 +26,19 @@ only cleared the DOM; there was no honest way to start fresh.
 - Update `/api/session`'s snapshot for the new file.
 - `/new` in the browser posts, shows the id, and reloads; SSE reconnects to the
   new path.
-- niuse sets `allow_new: false` because its thread/session semantics need an
-  archive step first.
+- Embedders can supply `new_session_provider`; niuse uses it to archive the
+  current thread and recreate `thread.jsonl`.
 
 ## Acceptance
 
 - [x] `/api/new` creates another log and changes the active path.
 - [x] The new file exists and has a session header.
-- [x] Busy/disabled paths fail closed.
+- [x] Busy/disabled paths fail closed; an embedder provider is used when set.
 - [x] `/new` is in help and the command menu.
 - [x] Existing path uses read a consistent locked clone.
 - [x] Tests cover creation over loopback.
 
 ## Notes
 
-Old SSE connections keep tailing the old file until the page reloads. A future
-slice can broadcast a session-switched event and handle archived niuse threads.
+Old SSE connections keep tailing the old file until the page reloads. niuse
+archives the active thread and creates a fresh one through the provider hook.

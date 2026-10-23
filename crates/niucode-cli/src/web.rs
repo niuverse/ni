@@ -42,6 +42,8 @@ pub struct Options {
     pub context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
     /// Allow `POST /api/new` to start a fresh session in the same directory.
     pub allow_new: bool,
+    /// Optional embedder hook for product-specific new-session semantics.
+    pub new_session_provider: Option<Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>>,
 }
 
 struct State {
@@ -57,6 +59,7 @@ struct State {
     context_provider: Option<Arc<dyn Fn() -> Value + Send + Sync>>,
     brand: String,
     allow_new: bool,
+    new_session_provider: Option<Arc<dyn Fn() -> Result<PathBuf> + Send + Sync>>,
     busy: AtomicBool,
     live: broadcast::Sender<Value>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
@@ -140,6 +143,7 @@ pub async fn serve(options: Options) -> Result<()> {
             context_provider: options.context_provider,
             brand: options.brand.unwrap_or_else(|| "niucode".into()),
             allow_new: options.allow_new,
+            new_session_provider: options.new_session_provider,
             busy: AtomicBool::new(false),
             live,
             pending: Mutex::new(HashMap::new()),
@@ -369,6 +373,17 @@ async fn new_session(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
 }
 
 fn create_session(state: &State) -> Result<PathBuf> {
+    if let Some(provider) = &state.new_session_provider {
+        let path = provider()?;
+        *state.path.lock().unwrap() = path.clone();
+        *state.snapshot.lock().unwrap() = serde_json::to_vec(&json!({
+            "id": path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("session"),
+            "path": path.display().to_string(),
+            "warnings": [],
+            "events": [],
+        }))?;
+        return Ok(path);
+    }
     let current = state.path.lock().unwrap().clone();
     let parent = current
         .parent()
@@ -870,6 +885,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
+            new_session_provider: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1035,6 +1051,7 @@ mod tests {
             context_provider: None,
             brand: "niucode".into(),
             allow_new: true,
+            new_session_provider: None,
             busy: AtomicBool::new(false),
             live: broadcast::channel(8).0,
             pending: Mutex::new(HashMap::new()),
@@ -1130,6 +1147,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                new_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1204,6 +1222,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                new_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
@@ -1351,6 +1370,7 @@ mod tests {
                 context_provider: None,
                 brand: "niucode".into(),
                 allow_new: true,
+                new_session_provider: None,
                 busy: AtomicBool::new(false),
                 live: broadcast::channel(8).0,
                 pending: Mutex::new(HashMap::new()),
