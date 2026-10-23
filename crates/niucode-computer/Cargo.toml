@@ -1,0 +1,16 @@
+[package]
+name = "niucode-computer"
+description = "Computer-use protocol, permissions, and observation contracts for niucode"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

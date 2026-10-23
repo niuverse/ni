@@ -8,6 +8,7 @@ cd "$root"
 mode="${1:---check}"
 order=(
     niucode-core
+    niucode-computer
     niucode-auth
     niucode-provider
     niucode-tools
