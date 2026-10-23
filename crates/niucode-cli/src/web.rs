@@ -186,6 +186,30 @@ async fn handle(mut stream: TcpStream, state: Arc<State>) -> Result<()> {
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
+    if let Some(host) = header(head, "host") {
+        if !loopback_host(host) {
+            return send(
+                &mut stream,
+                "403 Forbidden",
+                "application/json",
+                br#"{"error":"non-loopback host"}"#.to_vec(),
+            )
+            .await;
+        }
+    }
+    if method == "POST" {
+        if let Some(origin) = header(head, "origin") {
+            if !loopback_origin(origin) {
+                return send(
+                    &mut stream,
+                    "403 Forbidden",
+                    "application/json",
+                    br#"{"error":"cross-origin request rejected"}"#.to_vec(),
+                )
+                .await;
+            }
+        }
+    }
     let current_path = state.path.lock().unwrap().clone();
     if method == "GET" && path == "/api/events" {
         return stream_events(stream, current_path, state.live.subscribe()).await;
@@ -616,7 +640,7 @@ async fn run_prompt(state: Arc<State>, provider: Arc<dyn Provider>, prompt: Stri
 
 async fn send(stream: &mut TcpStream, status: &str, kind: &str, body: Vec<u8>) -> Result<()> {
     let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'\r\nCache-Control: no-store\r\n\r\n",
         body.len()
     );
     stream.write_all(head.as_bytes()).await?;
@@ -630,7 +654,7 @@ async fn stream_events(
     path: PathBuf,
     mut live: broadcast::Receiver<Value>,
 ) -> Result<()> {
-    let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\nTransfer-Encoding: chunked\r\n\r\n";
+    let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nTransfer-Encoding: chunked\r\n\r\n";
     stream.write_all(head.as_bytes()).await?;
     let mut offset = 0_u64;
     let mut partial = String::new();
@@ -674,6 +698,36 @@ async fn write_chunk(stream: &mut TcpStream, text: &str) -> Result<()> {
     stream.write_all(text.as_bytes()).await?;
     stream.write_all(b"\r\n").await?;
     Ok(())
+}
+
+fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
+    head.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        if key.trim().eq_ignore_ascii_case(name) {
+            Some(value.trim())
+        } else {
+            None
+        }
+    })
+}
+
+fn loopback_host(value: &str) -> bool {
+    let host = if let Some(rest) = value.strip_prefix('[') {
+        rest.split(']').next().unwrap_or(rest)
+    } else {
+        value.split(':').next().unwrap_or(value)
+    };
+    matches!(
+        host.to_ascii_lowercase().as_str(),
+        "127.0.0.1" | "localhost" | "::1"
+    )
+}
+
+fn loopback_origin(value: &str) -> bool {
+    let rest = value
+        .strip_prefix("http://")
+        .or_else(|| value.strip_prefix("https://"));
+    rest.is_some_and(loopback_host)
 }
 
 fn preview_json(preview: Option<&niucode_tools::ChangePreview>) -> Value {
@@ -1041,7 +1095,7 @@ fn export_markdown(events: &[Event]) -> String {
 
 async fn send_download(stream: &mut TcpStream, markdown: String) -> Result<()> {
     let head = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/markdown; charset=utf-8\r\nContent-Disposition: attachment; filename=\"niucode-session.md\"\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/markdown; charset=utf-8\r\nContent-Disposition: attachment; filename=\"niucode-session.md\"\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nCache-Control: no-store\r\n\r\n",
         markdown.len()
     );
     stream.write_all(head.as_bytes()).await?;
@@ -1174,6 +1228,40 @@ mod tests {
         assert!(html.contains("<td>1</td>"), "{html}");
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&lt;script&gt;"), "{html}");
+    }
+
+    #[test]
+    fn only_loopback_hosts_and_origins_are_accepted() {
+        assert!(loopback_host("127.0.0.1:8799"));
+        assert!(loopback_host("localhost:8799"));
+        assert!(loopback_host("[::1]:8799"));
+        assert!(!loopback_host("evil.example"));
+        assert!(loopback_origin("http://127.0.0.1:8799"));
+        assert!(loopback_origin("http://localhost:8799"));
+        assert!(!loopback_origin("https://evil.example"));
+        assert!(!loopback_origin("null"));
+    }
+
+    #[tokio::test]
+    async fn cross_origin_and_foreign_host_requests_are_rejected() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(serve_listener(listener, state()));
+        for request in [
+            "POST /api/prompt HTTP/1.1\r\nHost: localhost\r\nOrigin: https://evil.example\r\nContent-Length: 0\r\n\r\n",
+            "GET / HTTP/1.1\r\nHost: evil.example\r\n\r\n",
+        ] {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut reply = Vec::new();
+            stream.read_to_end(&mut reply).await.unwrap();
+            assert!(
+                String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 403"),
+                "{}",
+                String::from_utf8_lossy(&reply)
+            );
+        }
+        task.abort();
     }
 
     #[test]
