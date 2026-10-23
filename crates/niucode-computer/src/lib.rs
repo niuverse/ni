@@ -255,8 +255,14 @@ impl Observation {
             ComputerAction::Type { text, .. } if text.trim().is_empty() => {
                 Err(ActionError::EmptyText)
             }
+            ComputerAction::Type { text, .. } if text.chars().count() > MAX_TYPE_CHARS => {
+                Err(ActionError::TextTooLong)
+            }
             ComputerAction::Key { key, .. } if key.key.trim().is_empty() => {
                 Err(ActionError::EmptyKey)
+            }
+            ComputerAction::Key { key, .. } if key.key.chars().count() > MAX_KEY_CHARS => {
+                Err(ActionError::KeyTooLong)
             }
             ComputerAction::Scroll { amount, .. } if *amount == 0 || *amount > MAX_SCROLL_STEPS => {
                 Err(ActionError::InvalidScroll)
@@ -267,6 +273,8 @@ impl Observation {
 }
 
 pub const MAX_SCROLL_STEPS: u32 = 50;
+pub const MAX_TYPE_CHARS: usize = 10_000;
+pub const MAX_KEY_CHARS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -435,8 +443,12 @@ pub enum ActionError {
     CoordinateOutOfBounds,
     #[error("typed text is empty")]
     EmptyText,
+    #[error("typed text exceeds {MAX_TYPE_CHARS} characters")]
+    TextTooLong,
     #[error("key name is empty")]
     EmptyKey,
+    #[error("key name exceeds {MAX_KEY_CHARS} characters")]
+    KeyTooLong,
     #[error("scroll amount must be between 1 and {MAX_SCROLL_STEPS}")]
     InvalidScroll,
 }
@@ -485,8 +497,8 @@ pub fn tool_spec() -> serde_json::Value {
             "x": {"type": "integer"},
             "y": {"type": "integer"},
             "button": {"type": "string", "enum": ["left", "right", "middle"]},
-            "text": {"type": "string"},
-            "key": {"type": "string"},
+            "text": {"type": "string", "maxLength": MAX_TYPE_CHARS},
+            "key": {"type": "string", "maxLength": MAX_KEY_CHARS},
             "modifiers": {"type": "array", "items": {"type": "string", "enum": ["ctrl", "alt", "shift", "super"]}},
             "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
             "amount": {"type": "integer", "minimum": 1, "maximum": MAX_SCROLL_STEPS}
@@ -968,6 +980,29 @@ mod tests {
         assert_eq!(
             session.decide(&click()).unwrap(),
             PolicyDecision::NeedsApproval
+        );
+    }
+
+    #[test]
+    fn oversized_type_and_key_are_rejected() {
+        let observation = observation();
+        let typed = ComputerAction::Type {
+            observation_id: observation.id.clone(),
+            window_id: observation.window.id,
+            text: "x".repeat(MAX_TYPE_CHARS + 1),
+        };
+        assert_eq!(
+            observation.validate(&typed, 5_000).unwrap_err(),
+            ActionError::TextTooLong
+        );
+        let key = ComputerAction::Key {
+            observation_id: observation.id.clone(),
+            window_id: observation.window.id,
+            key: KeyChord::new(Vec::new(), "k".repeat(MAX_KEY_CHARS + 1)),
+        };
+        assert_eq!(
+            observation.validate(&key, 5_000).unwrap_err(),
+            ActionError::KeyTooLong
         );
     }
 
