@@ -1691,11 +1691,11 @@ async fn run_exec(options: ExecOptions, mut hooks: Option<&mut dyn TurnHooks>) -
     }
     agent_config.allowed_tools = tools;
     if computer != "off" {
-        let policy: ComputerPolicy = computer
-            .parse()
-            .with_context(|| format!("invalid --computer policy {computer:?}"))?;
         #[cfg(target_os = "linux")]
         {
+            let policy: ComputerPolicy = computer
+                .parse()
+                .with_context(|| format!("invalid --computer policy {computer:?}"))?;
             match niucode_computer_x11::X11Backend::connect(None) {
                 Ok(backend) => {
                     let mut runtime = ComputerRuntime::new(Box::new(backend), policy);
