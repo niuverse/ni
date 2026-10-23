@@ -71,8 +71,10 @@ the missing piece is a local transport and a rendering client.
 6. **Boundary.** niucode owns the server, protocol, and reference client;
    niuse owns identity/memory/product defaults and may embed or reskin the
    surface. No niucode source is forked into niuse.
-7. **Security headers.** `nosniff`, `no-store`, and a strict content type on
-   every response. No cookies in v0; no secrets in the HTML.
+7. **Security headers.** `nosniff`, `no-store`, a strict CSP, and a strict
+   content type on every response. The only cookie is the HttpOnly SameSite
+   local token cookie; the random token appears in the startup URL, not in the
+   static HTML.
 
 ## Consequences
 
@@ -87,7 +89,8 @@ the missing piece is a local transport and a rendering client.
 - v0 cannot chat or approve; it is a viewer.
 - A browser client duplicates presentation work (Markdown/KaTeX) that the TUI
   approximates in ANSI.
-- No authentication means loopback only until a later design.
+- The per-run token is local isolation, not multi-user/remote authentication;
+  same-user processes can still access the URL/cookie store.
 
 ## Follow-ups
 
