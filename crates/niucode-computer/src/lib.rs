@@ -389,6 +389,26 @@ impl ComputerAction {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum SessionError {
+    #[error("computer policy is off; arm the session first")]
+    PolicyOff,
+    #[error("unknown observation {0}")]
+    UnknownObservation(String),
+    #[error(transparent)]
+    Action(#[from] ActionError),
+}
+
+#[derive(Debug, Error)]
+pub enum InputError {
+    #[error("missing or invalid {0}")]
+    Field(&'static str),
+    #[error("unsupported computer action {0:?}")]
+    Action(String),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ActionError {
     #[error("observation id is empty")]
@@ -407,6 +427,275 @@ pub enum ActionError {
     EmptyKey,
     #[error("scroll amount must be between 1 and {MAX_SCROLL_STEPS}")]
     InvalidScroll,
+}
+
+/// One observation plus the PNG used to derive it. Backends return this so the
+/// runtime can attach the image to the provider request without re-capturing.
+pub struct Capture {
+    pub observation: Observation,
+    pub png: Vec<u8>,
+}
+
+/// OS backend contract. Errors are boxed so the protocol crate stays free of
+/// platform dependencies; the agent surfaces them as tool failures.
+pub trait ComputerBackend: Send {
+    fn observe(
+        &mut self,
+        window: Option<WindowId>,
+    ) -> Result<Capture, Box<dyn std::error::Error + Send + Sync>>;
+
+    fn perform(
+        &mut self,
+        action: &ComputerAction,
+        observation: &Observation,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+/// JSON schema advertised to the model. The model never sees window kinds or
+/// backend-specific handles; it only proposes actions and purposes.
+pub fn tool_spec() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["observe", "click", "type", "key", "scroll"]
+            },
+            "purpose": {"type": "string", "description": "Why this action is needed"},
+            "window_id": {"type": "integer", "minimum": 1},
+            "observation_id": {"type": "string"},
+            "x": {"type": "integer"},
+            "y": {"type": "integer"},
+            "button": {"type": "string", "enum": ["left", "right", "middle"]},
+            "text": {"type": "string"},
+            "key": {"type": "string"},
+            "modifiers": {"type": "array", "items": {"type": "string", "enum": ["ctrl", "alt", "shift", "super"]}},
+            "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
+            "amount": {"type": "integer", "minimum": 1, "maximum": MAX_SCROLL_STEPS}
+        },
+        "required": ["action"]
+    })
+}
+
+/// Parse a model tool call into a typed action. Unknown fields are ignored;
+/// missing required fields fail with a stable message.
+pub fn parse_action(input: &serde_json::Value) -> Result<ComputerAction, InputError> {
+    let action = input
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(InputError::Field("action"))?;
+    match action {
+        "observe" => Ok(ComputerAction::Observe {
+            window_id: optional_u64(input, "window_id")?.map(WindowId),
+        }),
+        "click" => Ok(ComputerAction::Click {
+            observation_id: observation_id(input)?,
+            window_id: window_id(input)?,
+            point: point(input)?,
+            button: match input.get("button").and_then(serde_json::Value::as_str) {
+                Some("right") => MouseButton::Right,
+                Some("middle") => MouseButton::Middle,
+                _ => MouseButton::Left,
+            },
+        }),
+        "type" => Ok(ComputerAction::Type {
+            observation_id: observation_id(input)?,
+            window_id: window_id(input)?,
+            text: required_str(input, "text")?.to_string(),
+        }),
+        "key" => Ok(ComputerAction::Key {
+            observation_id: observation_id(input)?,
+            window_id: window_id(input)?,
+            key: KeyChord {
+                modifiers: parse_modifiers(input)?,
+                key: required_str(input, "key")?.to_string(),
+            },
+        }),
+        "scroll" => Ok(ComputerAction::Scroll {
+            observation_id: observation_id(input)?,
+            window_id: window_id(input)?,
+            point: point(input)?,
+            direction: match required_str(input, "direction")? {
+                "down" => ScrollDirection::Down,
+                "left" => ScrollDirection::Left,
+                "right" => ScrollDirection::Right,
+                "up" => ScrollDirection::Up,
+                other => {
+                    return Err(InputError::Field(match other {
+                        "down" | "left" | "right" => "direction",
+                        _ => "direction",
+                    }))
+                }
+            },
+            amount: input
+                .get("amount")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or(InputError::Field("amount"))?,
+        }),
+        other => Err(InputError::Action(other.to_string())),
+    }
+}
+
+/// In-memory session state for computer use. The event log is the durable
+/// source; observations expire quickly and are not persisted.
+#[derive(Debug, Default)]
+pub struct ComputerSession {
+    policy: ComputerPolicy,
+    armed: bool,
+    observations: std::collections::HashMap<String, Observation>,
+}
+
+impl ComputerSession {
+    pub fn new(policy: ComputerPolicy) -> Self {
+        Self {
+            policy,
+            armed: false,
+            observations: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn policy(&self) -> ComputerPolicy {
+        self.policy
+    }
+
+    pub fn set_policy(&mut self, policy: ComputerPolicy) {
+        self.policy = policy;
+        if policy == ComputerPolicy::Off {
+            self.armed = false;
+        }
+    }
+
+    pub fn is_armed(&self) -> bool {
+        self.armed
+    }
+
+    pub fn arm(&mut self) -> Result<(), SessionError> {
+        if self.policy == ComputerPolicy::Off {
+            return Err(SessionError::PolicyOff);
+        }
+        self.armed = true;
+        Ok(())
+    }
+
+    pub fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    pub fn remember(&mut self, observation: Observation) {
+        self.observations
+            .insert(observation.id.as_str().to_string(), observation);
+        if self.observations.len() > 8 {
+            let oldest = self
+                .observations
+                .values()
+                .min_by_key(|observation| observation.captured_at_ms)
+                .map(|observation| observation.id.as_str().to_string());
+            if let Some(oldest) = oldest {
+                self.observations.remove(&oldest);
+            }
+        }
+    }
+
+    pub fn observation(&self, id: &ObservationId) -> Result<&Observation, SessionError> {
+        self.observations
+            .get(id.as_str())
+            .ok_or_else(|| SessionError::UnknownObservation(id.to_string()))
+    }
+
+    /// Resolve policy for an action, using the observation's window kind for
+    /// input actions. Unarmed sessions allow nothing.
+    pub fn decide(&self, action: &ComputerAction) -> Result<PolicyDecision, SessionError> {
+        if !self.armed {
+            return Ok(PolicyDecision::Denied);
+        }
+        match action {
+            ComputerAction::Observe { .. } => Ok(decide(self.policy, action, WindowKind::Normal)),
+            _ => {
+                let observation =
+                    self.observation(action.observation_id().ok_or(SessionError::PolicyOff)?)?;
+                Ok(decide(self.policy, action, observation.window.kind))
+            }
+        }
+    }
+
+    pub fn validate(
+        &self,
+        action: &ComputerAction,
+        now_ms: u64,
+    ) -> Result<&Observation, SessionError> {
+        let observation =
+            self.observation(action.observation_id().ok_or(SessionError::PolicyOff)?)?;
+        observation.validate(action, now_ms)?;
+        Ok(observation)
+    }
+}
+
+fn required_str<'a>(
+    input: &'a serde_json::Value,
+    key: &'static str,
+) -> Result<&'a str, InputError> {
+    input
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .ok_or(InputError::Field(key))
+}
+
+fn optional_u64(input: &serde_json::Value, key: &'static str) -> Result<Option<u64>, InputError> {
+    match input.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_u64().map(Some).ok_or(InputError::Field(key)),
+    }
+}
+
+fn window_id(input: &serde_json::Value) -> Result<WindowId, InputError> {
+    optional_u64(input, "window_id")?
+        .map(WindowId)
+        .ok_or(InputError::Field("window_id"))
+}
+
+fn observation_id(input: &serde_json::Value) -> Result<ObservationId, InputError> {
+    let value = required_str(input, "observation_id")?;
+    if value.is_empty() {
+        return Err(InputError::Field("observation_id"));
+    }
+    Ok(ObservationId::new(value))
+}
+
+fn point(input: &serde_json::Value) -> Result<Point, InputError> {
+    let x = input
+        .get("x")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok())
+        .ok_or(InputError::Field("x"))?;
+    let y = input
+        .get("y")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok())
+        .ok_or(InputError::Field("y"))?;
+    Ok(Point::new(x, y))
+}
+
+fn parse_modifiers(input: &serde_json::Value) -> Result<Vec<Modifier>, InputError> {
+    let mut modifiers = Vec::new();
+    for value in input
+        .get("modifiers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(value) = value.as_str() else {
+            return Err(InputError::Field("modifiers"));
+        };
+        modifiers.push(match value {
+            "ctrl" => Modifier::Ctrl,
+            "alt" => Modifier::Alt,
+            "shift" => Modifier::Shift,
+            "super" => Modifier::Super,
+            _ => return Err(InputError::Field("modifiers")),
+        });
+    }
+    Ok(modifiers)
 }
 
 #[cfg(test)]
@@ -587,6 +876,80 @@ mod tests {
         assert_eq!(
             observation.validate(&zero_scroll, 5_000),
             Err(ActionError::InvalidScroll)
+        );
+    }
+
+    #[test]
+    fn tool_input_parses_actions_and_modifiers() {
+        let observe =
+            parse_action(&serde_json::json!({"action":"observe","window_id":42})).unwrap();
+        assert_eq!(
+            observe,
+            ComputerAction::Observe {
+                window_id: Some(WindowId(42))
+            }
+        );
+        let click = parse_action(&serde_json::json!({
+            "action":"click","observation_id":"obs-1","window_id":42,"x":3,"y":4,"button":"right"
+        }))
+        .unwrap();
+        assert!(matches!(
+            click,
+            ComputerAction::Click {
+                button: MouseButton::Right,
+                ..
+            }
+        ));
+        let key = parse_action(&serde_json::json!({
+            "action":"key","observation_id":"obs-1","window_id":42,"key":"l","modifiers":["ctrl","shift"]
+        }))
+        .unwrap();
+        assert!(matches!(
+            key,
+            ComputerAction::Key { key: KeyChord { ref modifiers, .. }, .. }
+                if modifiers == &[Modifier::Ctrl, Modifier::Shift]
+        ));
+        assert!(parse_action(&serde_json::json!({"action":"click"})).is_err());
+        assert!(parse_action(&serde_json::json!({"action":"teleport"})).is_err());
+        let spec = tool_spec();
+        assert_eq!(spec["properties"]["action"]["enum"][0], "observe");
+    }
+
+    #[test]
+    fn session_requires_arm_and_known_observation() {
+        let mut session = ComputerSession::new(ComputerPolicy::Control);
+        let observe = ComputerAction::Observe { window_id: None };
+        assert_eq!(session.decide(&observe).unwrap(), PolicyDecision::Denied);
+        session.arm().unwrap();
+        assert_eq!(session.decide(&observe).unwrap(), PolicyDecision::Allowed);
+        assert!(matches!(
+            session.decide(&click()),
+            Err(SessionError::UnknownObservation(_))
+        ));
+        session.remember(observation());
+        assert_eq!(
+            session.decide(&click()).unwrap(),
+            PolicyDecision::NeedsApproval
+        );
+        assert!(session.validate(&click(), 5_000).is_ok());
+        assert!(matches!(
+            session.validate(&click(), 99_000),
+            Err(SessionError::Action(ActionError::ObservationExpired))
+        ));
+        let mut off = ComputerSession::new(ComputerPolicy::Off);
+        assert!(matches!(off.arm(), Err(SessionError::PolicyOff)));
+    }
+
+    #[test]
+    fn autonomous_uses_the_observation_window_kind() {
+        let mut session = ComputerSession::new(ComputerPolicy::Autonomous);
+        session.arm().unwrap();
+        let mut terminal = observation();
+        terminal.window.kind = WindowKind::Terminal;
+        session.remember(terminal);
+        assert_eq!(
+            session.decide(&click()).unwrap(),
+            PolicyDecision::NeedsApproval
         );
     }
 

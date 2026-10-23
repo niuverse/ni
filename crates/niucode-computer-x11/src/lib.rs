@@ -9,8 +9,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use niucode_computer::{
-    ComputerAction, ImageMeta, KeyChord, Modifier, MouseButton, Observation, ObservationId, Point,
-    Rect, ScrollDirection, WindowId, WindowInfo, WindowKind,
+    Capture, ComputerAction, ComputerBackend, ImageMeta, KeyChord, Modifier, MouseButton,
+    Observation, ObservationId, Point, Rect, ScrollDirection, WindowId, WindowInfo, WindowKind,
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -61,11 +61,6 @@ struct Atoms {
     net_wm_name: u32,
     utf8_string: u32,
     wm_class: u32,
-}
-
-pub struct Capture {
-    pub observation: Observation,
-    pub png: Vec<u8>,
 }
 
 impl X11Backend {
@@ -439,6 +434,23 @@ impl X11Backend {
                 .map_err(|error| X11Error::Png(error.to_string()))?;
         }
         Ok(png)
+    }
+}
+
+impl ComputerBackend for X11Backend {
+    fn observe(
+        &mut self,
+        window: Option<WindowId>,
+    ) -> Result<Capture, Box<dyn std::error::Error + Send + Sync>> {
+        X11Backend::observe(self, window).map_err(|error| Box::new(error) as _)
+    }
+
+    fn perform(
+        &mut self,
+        action: &ComputerAction,
+        observation: &Observation,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        X11Backend::perform(self, action, observation).map_err(|error| Box::new(error) as _)
     }
 }
 
